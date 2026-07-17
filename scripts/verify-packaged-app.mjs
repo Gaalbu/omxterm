@@ -1,7 +1,7 @@
 import { listPackage } from "@electron/asar";
 import { execFile as execFileCallback, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -18,6 +18,24 @@ const defaultApplicationPath = path.join(
   "mac-arm64",
   "OMXTerm.app",
 );
+const applicationIconPath = path.join(
+  projectRoot,
+  "assets",
+  "application-icon.icns",
+);
+
+const requiredIcnsRepresentations = [
+  { name: "icon_16x16.png", width: 16, height: 16 },
+  { name: "icon_16x16@2x.png", width: 32, height: 32 },
+  { name: "icon_32x32.png", width: 32, height: 32 },
+  { name: "icon_32x32@2x.png", width: 64, height: 64 },
+  { name: "icon_128x128.png", width: 128, height: 128 },
+  { name: "icon_128x128@2x.png", width: 256, height: 256 },
+  { name: "icon_256x256.png", width: 256, height: 256 },
+  { name: "icon_256x256@2x.png", width: 512, height: 512 },
+  { name: "icon_512x512.png", width: 512, height: 512 },
+  { name: "icon_512x512@2x.png", width: 1024, height: 1024 },
+];
 
 const requiredAsarEntries = [
   "/dist/main/index.js",
@@ -57,6 +75,46 @@ export function inspectAsarEntries(entries) {
   return { missing, forbidden };
 }
 
+export function inspectIcnsRepresentations(representations) {
+  const actualByName = new Map(
+    representations.map((representation) => [
+      representation.name,
+      representation,
+    ]),
+  );
+  return {
+    missing: requiredIcnsRepresentations
+      .filter((required) => !actualByName.has(required.name))
+      .map((required) => required.name),
+    wrongDimensions: requiredIcnsRepresentations.flatMap((required) => {
+      const actual = actualByName.get(required.name);
+      if (
+        !actual ||
+        (actual.width === required.width && actual.height === required.height)
+      )
+        return [];
+      return [
+        `${required.name} (expected ${required.width}x${required.height}, got ${actual.width}x${actual.height})`,
+      ];
+    }),
+  };
+}
+
+async function readPngRepresentation(file) {
+  const data = await readFile(file);
+  if (
+    data.length < 24 ||
+    data.subarray(0, 8).toString("hex") !== "89504e470d0a1a0a" ||
+    data.subarray(12, 16).toString("ascii") !== "IHDR"
+  )
+    throw new Error(`ICNS representation is not a PNG: ${path.basename(file)}`);
+  return {
+    name: path.basename(file),
+    width: data.readUInt32BE(16),
+    height: data.readUInt32BE(20),
+  };
+}
+
 async function sha256(file) {
   return createHash("sha256")
     .update(await readFile(file))
@@ -94,6 +152,49 @@ async function inspectUnsignedApplication(applicationPath) {
   } catch (cause) {
     const stderr = String(cause?.stderr ?? "");
     if (!stderr.includes("code object is not signed at all")) throw cause;
+  }
+}
+
+async function inspectApplicationIcon(applicationPath) {
+  const resources = path.join(applicationPath, "Contents", "Resources");
+  const infoPlist = path.join(applicationPath, "Contents", "Info.plist");
+  const { stdout } = await execFile("plutil", [
+    "-extract",
+    "CFBundleIconFile",
+    "raw",
+    "-o",
+    "-",
+    infoPlist,
+  ]);
+  const iconName = stdout.trim();
+  if (!iconName.endsWith(".icns"))
+    throw new Error(
+      `Packaged CFBundleIconFile is not an ICNS file: ${iconName}`,
+    );
+
+  const packagedIcon = path.join(resources, iconName);
+  await assertSameFile(applicationIconPath, packagedIcon);
+
+  const temporaryRoot = await mkdtemp(path.join(tmpdir(), "omxterm-icon-"));
+  const iconset = path.join(temporaryRoot, "application-icon.iconset");
+  try {
+    await execFile("iconutil", ["-c", "iconset", "-o", iconset, packagedIcon]);
+    const representations = await Promise.all(
+      (await readdir(iconset)).map((name) =>
+        readPngRepresentation(path.join(iconset, name)),
+      ),
+    );
+    const inspection = inspectIcnsRepresentations(representations);
+    const problems = [
+      ...inspection.missing.map((name) => `missing ${name}`),
+      ...inspection.wrongDimensions,
+    ];
+    if (problems.length > 0)
+      throw new Error(
+        `Packaged application icon representations are invalid: ${problems.join(", ")}`,
+      );
+  } finally {
+    await rm(temporaryRoot, { recursive: true, force: true });
   }
 }
 
@@ -189,6 +290,7 @@ export async function verifyPackagedApplication(
     path.join(nativeRoot, "spawn-helper"),
     "node-pty spawn helper",
   );
+  await inspectApplicationIcon(applicationPath);
   await inspectUnsignedApplication(applicationPath);
 
   const asarInspection = inspectAsarEntries(await listPackage(asar));
