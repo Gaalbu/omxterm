@@ -5,12 +5,88 @@ import {
   registerOsc52Clipboard,
   XTERM_OSC_PAYLOAD_LIMIT,
 } from "../../src/terminal-surface/osc52-clipboard";
+import { registerTerminalTitleEvents } from "../../src/terminal-surface/terminal-title-events";
+import {
+  createTerminalWindowTitleController,
+  DEFAULT_TERMINAL_TITLE,
+} from "../../src/main/terminal-window-title";
 
 function write(terminal: Terminal, data: string): Promise<void> {
   return new Promise((resolve) => terminal.write(data, resolve));
 }
 
 describe("standard xterm compatibility fixtures", () => {
+  it("parses contiguous and split OSC 0/2 titles equivalently and keeps BEL silent", async () => {
+    const terminal = new Terminal();
+    const titles: string[] = [];
+    const responses: string[] = [];
+    const bell = vi.fn();
+    terminal.onData((data) => responses.push(data));
+    registerTerminalTitleEvents(terminal, {
+      onTitleRequest: (title) => titles.push(title),
+      onBell: bell,
+    });
+
+    await write(terminal, "\u001b]0;same\u0007");
+    await write(terminal, "\u001b]2;sa");
+    await write(terminal, "me\u001b\\");
+    await write(terminal, "\u0007");
+
+    expect(titles).toEqual(["same", "same"]);
+    expect(bell).toHaveBeenCalledOnce();
+    expect(responses).toEqual([]);
+    terminal.dispose();
+  });
+
+  it("consumes icon and window title reports without any PTY reply", async () => {
+    const terminal = new Terminal();
+    const titles: string[] = [];
+    const responses: string[] = [];
+    terminal.onData((data) => responses.push(data));
+    registerTerminalTitleEvents(terminal, {
+      onTitleRequest: (title) => titles.push(title),
+    });
+
+    await write(terminal, "\u001b[20t\u001b[21t");
+
+    expect(titles).toEqual([]);
+    expect(responses).toEqual([]);
+    terminal.dispose();
+  });
+
+  it("falls back at the native boundary for parser-delivered titles above the generic IPC limit", async () => {
+    const terminal = new Terminal();
+    const responses: string[] = [];
+    const nativeTitles: string[] = [];
+    const dockRequests = vi.fn();
+    const window = {
+      isFocused: () => true,
+      setTitle: (title: string) => nativeTitles.push(title),
+      on: vi.fn(),
+      removeListener: vi.fn(),
+    };
+    const controller = createTerminalWindowTitleController(
+      window,
+      dockRequests,
+    );
+    terminal.onData((data) => responses.push(data));
+    registerTerminalTitleEvents(terminal, {
+      onTitleRequest: controller.requestTitle,
+    });
+    const canary = `CANARY${"x".repeat(65_537)}`;
+
+    await write(terminal, `\u001b]2;${canary}\u001b\\`);
+
+    expect(nativeTitles).toEqual([
+      DEFAULT_TERMINAL_TITLE,
+      DEFAULT_TERMINAL_TITLE,
+    ]);
+    expect(JSON.stringify(nativeTitles)).not.toContain("CANARY");
+    expect(responses).toEqual([]);
+    expect(dockRequests).not.toHaveBeenCalled();
+    controller.dispose();
+    terminal.dispose();
+  });
   it("renders Unicode and representative REPL cursor movement", async () => {
     const terminal = new Terminal({ cols: 40, rows: 6, scrollback: 10_000 });
 

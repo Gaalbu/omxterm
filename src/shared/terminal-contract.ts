@@ -25,6 +25,10 @@ export function isBoundedTerminalPayload(value: unknown): value is string {
   );
 }
 
+export function isTerminalTitleRequest(value: unknown): value is string {
+  return typeof value === "string";
+}
+
 export function splitTerminalPayload(value: string): string[] {
   if (value.length === 0) return [];
 
