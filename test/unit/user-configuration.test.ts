@@ -23,6 +23,11 @@ import {
 
 const configPath = "/isolated/config/omxterm/config.json";
 const installedFonts = new Set(["SF Mono", "Exact Family"]);
+const commonFontMetrics = Object.freeze({ cellWidth: 8, cellHeight: 16 });
+
+async function getInstalledFontFamilyMetrics(family: string) {
+  return installedFonts.has(family) ? commonFontMetrics : undefined;
+}
 
 describe("strict version 1 User Configuration", () => {
   it("resolves non-empty XDG_CONFIG_HOME exactly and falls back for unset or empty values", () => {
@@ -41,9 +46,21 @@ describe("strict version 1 User Configuration", () => {
   });
 
   it("uses all documented defaults when only version is present", () => {
-    expect(
-      validateUserConfiguration({ version: 1 }, configPath, new Set()),
-    ).toEqual(DEFAULT_USER_CONFIGURATION);
+    const configuration = validateUserConfiguration(
+      { version: 1 },
+      configPath,
+      new Set(),
+    );
+    expect(configuration).toEqual(DEFAULT_USER_CONFIGURATION);
+    expect(configuration.fontLineHeight).toBe(1);
+    expect(configuration.terminalPadding).toEqual({
+      top: 0,
+      right: 8,
+      bottom: 8,
+      left: 8,
+    });
+    expect(Object.isFrozen(configuration)).toBe(true);
+    expect(Object.isFrozen(configuration.terminalPadding)).toBe(true);
   });
 
   it("accepts every preference and preserves exact values for every consumer", () => {
@@ -53,7 +70,10 @@ describe("strict version 1 User Configuration", () => {
           version: 1,
           confirmClose: false,
           logLevel: "debug",
-          font: { family: "Exact Family", size: 23 },
+          font: { family: "Exact Family", size: 23, lineHeight: 1.15 },
+          terminal: {
+            padding: { top: 0, right: 12, bottom: 8, left: 16 },
+          },
           scrollback: { lines: 0 },
           keyboard: { optionAsAlt: "left" },
           window: { alwaysOnTop: true },
@@ -67,10 +87,81 @@ describe("strict version 1 User Configuration", () => {
       logLevel: "debug",
       fontFamily: "Exact Family",
       fontSize: 23,
+      fontLineHeight: 1.15,
+      terminalPadding: { top: 0, right: 12, bottom: 8, left: 16 },
       scrollbackLines: 0,
       optionKeyMode: "left",
       alwaysOnTop: true,
     });
+  });
+
+  it.each([
+    [1, true],
+    [1.15, true],
+    [2, true],
+    [0.99, false],
+    [2.01, false],
+    [Number.NaN, false],
+    [Number.POSITIVE_INFINITY, false],
+  ])(
+    "validates font.lineHeight %s at the schema boundary",
+    (lineHeight, accepted) => {
+      const action = () =>
+        validateUserConfiguration(
+          { version: 1, font: { lineHeight } },
+          configPath,
+          installedFonts,
+        );
+      if (accepted) expect(action().fontLineHeight).toBe(lineHeight);
+      else
+        expect(action).toThrow(
+          expect.objectContaining({ location: "font.lineHeight" }),
+        );
+    },
+  );
+
+  it.each([0, 128])(
+    "accepts terminal.padding boundary %s on every side",
+    (padding) => {
+      expect(
+        validateUserConfiguration(
+          {
+            version: 1,
+            terminal: {
+              padding: {
+                top: padding,
+                right: padding,
+                bottom: padding,
+                left: padding,
+              },
+            },
+          },
+          configPath,
+          installedFonts,
+        ).terminalPadding,
+      ).toEqual({
+        top: padding,
+        right: padding,
+        bottom: padding,
+        left: padding,
+      });
+    },
+  );
+
+  it.each(
+    ["top", "right", "bottom", "left"].flatMap((side) =>
+      [-1, 1.5, 129].map((value) => [side, value] as const),
+    ),
+  )("rejects terminal.padding.%s value %s", (side, value) => {
+    expect(() =>
+      validateUserConfiguration(
+        { version: 1, terminal: { padding: { [side]: value } } },
+        configPath,
+        installedFonts,
+      ),
+    ).toThrow(
+      expect.objectContaining({ location: `terminal.padding.${side}` }),
+    );
   });
 
   it.each([
@@ -133,6 +224,11 @@ describe("strict version 1 User Configuration", () => {
     [{ version: 2 }, "version"],
     [{ version: 1, extra: true }, "$.extra"],
     [{ version: 1, font: { weight: 400 } }, "font.weight"],
+    [{ version: 1, terminal: { gap: 8 } }, "terminal.gap"],
+    [
+      { version: 1, terminal: { padding: { horizontal: 8 } } },
+      "terminal.padding.horizontal",
+    ],
     [{ version: 1, scrollback: { extra: 1 } }, "scrollback.extra"],
     [{ version: 1, keyboard: { extra: 1 } }, "keyboard.extra"],
     [{ version: 1, window: { extra: 1 } }, "window.extra"],
@@ -177,17 +273,15 @@ describe("isolated User Configuration loading", () => {
 
   it("treats only ENOENT as absence and creates no file or directory", async () => {
     const { xdg, home } = await roots();
-    const isFontFamilyAvailable = vi.fn(async (family) =>
-      installedFonts.has(family),
-    );
+    const getMetrics = vi.fn(getInstalledFontFamilyMetrics);
     const configuration = await loadUserConfiguration({
       environment: { XDG_CONFIG_HOME: xdg },
       homeDirectory: home,
-      isFontFamilyAvailable,
+      getInstalledFontFamilyMetrics: getMetrics,
     });
     expect(configuration).toEqual(DEFAULT_USER_CONFIGURATION);
     await expect(stat(xdg)).rejects.toMatchObject({ code: "ENOENT" });
-    expect(isFontFamilyAvailable).not.toHaveBeenCalled();
+    expect(getMetrics).not.toHaveBeenCalled();
   });
 
   it("rejects a dangling configuration symlink without changing it or starting", async () => {
@@ -205,9 +299,7 @@ describe("isolated User Configuration loading", () => {
         {
           environment: { XDG_CONFIG_HOME: xdg },
           homeDirectory: home,
-          isFontFamilyAvailable: vi.fn(async (family) =>
-            installedFonts.has(family),
-          ),
+          getInstalledFontFamilyMetrics: vi.fn(getInstalledFontFamilyMetrics),
         },
         start,
       ),
@@ -225,9 +317,7 @@ describe("isolated User Configuration loading", () => {
     const base = {
       environment: { XDG_CONFIG_HOME: "/isolated" },
       homeDirectory: "/home/tester",
-      isFontFamilyAvailable: vi.fn(async (family) =>
-        installedFonts.has(family),
-      ),
+      getInstalledFontFamilyMetrics: vi.fn(getInstalledFontFamilyMetrics),
     };
     await expect(
       loadUserConfiguration({
@@ -261,9 +351,7 @@ describe("isolated User Configuration loading", () => {
         {
           environment: { XDG_CONFIG_HOME: xdg },
           homeDirectory: home,
-          isFontFamilyAvailable: vi.fn(async (family) =>
-            installedFonts.has(family),
-          ),
+          getInstalledFontFamilyMetrics: vi.fn(getInstalledFontFamilyMetrics),
         },
         start,
       );
@@ -293,21 +381,20 @@ describe("isolated User Configuration loading", () => {
       homeFile,
       JSON.stringify({ version: 1, font: { size: 30 } }),
     );
-    const isFontFamilyAvailable = vi.fn(
-      async (family: string) => family === "Exact Family",
+    const getMetrics = vi.fn(async (family: string) =>
+      family === "Exact Family" ? commonFontMetrics : undefined,
     );
 
     const configuration = await loadUserConfiguration({
       environment: { XDG_CONFIG_HOME: xdg },
       homeDirectory: home,
-      isFontFamilyAvailable,
+      getInstalledFontFamilyMetrics: getMetrics,
     });
 
     expect(configuration.fontFamily).toBe("Exact Family");
     expect(configuration.fontSize).toBe(16);
-    expect(isFontFamilyAvailable).toHaveBeenCalledExactlyOnceWith(
-      "Exact Family",
-    );
+    expect(configuration.configuredFontMetrics).toEqual(commonFontMetrics);
+    expect(getMetrics).toHaveBeenCalledExactlyOnceWith("Exact Family", 16);
   });
 
   it("rejects an unavailable configured family without starting or changing the file", async () => {
@@ -325,7 +412,7 @@ describe("isolated User Configuration loading", () => {
         {
           environment: { XDG_CONFIG_HOME: xdg },
           homeDirectory: home,
-          isFontFamilyAvailable: vi.fn(async () => false),
+          getInstalledFontFamilyMetrics: vi.fn(async () => undefined),
         },
         start,
       ),
@@ -333,6 +420,37 @@ describe("isolated User Configuration loading", () => {
       configurationPath: file,
       location: "font.family",
       reason: "must exactly name an installed font family",
+    });
+
+    expect(start).not.toHaveBeenCalled();
+    expect(await readFile(file)).toEqual(original);
+  });
+
+  it("preserves the actionable diagnostic when the targeted AppKit query fails", async () => {
+    const { xdg, home } = await roots();
+    const file = path.join(xdg, "omxterm", "config.json");
+    await mkdir(path.dirname(file), { recursive: true });
+    const original = Buffer.from(
+      '{"version":1,"font":{"family":"Exact Family","size":72}}',
+    );
+    await writeFile(file, original);
+    const start = vi.fn();
+
+    await expect(
+      startWithUserConfiguration(
+        {
+          environment: { XDG_CONFIG_HOME: xdg },
+          homeDirectory: home,
+          getInstalledFontFamilyMetrics: vi.fn(async () => {
+            throw Object.assign(new Error("timed out"), { code: "ETIMEDOUT" });
+          }),
+        },
+        start,
+      ),
+    ).rejects.toMatchObject({
+      configurationPath: file,
+      location: "font.family",
+      reason: "installed font families could not be discovered",
     });
 
     expect(start).not.toHaveBeenCalled();
@@ -349,14 +467,13 @@ describe("isolated User Configuration loading", () => {
     );
     await writeFile(file, original);
     const start = vi.fn((configuration) => configuration);
+    const getMetrics = vi.fn(getInstalledFontFamilyMetrics);
 
     const result = await startWithUserConfiguration(
       {
         environment: { XDG_CONFIG_HOME: xdg },
         homeDirectory: home,
-        isFontFamilyAvailable: vi.fn(async (family) =>
-          installedFonts.has(family),
-        ),
+        getInstalledFontFamilyMetrics: getMetrics,
       },
       start,
     );
@@ -370,6 +487,7 @@ describe("isolated User Configuration loading", () => {
       scrollbackLines: 10_000,
       optionKeyMode: "none",
     });
+    expect(getMetrics).not.toHaveBeenCalled();
     expect(await readFile(file)).toEqual(original);
   });
 });

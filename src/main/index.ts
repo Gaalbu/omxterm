@@ -36,7 +36,7 @@ import {
 } from "./terminal-window";
 import { registerTerminalWindowHost } from "./terminal-window-host";
 import { createTerminalWindowTitleController } from "./terminal-window-title";
-import { isInstalledFontFamilyAvailable } from "./installed-font-family";
+import { installedFontFamilyMetrics } from "./installed-font-family";
 import { UserConfigurationError } from "./user-configuration";
 import { reportUserConfigurationFailure } from "./user-configuration-failure";
 import { startWithUserConfiguration } from "./configured-startup";
@@ -80,7 +80,7 @@ app
       {
         environment: process.env,
         homeDirectory: account.homedir,
-        isFontFamilyAvailable: isInstalledFontFamilyAvailable,
+        getInstalledFontFamilyMetrics: installedFontFamilyMetrics,
       },
       async (userConfiguration) => {
         operationalEvents!.setLevel(userConfiguration.logLevel);
@@ -91,6 +91,8 @@ app
             ? { fontFamily: userConfiguration.fontFamily }
             : {}),
           fontSize: userConfiguration.fontSize,
+          fontLineHeight: userConfiguration.fontLineHeight,
+          terminalPadding: userConfiguration.terminalPadding,
           scrollbackLines: userConfiguration.scrollbackLines,
           optionKeyMode: userConfiguration.optionKeyMode,
         });
@@ -110,7 +112,7 @@ app
             const defaultShell = account.shell;
 
             const window = new BrowserWindow(
-              terminalWindowOptions(preloadPath),
+              terminalWindowOptions(preloadPath, userConfiguration),
             );
             lockTerminalRendererNavigation(window.webContents);
             const titleController = createTerminalWindowTitleController(
