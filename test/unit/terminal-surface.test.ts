@@ -6,6 +6,11 @@ import type {
 } from "../../src/shared/terminal-contract";
 import type { TerminalSessionHandlers } from "../../src/terminal-surface/terminal-session-adapter";
 
+type XtermResize = TerminalSize & {
+  readonly colsChanged?: boolean;
+  readonly rowsChanged?: boolean;
+};
+
 const xterm = vi.hoisted(() => {
   class FakeTerminal {
     static current: FakeTerminal;
@@ -29,7 +34,7 @@ const xterm = vi.hoisted(() => {
     };
     readonly constructorOptions: Record<string, unknown>;
     private onInput: ((data: string) => void) | undefined;
-    private onTerminalResize: ((size: TerminalSize) => void) | undefined;
+    private onTerminalResize: ((size: XtermResize) => void) | undefined;
     private onKey: ((event: KeyboardEvent) => boolean) | undefined;
     private addon: { dispose(): void } | undefined;
     private selection = "";
@@ -74,7 +79,7 @@ const xterm = vi.hoisted(() => {
       this.onInput = listener;
       return { dispose: this.inputDispose };
     }
-    onResize(listener: (size: TerminalSize) => void) {
+    onResize(listener: (size: XtermResize) => void) {
       this.onTerminalResize = listener;
       return { dispose: this.resizeDispose };
     }
@@ -88,7 +93,7 @@ const xterm = vi.hoisted(() => {
     emitInput(data: string) {
       this.onInput?.(data);
     }
-    emitResize(size: TerminalSize) {
+    emitResize(size: XtermResize) {
       this.onTerminalResize?.(size);
     }
     emitKey(event: Partial<KeyboardEvent>) {
@@ -130,12 +135,16 @@ class FakeResizeObserver {
   readonly disconnect = vi.fn();
   static observeError: Error | undefined;
 
-  constructor(_listener: ResizeObserverCallback) {
+  constructor(private readonly listener: ResizeObserverCallback) {
     FakeResizeObserver.current = this;
     this.observe.mockImplementation(() => {
       if (FakeResizeObserver.observeError)
         throw FakeResizeObserver.observeError;
     });
+  }
+
+  notify() {
+    this.listener([], this as unknown as ResizeObserver);
   }
 }
 
@@ -193,6 +202,52 @@ describe("portable Terminal Surface", () => {
     expect(FakeResizeObserver.current.disconnect).toHaveBeenCalledOnce();
     expect(xterm.FakeTerminal.current.dispose).toHaveBeenCalledOnce();
     expect(xterm.fitDispose).toHaveBeenCalledOnce();
+  });
+
+  it("refits through the observed container after shrinking and growing", async () => {
+    const frames: FrameRequestCallback[] = [];
+    vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
+      frames.push(callback);
+      return frames.length;
+    });
+    let fittedSize: TerminalSize = { cols: 120, rows: 40 };
+    xterm.fit.mockImplementation(() => {
+      xterm.FakeTerminal.current.emitResize({
+        ...fittedSize,
+        colsChanged: true,
+        rowsChanged: true,
+      });
+    });
+    const adapter = {
+      start: vi.fn(async () => undefined),
+      write: vi.fn(),
+      resize: vi.fn(),
+      close: vi.fn(),
+    };
+    const { mountTerminalSurface } =
+      await import("../../src/terminal-surface/terminal-surface");
+    const surface = await mountTerminalSurface(
+      document.createElement("main"),
+      adapter,
+    );
+    adapter.resize.mockClear();
+
+    fittedSize = { cols: 60, rows: 20 };
+    FakeResizeObserver.current.notify();
+    expect(adapter.resize).not.toHaveBeenCalled();
+    frames.shift()!(0);
+    expect(adapter.resize).toHaveBeenLastCalledWith({ cols: 60, rows: 20 });
+
+    fittedSize = { cols: 132, rows: 44 };
+    FakeResizeObserver.current.notify();
+    expect(adapter.resize).toHaveBeenCalledOnce();
+    frames.shift()!(1);
+    expect(adapter.resize.mock.calls).toEqual([
+      [{ cols: 60, rows: 20 }],
+      [{ cols: 132, rows: 44 }],
+    ]);
+
+    surface.dispose();
   });
 
   it("forwards parser title and BEL events and disposes their subscriptions", async () => {
@@ -824,13 +879,11 @@ describe("portable Terminal Surface", () => {
       { appearance: { fontSize: 16 } },
     );
     const firstTerminal = xterm.FakeTerminal.current;
+    firstAdapter.resize.mockClear();
 
     first.zoom("in");
     expect(firstTerminal.options.fontSize).toBe(17);
-    expect(firstAdapter.resize).toHaveBeenLastCalledWith({
-      cols: 92,
-      rows: 28,
-    });
+    expect(firstAdapter.resize.mock.calls).toEqual([[{ cols: 92, rows: 28 }]]);
 
     const secondAdapter = createAdapter();
     const second = await mountTerminalSurface(
@@ -839,12 +892,16 @@ describe("portable Terminal Surface", () => {
       { appearance: { fontSize: 20 } },
     );
     const secondTerminal = xterm.FakeTerminal.current;
+    secondAdapter.resize.mockClear();
     second.zoom("out");
     second.zoom("reset");
 
     expect(firstTerminal.options.fontSize).toBe(17);
     expect(secondTerminal.options.fontSize).toBe(20);
-    expect(secondAdapter.resize).toHaveBeenCalled();
+    expect(secondAdapter.resize.mock.calls).toEqual([
+      [{ cols: 92, rows: 28 }],
+      [{ cols: 92, rows: 28 }],
+    ]);
 
     first.dispose();
     second.dispose();
