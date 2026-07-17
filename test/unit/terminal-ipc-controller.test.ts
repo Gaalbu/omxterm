@@ -37,6 +37,8 @@ function clipboardOptions() {
     onTitleRequest: vi.fn(),
     onBell: vi.fn(),
     onUserInteraction: vi.fn(),
+    openExternalLink: vi.fn(async () => {}),
+    onExternalLinkOpenError: vi.fn(),
   };
 }
 
@@ -104,7 +106,7 @@ describe("terminal IPC controller", () => {
     expect(firstSession.close).toHaveBeenCalledOnce();
     expect(secondSession.close).not.toHaveBeenCalled();
     expect(ipc.handlers.size).toBe(4);
-    expect(ipc.listeners.size).toBe(6);
+    expect(ipc.listeners.size).toBe(7);
   });
 
   it("reports a normalized shell startup failure without disclosing the cause", () => {
@@ -299,6 +301,102 @@ describe("terminal IPC controller", () => {
     expect(clipboard.readClipboardText).not.toHaveBeenCalled();
     expect(clipboard.confirmPaste).not.toHaveBeenCalled();
     expect(session.write).not.toHaveBeenCalled();
+  });
+
+  it("opens only exact stable lowercase HTTP(S) requests from the owning main frame with one-call-per-request cardinality", () => {
+    const ipc = createIpcHarness();
+    const mainFrame = {};
+    const webContents: TrustedWebContents = {
+      mainFrame,
+      isDestroyed: () => false,
+      send: vi.fn(),
+    };
+    const options = clipboardOptions();
+    const router = registerTerminalIpcRouter(ipc.ipcMain);
+    router.registerController({
+      ...options,
+      webContents,
+      createSession: vi.fn(),
+      onSessionStartError: vi.fn(),
+      onSessionExit: vi.fn(),
+    });
+    const request = ipc.listeners.get(terminalIpc.externalLink)!;
+    const trusted = { sender: webContents, senderFrame: mainFrame };
+    const forged = { sender: webContents, senderFrame: {} };
+
+    request(trusted, "https://example.test/a?x=%2F#fragment");
+    request(trusted, "https://example.test/a?x=%2F#fragment");
+    request(trusted, "http://example.test");
+    request(
+      trusted,
+      "https://example.test:8443/path?name=Luiz%20Otavio#section",
+    );
+    request(trusted, "https://example.test:443/path");
+    request(trusted, "https://münchen.example/path");
+    for (const rejected of [
+      "HTTP://example.test",
+      "HTTPS://example.test",
+      "%68ttp://example.test",
+      "\u0000https://example.test",
+      "https://example.test/\u0001path",
+      "https://example.test/trailing ",
+      "\u0085https://example.test",
+      "https://example.test/\u009fpath",
+      "https://example.test/zero\u200bwidth",
+      "https://example.test\\@evil.test",
+      "//example.test/path",
+      "https://",
+      "not a URL",
+      "file:///tmp/example",
+      "custom://example.test",
+      "http:///missing-host",
+    ])
+      request(trusted, rejected);
+    request(forged, "https://forged.test");
+
+    expect(options.openExternalLink.mock.calls).toEqual([
+      ["https://example.test/a?x=%2F#fragment"],
+      ["https://example.test/a?x=%2F#fragment"],
+      ["http://example.test"],
+      ["https://example.test:8443/path?name=Luiz%20Otavio#section"],
+      ["https://example.test:443/path"],
+      ["https://münchen.example/path"],
+    ]);
+    expect(webContents.send).not.toHaveBeenCalled();
+  });
+
+  it("observes one opener rejection without retrying or exposing link content", async () => {
+    const ipc = createIpcHarness();
+    const mainFrame = {};
+    const webContents: TrustedWebContents = {
+      mainFrame,
+      isDestroyed: () => false,
+      send: vi.fn(),
+    };
+    const rejectedUrl = "https://private.example.test/secret";
+    const options = clipboardOptions();
+    options.openExternalLink.mockRejectedValueOnce(new Error(rejectedUrl));
+    const router = registerTerminalIpcRouter(ipc.ipcMain);
+    router.registerController({
+      ...options,
+      webContents,
+      createSession: vi.fn(),
+      onSessionStartError: vi.fn(),
+      onSessionExit: vi.fn(),
+    });
+
+    ipc.listeners.get(terminalIpc.externalLink)!(
+      { sender: webContents, senderFrame: mainFrame },
+      rejectedUrl,
+    );
+    await Promise.resolve();
+
+    expect(options.openExternalLink).toHaveBeenCalledOnce();
+    expect(options.onExternalLinkOpenError).toHaveBeenCalledWith();
+    expect(webContents.send).not.toHaveBeenCalled();
+    expect(
+      JSON.stringify(options.onExternalLinkOpenError.mock.calls),
+    ).not.toContain(rejectedUrl);
   });
 
   it("consumes malformed and forged context-menu IPC without side effects", () => {

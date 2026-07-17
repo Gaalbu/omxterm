@@ -50,6 +50,8 @@ export interface TerminalIpcControllerOptions {
   readonly onTitleRequest: (request: string) => void;
   readonly onBell: () => void;
   readonly onUserInteraction: () => void;
+  readonly openExternalLink: (url: string) => Promise<void>;
+  readonly onExternalLinkOpenError: () => void;
 }
 
 export interface TerminalIpcController {
@@ -74,6 +76,7 @@ interface RoutedTerminalIpcController extends TerminalIpcController {
   showClipboardContextMenu(payload?: unknown): void;
   title(payload?: unknown): void;
   bell(payload?: unknown): void;
+  openExternalLink(payload?: unknown): void;
 }
 
 export function registerTerminalIpcRouter(
@@ -105,6 +108,8 @@ export function registerTerminalIpcRouter(
     controllerFor(event)?.title(payload);
   const bell: IpcListener = (event, payload) =>
     controllerFor(event)?.bell(payload);
+  const externalLink: IpcListener = (event, payload) =>
+    controllerFor(event)?.openExternalLink(payload);
   const writeClipboardText: IpcHandler = (event, payload) => {
     const controller = controllerFor(event);
     if (!controller)
@@ -135,6 +140,7 @@ export function registerTerminalIpcRouter(
   ipcMain.on(terminalIpc.close, close);
   ipcMain.on(terminalIpc.title, title);
   ipcMain.on(terminalIpc.bell, bell);
+  ipcMain.on(terminalIpc.externalLink, externalLink);
   ipcMain.handle(terminalIpc.clipboardWrite, writeClipboardText);
   ipcMain.handle(terminalIpc.clipboardRead, readClipboardText);
   ipcMain.handle(terminalIpc.clipboardConfirmPaste, confirmPaste);
@@ -164,6 +170,7 @@ export function registerTerminalIpcRouter(
       ipcMain.removeListener(terminalIpc.close, close);
       ipcMain.removeListener(terminalIpc.title, title);
       ipcMain.removeListener(terminalIpc.bell, bell);
+      ipcMain.removeListener(terminalIpc.externalLink, externalLink);
       ipcMain.removeHandler(terminalIpc.clipboardWrite);
       ipcMain.removeHandler(terminalIpc.clipboardRead);
       ipcMain.removeHandler(terminalIpc.clipboardConfirmPaste);
@@ -263,6 +270,12 @@ function createTerminalIpcController(
   const bell = (payload?: unknown) => {
     if (payload === undefined) options.onBell();
   };
+  const openExternalLink = (payload?: unknown) => {
+    if (!isValidExternalLink(payload)) return;
+    void options.openExternalLink(payload).catch(() => {
+      options.onExternalLinkOpenError();
+    });
+  };
 
   return {
     start,
@@ -275,6 +288,7 @@ function createTerminalIpcController(
     showClipboardContextMenu,
     title,
     bell,
+    openExternalLink,
     dispose() {
       if (disposed) return;
       disposed = true;
@@ -282,4 +296,27 @@ function createTerminalIpcController(
       closeSession();
     },
   };
+}
+
+export function isValidExternalLink(value: unknown): value is string {
+  if (
+    typeof value !== "string" ||
+    value.length === 0 ||
+    /[\s\p{Cc}\p{Cf}\\]/u.test(value) ||
+    (!value.startsWith("http://") && !value.startsWith("https://"))
+  )
+    return false;
+  try {
+    const parsed = new URL(value);
+    const authority = value
+      .slice(value.startsWith("https://") ? 8 : 7)
+      .split(/[/?#]/u, 1)[0]!;
+    return (
+      (parsed.protocol === "http:" || parsed.protocol === "https:") &&
+      authority.length > 0 &&
+      parsed.host.length > 0
+    );
+  } catch {
+    return false;
+  }
 }
