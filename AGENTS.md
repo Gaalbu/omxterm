@@ -64,7 +64,9 @@ relevant formatting and diff checks.
    records verification evidence.
 6. Merge PRs with squash after required reviews and checks pass. Use the PR
    title as the conventional squash commit subject.
-7. After integration, verify issue closure and delete the merged branch.
+7. After integration, verify issue closure, remove the associated worktree, and
+   delete the merged issue branch both locally and remotely. Preserve active,
+   unmerged, or unrelated branches.
 
 Keep tracker state accurate. A delivered change that is not reflected in its
 issue or PR is unfinished work.
