@@ -56,7 +56,7 @@ relevant formatting and diff checks.
 
 1. Check existing issues, PRs, branches, and working-tree changes before taking
    ownership. Never duplicate an active writer.
-2. Work on one issue at a time in its own branch.
+2. Each writer owns one issue at a time in an exclusive branch and worktree.
 3. Preserve unrelated and uncommitted user changes.
 4. Use small conventional commits such as `feat`, `fix`, `refactor`, `test`,
    `docs`, `chore`, and `ci`.
@@ -68,6 +68,37 @@ relevant formatting and diff checks.
 
 Keep tracker state accurate. A delivered change that is not reflected in its
 issue or PR is unfinished work.
+
+### Issue queues and orchestration
+
+- When planning multiple issues, record both **blocking edges** and **conflict
+  edges**. A blocking edge requires one issue to complete before another can
+  start or integrate. A conflict edge means the issues should not have active
+  writers at the same time because they overlap in files, contracts, artifacts,
+  or integration assumptions.
+- An issue is safe to implement in parallel only when repository evidence shows
+  that it has neither kind of edge with the other active work. Missing declared
+  dependencies alone is not evidence of independence. When independence is
+  uncertain, integrate sequentially.
+- Give every parallel writer exclusive ownership of its issue, branch, and
+  worktree. Use the operating system temporary directory for disposable clean
+  reproductions and verification worktrees; use a durable path for
+  implementation that must survive restarts or task recovery.
+- Integrate completed issues one at a time. After each merge, synchronize and
+  revalidate the remaining branches before accepting them. Remove merged
+  branches and worktrees after confirming they contain no uncommitted work.
+- The orchestrator owns routine engineering decisions. It reads the issue,
+  spec, ADRs, and repository evidence, then chooses the smallest safe complete
+  solution. It may repair minor omissions or non-material issue details when
+  doing so does not expand product scope, introduce code smell, weaken security,
+  or revise a durable decision. Record material deviations in the PR.
+- Escalate only a real product choice, security-boundary decision, missing
+  authority, owner-only manual gate, or the absence of any safe in-scope path.
+  Tool failures, reviewer disagreement, and workflow plumbing should degrade to
+  an equivalent safe path rather than stop delivery.
+- Keep PR descriptions concise: intent, material changes, acceptance-criteria
+  mapping, verification evidence, and documentation impact. A PR is not an
+  execution diary.
 
 ## Documentation
 
