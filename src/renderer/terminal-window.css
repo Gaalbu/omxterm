@@ -1,6 +1,6 @@
 :root {
   color-scheme: dark;
-  background: #000000;
+  background: var(--terminal-background, transparent);
 }
 
 @font-face {
@@ -19,7 +19,7 @@ body,
   height: 100%;
   margin: 0;
   overflow: hidden;
-  background: #000000;
+  background: var(--terminal-background, transparent);
 }
 
 #terminal-surface::before {
@@ -40,4 +40,8 @@ body,
   padding: calc(30px + var(--terminal-padding-top, 0px))
     var(--terminal-padding-right, 8px) var(--terminal-padding-bottom, 8px)
     var(--terminal-padding-left, 8px);
+}
+
+#terminal-surface .xterm-viewport {
+  background-color: var(--terminal-background, transparent);
 }
