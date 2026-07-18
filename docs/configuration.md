@@ -131,6 +131,29 @@ inset. `font.lineHeight` changes row height independently of glyph size.
 Window Font Zoom and the native Always on Top menu are per-window runtime
 actions and never rewrite this file.
 
+### Tuning padding around the terminal grid
+
+The Terminal Surface is a grid of whole character cells, not ordinary text
+that can end at any pixel. After accounting for the title inset and configured
+padding, OMXTerm fits the largest whole number of columns and rows that the
+window can contain. Cell width and height depend on the font family, font size,
+line height, and renderer, so the remaining width and height rarely divide
+evenly into cells.
+
+This is why Otávio's example uses visually asymmetric padding. Its
+`4 / 4 / 8 / 16` top, right, bottom, and left values were tuned around Fira
+Code at 22 px with a 1.1 line height; they are not universal values that make
+every font and window geometrically balanced.
+
+Choose the font size and line height you normally use first, then adjust the
+four padding sides by eye. Resizing the window or using Window Font Zoom changes
+the cell measurements without changing the configured padding, so a balance
+that looks right at one size may shift at another. OMXTerm currently refits the
+terminal grid and keeps it usable, but it does not redistribute leftover pixels
+or automatically rebalance padding. `Cmd+0` returns the window to its
+configured font size when you want to return to the size around which the
+padding was tuned.
+
 ## Terminal Themes
 
 A Terminal Theme is a complete OMXTerm palette stored as strict JSON. Start
