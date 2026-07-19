@@ -45,13 +45,32 @@ interface SessionCallbacks {
   readonly onExit: (exit: TerminalExit) => void;
 }
 
+// Lifecycle context for one ended (or failed) Live Terminal Session within
+// its window: `liveSessions` counts the sessions still running afterwards,
+// and `closeRequested` distinguishes a close-driven end from a spontaneous
+// exit so an expected kill signal is not treated as a failure.
+export interface TerminalSessionEndContext {
+  readonly sessionId: TerminalSessionId;
+  readonly closeRequested: boolean;
+  readonly liveSessions: number;
+}
+
+export interface TerminalSessionStartErrorContext {
+  readonly liveSessions: number;
+}
+
 export interface TerminalIpcControllerOptions {
   readonly windowId?: number;
   readonly configuration: TerminalRendererConfiguration;
   readonly webContents: TrustedWebContents;
   readonly createSession: (callbacks: SessionCallbacks) => LocalTerminalSession;
-  readonly onSessionStartError: () => void;
-  readonly onSessionExit: (exit: TerminalExit) => void;
+  readonly onSessionStartError: (
+    context: TerminalSessionStartErrorContext,
+  ) => void;
+  readonly onSessionExit: (
+    exit: TerminalExit,
+    context: TerminalSessionEndContext,
+  ) => void;
   readonly writeClipboardText: (text: string) => void;
   readonly readClipboardText: () => string;
   readonly confirmPaste: (text: string) => Promise<boolean>;
@@ -65,6 +84,11 @@ export interface TerminalIpcControllerOptions {
 }
 
 export interface TerminalIpcController {
+  // Close confirmations ask only when the affected sessions are running a
+  // foreground child process (ADR 0017). The selected session is the one the
+  // renderer last reported; before any report, every live session counts.
+  hasBusySelectedSession(): boolean;
+  hasBusySession(): boolean;
   dispose(): void;
 }
 
@@ -81,6 +105,7 @@ interface RoutedTerminalIpcController extends TerminalIpcController {
   input(payload?: unknown): void;
   resize(payload?: unknown): void;
   close(payload?: unknown): void;
+  tabSelected(payload?: unknown): void;
   writeClipboardText(payload?: unknown): void;
   readClipboardText(payload?: unknown): string;
   confirmPaste(payload?: unknown): Promise<boolean>;
@@ -148,6 +173,8 @@ export function registerTerminalIpcRouter(
     route(event, (controller) => controller.resize(payload));
   const close: IpcListener = (event, payload) =>
     route(event, (controller) => controller.close(payload));
+  const tabSelected: IpcListener = (event, payload) =>
+    route(event, (controller) => controller.tabSelected(payload));
   const title: IpcListener = (event, payload) =>
     route(event, (controller) => controller.title(payload));
   const bell: IpcListener = (event, payload) =>
@@ -222,6 +249,7 @@ export function registerTerminalIpcRouter(
   ipcMain.on(terminalIpc.input, input);
   ipcMain.on(terminalIpc.resize, resize);
   ipcMain.on(terminalIpc.close, close);
+  ipcMain.on(terminalIpc.tabSelected, tabSelected);
   ipcMain.on(terminalIpc.title, title);
   ipcMain.on(terminalIpc.bell, bell);
   ipcMain.on(terminalIpc.externalLink, externalLink);
@@ -258,6 +286,7 @@ export function registerTerminalIpcRouter(
       ipcMain.removeListener(terminalIpc.input, input);
       ipcMain.removeListener(terminalIpc.resize, resize);
       ipcMain.removeListener(terminalIpc.close, close);
+      ipcMain.removeListener(terminalIpc.tabSelected, tabSelected);
       ipcMain.removeListener(terminalIpc.title, title);
       ipcMain.removeListener(terminalIpc.bell, bell);
       ipcMain.removeListener(terminalIpc.externalLink, externalLink);
@@ -275,6 +304,7 @@ export function registerTerminalIpcRouter(
 interface RoutedSessionState {
   readonly session: LocalTerminalSession;
   closed: boolean;
+  exited: boolean;
 }
 
 function createTerminalIpcController(
@@ -285,6 +315,7 @@ function createTerminalIpcController(
   let disposed = false;
   const sessions = new Map<TerminalSessionId, RoutedSessionState>();
   let nextSessionNumber = 1;
+  let selectedSessionId: TerminalSessionId | undefined;
   const windowId = options.windowId;
   const writeWindowEvent = (
     event: Parameters<OperationalEventLog["write"]>[0],
@@ -310,6 +341,22 @@ function createTerminalIpcController(
     state.session.close();
   };
 
+  const countLiveSessions = () =>
+    [...sessions.values()].filter((state) => !state.exited).length;
+
+  const isBusy = (state: RoutedSessionState) =>
+    !state.closed && !state.exited && state.session.hasForegroundChildProcess();
+  const hasBusySession = () => [...sessions.values()].some(isBusy);
+
+  const tabSelected = (payload?: unknown) => {
+    if (!isTerminalSessionReference(payload)) {
+      reject("ipc", "invalid-payload");
+      return;
+    }
+    if (!routedSession(payload.sessionId)) return;
+    selectedSessionId = payload.sessionId;
+  };
+
   // A session-scoped payload is rejected before it is routed: an invalid shape
   // never reaches a session, and a well-formed message may only address a
   // session id this controller allocated for its own Terminal Window.
@@ -331,6 +378,7 @@ function createTerminalIpcController(
     const sessionId: TerminalSessionId = `s${nextSessionNumber}`;
     nextSessionNumber += 1;
     let startedAt: number | undefined;
+    let exitedBeforeRegistration = false;
     let createdSession: LocalTerminalSession;
     try {
       createdSession = options.createSession({
@@ -341,10 +389,17 @@ function createTerminalIpcController(
         },
         onExit(exit) {
           if (disposed) return;
+          const state = sessions.get(sessionId);
+          if (state) state.exited = true;
+          else exitedBeforeRegistration = true;
           if (!options.webContents.isDestroyed()) {
             options.webContents.send(terminalIpc.exit, { sessionId, ...exit });
           }
-          options.onSessionExit(exit);
+          options.onSessionExit(exit, {
+            sessionId,
+            closeRequested: state?.closed ?? false,
+            liveSessions: countLiveSessions(),
+          });
           if (windowId !== undefined) {
             const outcome = exit.signal !== 0 ? "signal" : "clean";
             writeWindowEvent({
@@ -368,11 +423,15 @@ function createTerminalIpcController(
           code: null,
           durationMs: elapsedMilliseconds(startedAt),
         });
-      options.onSessionStartError();
+      options.onSessionStartError({ liveSessions: countLiveSessions() });
       throw new Error("The Default Shell could not be started");
     }
 
-    sessions.set(sessionId, { session: createdSession, closed: false });
+    sessions.set(sessionId, {
+      session: createdSession,
+      closed: false,
+      exited: exitedBeforeRegistration,
+    });
     startedAt = Date.now();
     if (windowId !== undefined)
       writeWindowEvent({
@@ -495,6 +554,14 @@ function createTerminalIpcController(
     input,
     resize,
     close,
+    tabSelected,
+    hasBusySelectedSession() {
+      const selected = selectedSessionId
+        ? sessions.get(selectedSessionId)
+        : undefined;
+      return selected ? isBusy(selected) : hasBusySession();
+    },
+    hasBusySession,
     writeClipboardText,
     readClipboardText,
     confirmPaste,

@@ -77,6 +77,18 @@ describe("isolated preload terminal bridge", () => {
     });
   });
 
+  it("sends only validated tab selection notices", () => {
+    const bridge = electron.bridge!;
+
+    bridge.notifyTabSelection("s3");
+    expect(() => bridge.notifyTabSelection("")).toThrow(TypeError);
+    expect(() => bridge.notifyTabSelection("session-1")).toThrow(TypeError);
+
+    expect(electron.send).toHaveBeenCalledWith(terminalIpc.tabSelected, {
+      sessionId: "s3",
+    });
+  });
+
   it("returns only a validated Live Terminal Session identifier from start", async () => {
     const bridge = electron.bridge!;
 
@@ -169,6 +181,7 @@ describe("isolated preload terminal bridge", () => {
       createSession: vi.fn(() => ({
         write: vi.fn(),
         resize: vi.fn(),
+        hasForegroundChildProcess: () => false,
         close: vi.fn(),
       })),
       onSessionStartError: vi.fn(),
@@ -277,6 +290,42 @@ describe("isolated preload terminal bridge", () => {
     expect(onExit).toHaveBeenCalledOnce();
     expect(onExit).toHaveBeenCalledWith("s2", { exitCode: 0, signal: 0 });
     expect(electron.removeListener).toHaveBeenCalledTimes(2);
+  });
+
+  it("delivers only valid tab commands from main", () => {
+    const bridge = electron.bridge!;
+    const onTabCommand = vi.fn();
+    const remove = bridge.onTabCommand(onTabCommand);
+
+    electron.listeners.get(terminalIpc.tabCommand)?.({}, { action: "new" });
+    electron.listeners.get(terminalIpc.tabCommand)?.({}, { action: "close" });
+    electron.listeners.get(terminalIpc.tabCommand)?.(
+      {},
+      { action: "select", position: 4 },
+    );
+    electron.listeners.get(terminalIpc.tabCommand)?.(
+      {},
+      { action: "close-session", sessionId: "s3" },
+    );
+    electron.listeners.get(terminalIpc.tabCommand)?.({}, { action: "detach" });
+    electron.listeners.get(terminalIpc.tabCommand)?.(
+      {},
+      { action: "select", position: 10 },
+    );
+    electron.listeners.get(terminalIpc.tabCommand)?.({}, "new");
+    remove();
+
+    expect(onTabCommand.mock.calls).toEqual([
+      [{ action: "new" }],
+      [{ action: "close" }],
+      [{ action: "select", position: 4 }],
+      [{ action: "close-session", sessionId: "s3" }],
+    ]);
+    expect(electron.removeListener).toHaveBeenCalledWith(
+      terminalIpc.tabCommand,
+      expect.any(Function),
+    );
+    electron.removeListener.mockClear();
   });
 
   it("delivers only valid Window Font Zoom commands from main", () => {
