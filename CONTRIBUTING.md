@@ -50,7 +50,13 @@ architecture. Linux also needs the `fontconfig` utilities for exact configured
 font-family validation. Running the AppImage normally requires FUSE 2, such as
 `libfuse2t64` on Ubuntu 24.04 or `libfuse2` on older Ubuntu releases. Linux
 rendering uses X11 and requires XWayland under a Wayland session; native Wayland
-is not currently claimed. macOS and Windows contributors should install the
+is not currently claimed. Launching OMXTerm — including the packaged launch
+inside `npm run package:verify` and `npm run check:linux` — needs a running
+graphical session; a headless or SSH shell without `$DISPLAY` fails with
+`Missing X server or $DISPLAY`. Over SSH, point `DISPLAY` at the machine's
+desktop session (commonly `DISPLAY=:0`). `xvfb-run` can smoke-test a truly
+headless machine but never counts as platform behavior evidence. macOS and
+Windows contributors should install the
 native build toolchain requested by npm if no matching dependency prebuild is
 available.
 
