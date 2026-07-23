@@ -11,8 +11,11 @@ Terminal Surface all remaining content space. It is not a Ghostty competitor
 claim, an SSH bastion, an AI product, a session manager, or an IDE.
 
 The initial Supported Platforms are macOS arm64, Linux arm64, and Windows
-arm64. x64, Intel macOS, and other operating systems are deferred rather than
-current support commitments.
+arm64. Linux rendering defaults to X11 and requires XWayland when the desktop
+session is Wayland; native Wayland rendering is not currently claimed. An
+explicit Electron `--ozone-platform` switch overrides the Linux default for
+diagnosis. x64, Intel macOS, and other operating systems are deferred rather
+than current support commitments.
 
 ## Product scope
 
@@ -43,9 +46,10 @@ updates, and remote terminal features are outside the current product contract.
 
 ## Window and session behavior
 
-- Launching OMXTerm creates a Terminal Window with one Terminal Tab. `Cmd+N`
-  creates another window; `Cmd+T` creates another tab in the selected window.
-  Each tab owns its own independent Live Terminal Session.
+- Launching OMXTerm creates a Terminal Window with one Terminal Tab. New Window
+  and New Tab default to `Cmd+N` and `Cmd+T` on macOS, and `Ctrl+Shift+N` and
+  `Ctrl+Shift+T` on Linux. Each tab owns its own independent Live Terminal
+  Session.
 - After its Terminal Surface mounts, an active Terminal Window gives terminal
   input DOM focus. Returning from another application or another OMXTerm window
   restores that focus only in the active Terminal Window without activating,
@@ -54,14 +58,19 @@ updates, and remote terminal features are outside the current product contract.
   area while the Terminal Surface remains fully interactive.
 - A window with a single tab shows no tab strip and renders exactly like the
   pre-tab contract. With two or more tabs, an OMXTerm-drawn tab strip occupies
-  its own full-width row below the fixed 30 px title inset, above the Terminal
-  Surface and Snippets Sidebar row. Clicking a tab selects it; the selected
-  tab's grid refits and receives terminal focus.
-- `Cmd+W` closes only the selected tab, terminating only its session. Closing
-  a window's last tab closes that window; `Cmd+Shift+W` closes the selected
-  window with all of its tabs. Closing the last window quits OMXTerm.
-- `Cmd+Q` requests one confirmation for all open windows when confirmation is
-  enabled and at least one Live Terminal Session is Busy.
+  its own full-width row above the Terminal Surface and Snippets Sidebar row.
+  On macOS it sits below the app-controlled 30 px native title inset; on Linux
+  it starts immediately below the operating system's native title and menu,
+  without another inset. Clicking a tab selects it; the selected tab's grid
+  refits and receives terminal focus.
+- Close Tab defaults to `Cmd+W` on macOS and `Ctrl+Shift+W` on Linux, and
+  terminates only the selected tab's session. Closing a window's last tab closes
+  that window. Close Window defaults to `Cmd+Shift+W` on macOS and
+  `Ctrl+Shift+Q` on Linux and closes all of the selected window's tabs. Closing
+  the last window quits OMXTerm.
+- Quit defaults to `Cmd+Q` on macOS and `Ctrl+Alt+Shift+Q` on Linux. It requests
+  one confirmation for all open windows when confirmation is enabled and at
+  least one Live Terminal Session is Busy.
 - `confirmClose` defaults to `true` and guards closing a tab, closing a
   window, and quitting with one confirmation per action — closing a window
   with several tabs asks once, not per tab. A close action asks only when an
@@ -75,8 +84,10 @@ updates, and remote terminal features are outside the current product contract.
   or a failure dialog, regardless of its numeric exit code.
 - A spawn failure or unexpected signal remains visible in a native error dialog
   and local log until acknowledged; the useless tab then closes.
-- Each window starts at configured font size. `Cmd++`, `Cmd+-`, and `Cmd+0`
-  affect only that window, apply to every tab in it, and are not persisted.
+- Each window starts at configured font size. Window Font Zoom defaults to
+  `Cmd++`, `Cmd+-`, and `Cmd+0` on macOS and `Ctrl++`, `Ctrl+-`, and `Ctrl+0`
+  on Linux; it affects only that window, applies to every tab in it, and is not
+  persisted.
 - The Terminal Surface and Live Terminal Session grid refit in both directions
   after Terminal Window width or height changes, after Window Font Zoom, and
   after tab selection. The xterm grid remains inside the visible content area
@@ -84,10 +95,12 @@ updates, and remote terminal features are outside the current product contract.
 - Native minimum window bounds keep the existing 320 px width and 200 px height
   as floors and grow at startup when configured font or padding needs more room
   for a visible terminal grid.
-- The Terminal Surface keeps a fixed 30 px native title/drag inset above the
-  configurable top padding. The selected Terminal Theme background fills the
-  complete app-controlled Terminal Window content, including the title inset
-  and all configured padding.
+- On macOS, the Terminal Surface keeps a fixed 30 px native title/drag inset
+  above the configurable top padding. Linux uses its operating-system title
+  and menu outside the app-controlled content and adds no duplicate inset. The
+  selected Terminal Theme background fills the complete app-controlled
+  Terminal Window content, including any title inset and all configured
+  padding.
 - `Window -> Always on Top` toggles only the selected window at the ordinary
   native floating level. New windows use the configured default.
 - Dropping one or more native file-manager files or folders anywhere in a
@@ -96,8 +109,9 @@ updates, and remote terminal features are outside the current product contract.
   delivered through Protected Paste without sending Enter. Drag navigation is
   prevented over the whole renderer document; a drop with no native files has
   no terminal side effect.
-- `View -> Toggle Snippets` (default `Cmd+Shift+S`, remappable through
-  `keybinds`) shows or hides the selected window's Snippets Sidebar beside its
+- `View -> Toggle Snippets` (default `Cmd+Shift+S` on macOS and
+  `Ctrl+Shift+S` on Linux, remappable through `keybinds`) shows or hides the
+  selected window's Snippets Sidebar beside its
   Terminal Surface. The sidebar lists the snippets from `snippets.json`,
   filters them by name and description as the user types, and a click injects
   the snippet into the selected tab's Live Terminal Session and returns focus to
@@ -130,16 +144,18 @@ to the Default Shell's name; the native window title mirrors the selected tab
 and falls back to `OMXTerm`. Title contents are never logged or reported to
 the PTY.
 
-Only literal visible `http:` and `https:` URLs are links. `Cmd+click` asks the
-Electron main process to parse and validate the exact URL before opening it.
-OSC 8 destinations and all other schemes are ignored.
+Only literal visible `http:` and `https:` URLs are links. `Cmd+click` on macOS
+or `Ctrl+click` on Linux asks the Electron main process to parse and validate
+the exact URL before opening it. OSC 8 destinations and all other schemes are
+ignored.
 
 ## Clipboard
 
 - Selection never copies automatically.
 - `Ctrl+C` and `Ctrl+V` remain PTY input.
-- `Cmd+C`, `Cmd+V`, and the native context menu perform explicit text copy and
-  paste. Any non-empty plain text, including whitespace-only text, is pasted
+- `Cmd+C` and `Cmd+V` on macOS, `Ctrl+Shift+C` and `Ctrl+Shift+V` on Linux,
+  and the native context menu perform explicit text copy and paste. Any
+  non-empty plain text, including whitespace-only text, is pasted
   unchanged and takes priority over every file-list representation. When text
   is empty and the clipboard exposes a supported native file-manager file list,
   Paste inserts its paths in the same form as a file drop. Plain-text URLs and
@@ -199,7 +215,8 @@ row-height multiplier from 1.0 through 2.0 inclusive, accepts fractional
 values, does not change glyph size, and defaults to 1.0. Terminal padding uses
 explicit per-side integer CSS pixels from 0 through 128 inclusive and defaults
 to top 0, right 8, bottom 8, and left 8. User top padding is added to the fixed,
-non-configurable 30 px native title inset. `logLevel` defaults to `info`,
+non-configurable 30 px native title inset on macOS; on Linux it begins directly
+below the native window chrome. `logLevel` defaults to `info`,
 `keyboard.optionAsAlt` to `none`, and `window.alwaysOnTop` to `false`.
 
 An optional `keybinds` object remaps application-chrome shortcuts for a fixed
@@ -220,9 +237,10 @@ triggered a keybind this way is consumed — it never reaches the terminal as
 input.
 Unknown action names, malformed accelerators, and duplicate accelerators are
 errors under the resilient failure contract below. Duplicates are judged on
-the effective map with macOS semantics (`CommandOrControl`, `Super`, and
-`Meta` count as `Command`): a remap that collides with another action's
-remaining default is the same error as two explicit entries colliding.
+the effective native map: `CommandOrControl` resolves to `Command` on macOS and
+`Control` on Linux, while `Super` and `Meta` use Electron's Command accelerator
+family. A remap that collides with another action's remaining default is the
+same error as two explicit entries colliding.
 Creating new actions, system-global shortcuts, chords or sequences, and
 per-platform alternate maps are unsupported.
 

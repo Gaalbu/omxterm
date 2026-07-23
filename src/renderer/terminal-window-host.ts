@@ -88,6 +88,10 @@ export function mountTerminalWindowPage(
   if (options.configuration) {
     const background = options.configuration.terminalTheme.colors.background;
     page.document.documentElement.style.setProperty(
+      "--native-title-inset",
+      `${options.configuration.nativeTitleInset}px`,
+    );
+    page.document.documentElement.style.setProperty(
       "--terminal-background",
       background,
     );
@@ -142,9 +146,14 @@ export function mountTerminalWindowPage(
   );
 
   const onPageFocus = () => tabs.focusSelected();
-  const onDragOver = (event: DragEvent) => event.preventDefault();
-  const onDrop = (event: DragEvent) => {
+  const onDragOver = (event: DragEvent) => {
     event.preventDefault();
+    event.stopPropagation();
+  };
+  const onDrop = (event: DragEvent) => {
+    // Capture before xterm or another target can interpret a native file URI.
+    event.preventDefault();
+    event.stopPropagation();
     const files = event.dataTransfer?.files;
     if (!files || files.length === 0 || !options.droppedFilePathInsertion)
       return;
@@ -156,8 +165,8 @@ export function mountTerminalWindowPage(
     disposed = true;
     page.removeEventListener("pagehide", onPageHide);
     page.removeEventListener("focus", onPageFocus);
-    page.document.removeEventListener("dragover", onDragOver);
-    page.document.removeEventListener("drop", onDrop);
+    page.document.removeEventListener("dragover", onDragOver, true);
+    page.document.removeEventListener("drop", onDrop, true);
     removeZoomListener?.();
     removeClipboardActionListener?.();
     removeTabCommandListener?.();
@@ -171,8 +180,8 @@ export function mountTerminalWindowPage(
 
   page.addEventListener("pagehide", onPageHide, { once: true });
   page.addEventListener("focus", onPageFocus);
-  page.document.addEventListener("dragover", onDragOver);
-  page.document.addEventListener("drop", onDrop);
+  page.document.addEventListener("dragover", onDragOver, true);
+  page.document.addEventListener("drop", onDrop, true);
 
   const ready = tabs.ready.then(() => {
     if (disposed) return;

@@ -151,6 +151,7 @@ describe("renderer Terminal Window page host", () => {
       fontFamily: "SF Mono",
       scrollbackLines: 2_000,
       optionKeyMode: "right",
+      nativeTitleInset: 30,
       terminalTheme: DEFAULT_TERMINAL_THEME,
       userFileErrors: [],
     } as const;
@@ -189,7 +190,7 @@ describe("renderer Terminal Window page host", () => {
     expect(removeZoomListener).toHaveBeenCalledOnce();
   });
 
-  it("applies a non-black theme to the page, root, tabs container, and mount options", async () => {
+  it("applies the native title inset and a non-black theme to the page and mount options", async () => {
     const theme = Object.freeze({
       ...DEFAULT_TERMINAL_THEME,
       name: "non-black",
@@ -210,12 +211,16 @@ describe("renderer Terminal Window page host", () => {
         terminalPadding: { top: 0, right: 8, bottom: 8, left: 8 },
         scrollbackLines: 10_000,
         optionKeyMode: "none",
+        nativeTitleInset: 0,
         terminalTheme: theme,
         userFileErrors: [],
       },
     });
     await host.ready;
 
+    expect(
+      document.documentElement.style.getPropertyValue("--native-title-inset"),
+    ).toBe("0px");
     expect(
       document.documentElement.style.getPropertyValue("--terminal-background"),
     ).toBe("#1e1e2e");
@@ -282,9 +287,12 @@ describe("renderer Terminal Window page host", () => {
     await vi.waitFor(() => expect(elements.tabStrip.hidden).toBe(false));
     elements.tabStrip.querySelector<HTMLButtonElement>("button")!.click();
 
+    const targetDragOver = vi.fn();
+    elements.tabStrip.addEventListener("dragover", targetDragOver);
     const dragOver = new Event("dragover", { bubbles: true, cancelable: true });
-    document.body.dispatchEvent(dragOver);
+    elements.tabStrip.dispatchEvent(dragOver);
     expect(dragOver.defaultPrevented).toBe(true);
+    expect(targetDragOver).not.toHaveBeenCalled();
 
     const file = new File([""], "A B.txt");
     const drop = new Event("drop", { bubbles: true, cancelable: true });
@@ -300,9 +308,12 @@ describe("renderer Terminal Window page host", () => {
         },
       },
     });
+    const targetDrop = vi.fn();
+    elements.tabStrip.addEventListener("drop", targetDrop);
     elements.tabStrip.dispatchEvent(drop);
 
     expect(drop.defaultPrevented).toBe(true);
+    expect(targetDrop).not.toHaveBeenCalled();
     expect(droppedFilePathInsertion).toHaveBeenCalledWith([file]);
     expect(first.inject).toHaveBeenCalledExactlyOnceWith("'/Users/me/A B.txt'");
     expect(second.inject).not.toHaveBeenCalled();

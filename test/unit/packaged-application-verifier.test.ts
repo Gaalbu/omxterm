@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   inspectAsarEntries,
   inspectApplicationVersions,
+  inspectForbiddenPackagedEntries,
   inspectIcnsRepresentations,
 } from "../../scripts/verify-packaged-app.mjs";
 
@@ -79,11 +80,24 @@ describe("packaged application verifier", () => {
     });
   });
 
-  it("accepts the complete production runtime boundary", () => {
-    expect(inspectAsarEntries(requiredEntries)).toEqual({
-      missing: [],
-      forbidden: [],
-    });
+  it("accepts only the native runtime required by each POSIX package", () => {
+    expect(
+      inspectAsarEntries(
+        [
+          ...requiredEntries,
+          "/node_modules/node-pty/prebuilds/darwin-arm64",
+          "/node_modules/node-pty/prebuilds/darwin-arm64/pty.node",
+          "/node_modules/node-pty/prebuilds/darwin-arm64/spawn-helper",
+        ],
+        "darwin",
+      ),
+    ).toEqual({ missing: [], forbidden: [] });
+    expect(
+      inspectAsarEntries(
+        [...requiredEntries, "/node_modules/node-pty/build/Release/pty.node"],
+        "linux",
+      ),
+    ).toEqual({ missing: [], forbidden: [] });
   });
 
   it.each([
@@ -96,14 +110,57 @@ describe("packaged application verifier", () => {
     "/node_modules/node-addon-api/napi.h",
     "/session-transcript.txt",
   ])("rejects development or private-looking entry %s", (entry) => {
-    expect(inspectAsarEntries([...requiredEntries, entry]).forbidden).toEqual([
-      entry,
+    expect(
+      inspectAsarEntries([...requiredEntries, entry], "darwin").forbidden,
+    ).toEqual([entry]);
+  });
+
+  it("rejects another operating system's native runtime", () => {
+    expect(
+      inspectAsarEntries(
+        [
+          ...requiredEntries,
+          "/node_modules/node-pty/build/Release/pty.node",
+          "/node_modules/node-pty/prebuilds/darwin-arm64/pty.node",
+        ],
+        "linux",
+      ).forbidden,
+    ).toEqual(["/node_modules/node-pty/prebuilds/darwin-arm64/pty.node"]);
+  });
+
+  it("rejects Linux node-pty rebuild intermediates", () => {
+    expect(
+      inspectAsarEntries(
+        [
+          ...requiredEntries,
+          "/node_modules/node-pty/build/Release/pty.node",
+          "/node_modules/node-pty/build/Makefile",
+          "/node_modules/node-pty/build/Release/obj.target/pty/src/unix/pty.o",
+        ],
+        "linux",
+      ).forbidden,
+    ).toEqual([
+      "/node_modules/node-pty/build/Makefile",
+      "/node_modules/node-pty/build/Release/obj.target/pty/src/unix/pty.o",
+    ]);
+  });
+
+  it("rejects private-looking files anywhere in an extracted package tree", () => {
+    expect(
+      inspectForbiddenPackagedEntries([
+        "/resources/app.asar",
+        "/resources/private-key.pem",
+        "/usr/share/omxterm/session-transcript.txt",
+      ]),
+    ).toEqual([
+      "/resources/private-key.pem",
+      "/usr/share/omxterm/session-transcript.txt",
     ]);
   });
 
   it("reports a missing runtime asset", () => {
-    expect(inspectAsarEntries(requiredEntries.slice(1)).missing).toEqual([
-      "/dist/main/index.js",
-    ]);
+    expect(
+      inspectAsarEntries(requiredEntries.slice(1), "linux").missing,
+    ).toEqual(["/dist/main/index.js"]);
   });
 });

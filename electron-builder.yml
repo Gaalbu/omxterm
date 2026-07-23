@@ -4,27 +4,15 @@ copyright: Copyright © 2026 Luiz Otávio Miranda
 asar:
   smartUnpack: false
 npmRebuild: false
-asarUnpack:
-  - node_modules/node-pty/prebuilds/darwin-arm64/pty.node
-  - node_modules/node-pty/prebuilds/darwin-arm64/spawn-helper
 directories:
   output: release
-files:
-  - dist/**
-  - "!dist/**/*.map"
-  - "!node_modules/**/*.map"
-  - "!node_modules/@xterm/*/src/**"
-  - "!node_modules/node-addon-api/**"
-  - "!node_modules/node-pty/deps/**"
-  - "!node_modules/node-pty/prebuilds/darwin-x64/**"
-  - "!node_modules/node-pty/prebuilds/win32-*/**"
-  - "!node_modules/node-pty/scripts/**"
-  - "!node_modules/node-pty/src/**"
-  - "!node_modules/node-pty/typings/**"
-  - "!node_modules/node-pty/lib/**/*.test.js"
 extraResources:
   - from: LICENSE
     to: LICENSE.txt
+  # Linux Terminal Windows resolve their icon from resources because a
+  # directly-run AppImage has no registered desktop entry to supply one.
+  - from: assets/application-icon.png
+    to: application-icon.png
   - from: THIRD_PARTY_NOTICES.md
     to: THIRD_PARTY_NOTICES.md
   - from: assets/fonts/OFL.txt
@@ -45,12 +33,64 @@ artifactName: ${productName}-${version}-${arch}.${ext}
 mac:
   icon: assets/application-icon.icns
   category: public.app-category.developer-tools
+  files:
+    - dist/**
+    - "!dist/**/*.map"
+    - "!node_modules/**/*.map"
+    - "!node_modules/@xterm/*/src/**"
+    - "!scripts/**"
+    - "!node_modules/node-addon-api/**"
+    - "!node_modules/node-pty/node-addon-api/**"
+    - "!node_modules/node-pty/build/**"
+    - "!node_modules/node-pty/deps/**"
+    - "!node_modules/node-pty/prebuilds/darwin-x64/**"
+    - "!node_modules/node-pty/prebuilds/win32-*/**"
+    - "!node_modules/node-pty/scripts/**"
+    - "!node_modules/node-pty/src/**"
+    - "!node_modules/node-pty/typings/**"
+    - "!node_modules/node-pty/lib/**/*.test.js"
+  asarUnpack:
+    - node_modules/node-pty/prebuilds/darwin-arm64/pty.node
+    - node_modules/node-pty/prebuilds/darwin-arm64/spawn-helper
   target:
     - target: dmg
       arch:
         - arm64
   identity: null
   hardenedRuntime: false
+linux:
+  icon: assets/application-icon.png
+  category: Utility
+  executableName: omxterm
+  syncDesktopName: true
+  files:
+    - dist/**
+    - "!dist/**/*.map"
+    - "!node_modules/**/*.map"
+    - "!node_modules/@xterm/*/src/**"
+    - "!scripts/**"
+    - "!node_modules/node-addon-api/**"
+    - "!node_modules/node-pty/node-addon-api/**"
+    - "!node_modules/node-pty/deps/**"
+    - "!node_modules/node-pty/prebuilds/**"
+    - "!node_modules/node-pty/build/Makefile"
+    - "!node_modules/node-pty/build/binding.Makefile"
+    - "!node_modules/node-pty/build/config.gypi"
+    - "!node_modules/node-pty/build/*.target.mk"
+    - "!node_modules/node-pty/build/Release/.deps/**"
+    - "!node_modules/node-pty/build/Release/.forge-meta"
+    - "!node_modules/node-pty/build/Release/node-addon-api/**"
+    - "!node_modules/node-pty/build/Release/obj.target/**"
+    - "!node_modules/node-pty/scripts/**"
+    - "!node_modules/node-pty/src/**"
+    - "!node_modules/node-pty/typings/**"
+    - "!node_modules/node-pty/lib/**/*.test.js"
+  asarUnpack:
+    - node_modules/node-pty/build/Release/pty.node
+  target:
+    - target: AppImage
+      arch:
+        - arm64
 dmg:
   sign: false
   title: ${productName} ${version}

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   lockTerminalRendererNavigation,
+  terminalNativeTitleInset,
   terminalWindowOptions,
 } from "../../src/main/terminal-window";
 import { DEFAULT_USER_CONFIGURATION } from "../../src/main/user-configuration";
@@ -32,8 +33,11 @@ describe("Terminal Window startup contract", () => {
     const options = terminalWindowOptions(
       "/application/preload.cjs",
       DEFAULT_USER_CONFIGURATION,
+      "darwin",
     );
 
+    expect(terminalNativeTitleInset("darwin")).toBe(30);
+    expect(options.useContentSize).toBe(false);
     expect(options.titleBarStyle).toBe("hiddenInset");
     expect(options.webPreferences).toMatchObject({
       preload: "/application/preload.cjs",
@@ -42,6 +46,39 @@ describe("Terminal Window startup contract", () => {
       nodeIntegration: false,
       webSecurity: true,
     });
+  });
+
+  it("uses native Linux chrome without an app-controlled title inset", () => {
+    const options = terminalWindowOptions(
+      "/application/preload.cjs",
+      extremeGeometryConfiguration,
+      "linux",
+    );
+
+    expect(terminalNativeTitleInset("linux")).toBe(0);
+    expect(options.useContentSize).toBe(true);
+    expect(options.titleBarStyle).toBe("default");
+    expect(options.minHeight).toBe(544);
+  });
+
+  // A directly-run AppImage has no registered desktop entry, so the window
+  // itself must carry the icon or the environment shows a placeholder.
+  it("carries the window icon when the platform provides one", () => {
+    const options = terminalWindowOptions(
+      "/application/preload.cjs",
+      DEFAULT_USER_CONFIGURATION,
+      "linux",
+      "/resources/application-icon.png",
+    );
+
+    expect(options.icon).toBe("/resources/application-icon.png");
+    expect(
+      terminalWindowOptions(
+        "/application/preload.cjs",
+        DEFAULT_USER_CONFIGURATION,
+        "darwin",
+      ),
+    ).not.toHaveProperty("icon");
   });
 
   it("uses the resolved Terminal Theme background before renderer startup", () => {

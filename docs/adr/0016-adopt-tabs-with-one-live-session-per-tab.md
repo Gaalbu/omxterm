@@ -5,10 +5,18 @@ Supersedes [ADR 0007](0007-one-live-session-per-independent-window.md).
 A Terminal Window holds one or more Terminal Tabs, and each tab owns exactly
 one Live Terminal Session. `Cmd+T` (the `newTab` default) creates a tab in the
 selected window while `Cmd+N` keeps creating independent windows. The tab strip
-is an OMXTerm-drawn full-width row below the fixed 30 px title inset, above the
-Terminal Surface and Snippets Sidebar row, and appears only when a window has
-at least two tabs — a single-tab window looks and behaves exactly like the
-previous contract.
+is an OMXTerm-drawn full-width row above the Terminal Surface and Snippets
+Sidebar row, and appears only when a window has at least two tabs — a single-tab
+window looks and behaves exactly like the previous contract. On macOS the row
+sits below the app-controlled 30 px title inset. Linux already places its native
+title and application menu outside the renderer, so its row starts at the top
+of the app-controlled content without a duplicate inset.
+
+Native Linux AppImage dogfooding showed why the inset is platform-specific:
+reusing the macOS inset below Linux's existing title and menu produced an empty
+30 px band before the tabs and reduced the Terminal Surface for no native drag
+behavior. The Electron main process therefore owns the platform choice and
+provides zero inset on Linux while preserving the settled macOS chrome.
 
 ADR 0007 recorded no rationale, so the 2026-07-19 design interview with Otávio
 reconstructed it: the rejection protected first-release scope and the
@@ -36,7 +44,12 @@ as the final fallback. The keybind vocabulary gains `newTab`, `closeTab`,
 macOS convention, `Cmd+W` moves from `closeWindow` to `closeTab` and
 `closeWindow` becomes `Cmd+Shift+W`; tab cycling defaults to `Ctrl+Tab` and
 `Ctrl+Shift+Tab`, and tab selection to `Cmd+1` through `Cmd+9` (literal
-positions). All remain remappable and duplicate-checked on the effective map.
+positions). On Linux, application shortcuts preserve ordinary terminal `Ctrl`
+input: tab cycling uses `Ctrl+PageDown` and `Ctrl+PageUp`, literal tab selection
+uses `Alt+1` through `Alt+9`, and tab/window actions use the conventional
+shifted terminal shortcuts recorded in the product contract. These are native
+platform defaults, not a profile system. All remain remappable and
+duplicate-checked on the effective native map.
 
 Session restoration, workspaces, splits, moving tabs between windows, and
 in-window tab reordering stay out of this round — deferred, not foreclosed.
