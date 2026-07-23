@@ -41,6 +41,10 @@ or revises a durable architectural decision or tradeoff.
 - Ask only when a missing answer materially changes product behavior, safety,
   scope, or authority. Otherwise make the smallest reasonable assumption,
   state it when relevant, and continue.
+- Derive project, version, and release state from the repository — tags,
+  package metadata, merged commits, issues, and milestones — instead of asking
+  the owner where the project stands. When owner authorization is needed,
+  present the derived state with a recommendation, not a question to research.
 - Explain blockers with evidence and a recommended next action.
 
 ## Workflow
