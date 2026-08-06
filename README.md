@@ -44,6 +44,32 @@ follow Apple's current [Open Anyway instructions](https://support.apple.com/1024
 in System Settings -> Privacy & Security. Do not disable system-wide macOS
 security protections.
 
+#### Troubleshooting stale macOS privacy permissions
+
+After repeatedly installing and removing different OMXTerm builds, macOS may
+show permissions as enabled for OMXTerm while programs launched from it still
+cannot use protected capabilities. This can affect tools that monitor,
+intercept, or synthesize global keyboard or mouse input even when the same tools
+work in another terminal with apparently identical permissions.
+
+To clear OMXTerm's app-specific privacy records and grant them again:
+
+1. Quit OMXTerm and remove `OMXTerm.app`.
+2. Run:
+
+   ```sh
+   tccutil reset All com.otaviomiranda.omxterm
+   ```
+
+3. Reinstall OMXTerm from the verified DMG and open it.
+4. Grant the required permissions again in System Settings -> Privacy &
+   Security. Tools that control global input commonly require Accessibility
+   and/or Input Monitoring permission.
+5. Quit and reopen OMXTerm after changing the permissions.
+
+The reset command is scoped to OMXTerm's bundle identifier; it does not reset
+privacy permissions for other applications.
+
 ### Installing on Linux
 
 Download the AppImage and its matching checksum file into the same directory.
