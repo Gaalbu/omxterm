@@ -10,10 +10,11 @@ import type {
 } from "../terminal-surface/terminal-session-adapter";
 import type {
   TerminalSurface,
+  TerminalSurfaceConfiguration,
   TerminalSurfaceOptions,
 } from "../terminal-surface/terminal-surface";
+import { DEFAULT_TERMINAL_FONT_SIZE } from "../shared/user-configuration";
 import type { ElectronTerminalAdapter } from "./electron-terminal-adapter";
-import type { TerminalTheme } from "../shared/terminal-theme";
 
 type MountTerminalSurface = (
   container: HTMLElement,
@@ -42,7 +43,7 @@ export interface TerminalTabs {
   readonly ready: Promise<void>;
   handleCommand(command: TerminalTabCommand): void;
   setSessionTitle(sessionId: TerminalSessionId, title: string): void;
-  applyTheme(theme: TerminalTheme): void;
+  applyConfiguration(configuration: TerminalSurfaceConfiguration): void;
   zoom(command: TerminalFontZoom): void;
   clipboardAction(action: TerminalClipboardAction): void;
   injectText(text: string): void;
@@ -67,7 +68,7 @@ export function createTerminalTabs(
   const tabs: TerminalTab[] = [];
   let selectedIndex = -1;
   let zoomSteps = 0;
-  let activeTheme = options.surfaceOptions.theme;
+  let activeSurfaceOptions = options.surfaceOptions;
   let disposed = false;
 
   const selectedTab = (): TerminalTab | undefined => tabs[selectedIndex];
@@ -183,8 +184,7 @@ export function createTerminalTabs(
     // itself stays tab-unaware. Events can only follow session output, so
     // the id is always known by the time they fire.
     const tabSurfaceOptions: TerminalSurfaceOptions = {
-      ...options.surfaceOptions,
-      ...(activeTheme ? { theme: activeTheme } : {}),
+      ...activeSurfaceOptions,
       ...(options.notifyTitle
         ? {
             onTitleRequest: (request: string) => {
@@ -220,7 +220,8 @@ export function createTerminalTabs(
       return;
     }
     tab.surface = surface;
-    if (activeTheme) surface.applyTheme(activeTheme);
+    const latestConfiguration = completeConfiguration(activeSurfaceOptions);
+    if (latestConfiguration) surface.applyConfiguration(latestConfiguration);
     replayZoom(surface);
     if (selectedTab() === tab) {
       const sessionId = tab.adapter.sessionId();
@@ -240,10 +241,11 @@ export function createTerminalTabs(
       tab.label = title;
       renderStrip();
     },
-    applyTheme(theme) {
+    applyConfiguration(configuration) {
       if (disposed) return;
-      activeTheme = theme;
-      for (const tab of tabs) tab.surface?.applyTheme(theme);
+      activeSurfaceOptions = { ...activeSurfaceOptions, ...configuration };
+      zoomSteps = Math.max(1 - configuration.appearance.fontSize, zoomSteps);
+      for (const tab of tabs) tab.surface?.applyConfiguration(configuration);
     },
     handleCommand(command) {
       if (disposed) return;
@@ -272,8 +274,14 @@ export function createTerminalTabs(
       }
     },
     zoom(command) {
+      const baseline =
+        activeSurfaceOptions.appearance?.fontSize ?? DEFAULT_TERMINAL_FONT_SIZE;
       zoomSteps =
-        command === "reset" ? 0 : zoomSteps + (command === "in" ? 1 : -1);
+        command === "reset"
+          ? 0
+          : command === "in"
+            ? zoomSteps + 1
+            : Math.max(1 - baseline, zoomSteps - 1);
       for (const tab of tabs) tab.surface?.zoom(command);
     },
     clipboardAction(action) {
@@ -304,6 +312,33 @@ export function createTerminalTabs(
       }
       tabs.length = 0;
     },
+  };
+}
+
+function completeConfiguration(
+  options: TerminalSurfaceOptions,
+): TerminalSurfaceConfiguration | undefined {
+  if (
+    options.appearance?.fontSize === undefined ||
+    options.appearance.lineHeight === undefined ||
+    options.padding === undefined ||
+    options.scrollbackLines === undefined ||
+    options.optionKeyMode === undefined ||
+    options.theme === undefined
+  )
+    return undefined;
+  return {
+    appearance: {
+      fontSize: options.appearance.fontSize,
+      lineHeight: options.appearance.lineHeight,
+      ...(options.appearance.systemFont
+        ? { systemFont: options.appearance.systemFont }
+        : {}),
+    },
+    padding: options.padding,
+    scrollbackLines: options.scrollbackLines,
+    optionKeyMode: options.optionKeyMode,
+    theme: options.theme,
   };
 }
 

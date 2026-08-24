@@ -1030,6 +1030,97 @@ describe("portable Terminal Surface", () => {
     surface.dispose();
   });
 
+  it("applies a complete runtime configuration in place and preserves zoom over the new baseline", async () => {
+    const frames: FrameRequestCallback[] = [];
+    vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
+      frames.push(callback);
+      return frames.length;
+    });
+    const adapter = {
+      start: vi.fn(async () => undefined),
+      write: vi.fn(),
+      resize: vi.fn(),
+      close: vi.fn(),
+    };
+    const { DEFAULT_TERMINAL_THEME } =
+      await import("../../src/shared/terminal-theme");
+    const { mountTerminalSurface } =
+      await import("../../src/terminal-surface/terminal-surface");
+    const container = document.createElement("main");
+    const surface = await mountTerminalSurface(container, adapter, {
+      appearance: { fontSize: 16, lineHeight: 1 },
+      scrollbackLines: 10_000,
+      optionKeyMode: "none",
+    });
+    const terminal = xterm.FakeTerminal.current;
+    surface.zoom("in");
+    frames.splice(0).forEach((frame) => frame(0));
+    xterm.fit.mockClear();
+
+    const theme = {
+      ...DEFAULT_TERMINAL_THEME,
+      name: "runtime",
+      colors: { ...DEFAULT_TERMINAL_THEME.colors, background: "#123456" },
+    } as const;
+    surface.applyConfiguration!({
+      appearance: {
+        fontSize: 20,
+        lineHeight: 1.25,
+        systemFont: { family: "SF Mono", available: true },
+      },
+      padding: { top: 1, right: 2, bottom: 3, left: 4 },
+      scrollbackLines: 25,
+      optionKeyMode: "left",
+      theme,
+    });
+
+    expect(terminal.options).toMatchObject({
+      fontFamily: '"SF Mono", "JetBrainsMono Nerd Font Mono", monospace',
+      fontSize: 21,
+      lineHeight: 1.25,
+      scrollback: 25,
+      theme: theme.colors,
+    });
+    expect(container.style.getPropertyValue("--terminal-padding-top")).toBe(
+      "1px",
+    );
+    expect(container.style.getPropertyValue("--terminal-padding-right")).toBe(
+      "2px",
+    );
+    expect(container.style.getPropertyValue("--terminal-padding-bottom")).toBe(
+      "3px",
+    );
+    expect(container.style.getPropertyValue("--terminal-padding-left")).toBe(
+      "4px",
+    );
+    expect(container.style.getPropertyValue("--terminal-background")).toBe(
+      "#123456",
+    );
+    expect(adapter.close).not.toHaveBeenCalled();
+    expect(frames).toHaveLength(1);
+    xterm.fit.mockImplementationOnce(() =>
+      terminal.emitResize({ cols: 90, rows: 30 }),
+    );
+    frames.shift()!(0);
+    expect(xterm.fit).toHaveBeenCalledOnce();
+    expect(adapter.resize).toHaveBeenLastCalledWith({ cols: 90, rows: 30 });
+
+    surface.applyConfiguration!({
+      appearance: { fontSize: 20, lineHeight: 1.25 },
+      padding: { top: 0, right: 0, bottom: 0, left: 0 },
+      scrollbackLines: 0,
+      optionKeyMode: "both",
+      theme,
+    });
+    expect(terminal.options.scrollback).toBe(0);
+    terminal.emitKey({ code: "AltRight", type: "keydown", altKey: true });
+    expect(terminal.options.macOptionIsMeta).toBe(true);
+    surface.zoom("reset");
+    expect(terminal.options.fontSize).toBe(20);
+
+    surface.dispose();
+  });
+
   it("applies row spacing independently of font size and keeps it through Window Font Zoom", async () => {
     const adapter = {
       start: vi.fn(async () => undefined),
@@ -1189,6 +1280,57 @@ describe("portable Terminal Surface", () => {
 
     expect(xterm.FakeTerminal.instances).toHaveLength(0);
     expect(adapter.close).toHaveBeenCalledOnce();
+  });
+
+  it("preserves independent cross-window zoom deltas over a reloaded baseline", async () => {
+    const createAdapter = () => ({
+      start: vi.fn(async () => undefined),
+      write: vi.fn(),
+      resize: vi.fn(),
+      close: vi.fn(),
+    });
+    const { DEFAULT_TERMINAL_THEME } =
+      await import("../../src/shared/terminal-theme");
+    const { mountTerminalSurface } =
+      await import("../../src/terminal-surface/terminal-surface");
+    const initialConfiguration = {
+      appearance: { fontSize: 16, lineHeight: 1 },
+      padding: { top: 0, right: 8, bottom: 8, left: 8 },
+      scrollbackLines: 10_000,
+      optionKeyMode: "none" as const,
+      theme: DEFAULT_TERMINAL_THEME,
+    };
+    const first = await mountTerminalSurface(
+      document.createElement("main"),
+      createAdapter(),
+      initialConfiguration,
+    );
+    const firstTerminal = xterm.FakeTerminal.current;
+    const second = await mountTerminalSurface(
+      document.createElement("main"),
+      createAdapter(),
+      initialConfiguration,
+    );
+    const secondTerminal = xterm.FakeTerminal.current;
+
+    first.zoom("in");
+    first.zoom("in");
+    second.zoom("out");
+    const reloadedConfiguration = {
+      ...initialConfiguration,
+      appearance: { fontSize: 20, lineHeight: 1.2 },
+    };
+    first.applyConfiguration(reloadedConfiguration);
+    second.applyConfiguration(reloadedConfiguration);
+
+    expect(firstTerminal.options.fontSize).toBe(22);
+    expect(secondTerminal.options.fontSize).toBe(19);
+    first.zoom("reset");
+    expect(firstTerminal.options.fontSize).toBe(20);
+    expect(secondTerminal.options.fontSize).toBe(19);
+
+    first.dispose();
+    second.dispose();
   });
 
   it("keeps Window Font Zoom independent, resets to each supplied size, and refits the PTY", async () => {
