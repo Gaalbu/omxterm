@@ -383,6 +383,107 @@ describe("isolated preload terminal bridge", () => {
     electron.removeListener.mockClear();
   });
 
+  it("delivers only validated bounded Terminal Theme updates from main", () => {
+    const bridge = electron.bridge!;
+    const listener = vi.fn();
+    const remove = bridge.onTerminalThemeUpdate(listener);
+    const valid = {
+      terminalTheme: {
+        ...DEFAULT_TERMINAL_THEME,
+        name: "updated",
+        colors: {
+          ...DEFAULT_TERMINAL_THEME.colors,
+          background: "#123456",
+        },
+      },
+      userFileErrors: ["reload failed"],
+    };
+
+    electron.listeners.get(terminalIpc.themeUpdate)?.({}, valid);
+    electron.listeners.get(terminalIpc.themeUpdate)?.(
+      {},
+      {
+        ...valid,
+        terminalTheme: {
+          ...valid.terminalTheme,
+          colors: { ...valid.terminalTheme.colors, background: "black" },
+        },
+      },
+    );
+    electron.listeners.get(terminalIpc.themeUpdate)?.(
+      {},
+      {
+        ...valid,
+        userFileErrors: ["x".repeat(65_537)],
+      },
+    );
+    electron.listeners.get(terminalIpc.themeUpdate)?.(
+      {},
+      {
+        ...valid,
+        extra: true,
+      },
+    );
+    remove();
+    electron.listeners.get(terminalIpc.themeUpdate)?.({}, valid);
+
+    expect(listener).toHaveBeenCalledExactlyOnceWith(valid);
+
+    electron.listeners.get(terminalIpc.themeUpdate)?.(
+      {},
+      { terminalTheme: DEFAULT_TERMINAL_THEME, userFileErrors: [] },
+    );
+  });
+
+  it("reconciles a theme update received while configuration is in flight", async () => {
+    const bridge = electron.bridge!;
+    const configuration = {
+      fontSize: 16,
+      fontLineHeight: 1,
+      terminalPadding: { top: 0, right: 8, bottom: 8, left: 8 },
+      scrollbackLines: 10_000,
+      optionKeyMode: "none",
+      nativeTitleInset: 0,
+      terminalTheme: DEFAULT_TERMINAL_THEME,
+      userFileErrors: ["startup warning"],
+    } as const;
+    const update = {
+      terminalTheme: {
+        ...DEFAULT_TERMINAL_THEME,
+        name: "received during startup",
+        colors: {
+          ...DEFAULT_TERMINAL_THEME.colors,
+          background: "#123456",
+        },
+      },
+      userFileErrors: [],
+    } as const;
+    let resolveConfiguration: (value: unknown) => void = () => {};
+    electron.invoke.mockReturnValueOnce(
+      new Promise<unknown>((resolve) => {
+        resolveConfiguration = resolve;
+      }),
+    );
+
+    const pendingConfiguration = bridge.configuration();
+    electron.listeners.get(terminalIpc.themeUpdate)?.({}, update);
+    resolveConfiguration(configuration);
+
+    await expect(pendingConfiguration).resolves.toEqual({
+      ...configuration,
+      ...update,
+    });
+    const listener = vi.fn();
+    const remove = bridge.onTerminalThemeUpdate(listener);
+    expect(listener).toHaveBeenCalledExactlyOnceWith(update);
+    remove();
+
+    electron.listeners.get(terminalIpc.themeUpdate)?.(
+      {},
+      { terminalTheme: DEFAULT_TERMINAL_THEME, userFileErrors: [] },
+    );
+  });
+
   it("delivers only valid Window Font Zoom commands from main", () => {
     const bridge = electron.bridge!;
     const onFontZoom = vi.fn();
