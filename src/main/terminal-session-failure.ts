@@ -11,11 +11,16 @@ interface TerminalSessionFailureDialog {
 export function terminalSessionFailureDialog(
   failure: TerminalSessionFailure,
 ): TerminalSessionFailureDialog {
+  const explicitCommand = failure.launchKind === "explicit-command";
   if (failure.reason === "spawn") {
     return {
       type: "error",
-      title: "Shell could not start",
-      message: "The Default Shell could not be started.",
+      title: explicitCommand
+        ? "Command could not start"
+        : "Shell could not start",
+      message: explicitCommand
+        ? "The requested command could not be started."
+        : "The Default Shell could not be started.",
       detail: "Lifecycle failure: spawn.",
       buttons: ["OK"],
     };
@@ -23,8 +28,12 @@ export function terminalSessionFailureDialog(
 
   return {
     type: "error",
-    title: "Shell exited unexpectedly",
-    message: "The Default Shell exited unexpectedly.",
+    title: explicitCommand
+      ? "Command exited unexpectedly"
+      : "Shell exited unexpectedly",
+    message: explicitCommand
+      ? "The requested command exited unexpectedly."
+      : "The Default Shell exited unexpectedly.",
     detail: `Signal: ${failure.signal ?? "unknown"}.`,
     buttons: ["OK"],
   };
