@@ -1,9 +1,8 @@
 # OMXTerm
 
-OMXTerm is Otávio's personal desktop terminal: an environment shaped around his
-own workflows, preferences, and experiments rather than a commercial product or
-a claim of superiority over other terminals. OMXTerm Web is the separate
-browser-based SSH broker previously named OMXTerm.
+OMXTerm is an open-source personal desktop terminal built around the Personal
+Terminal concept: an environment deliberately shaped by its user. OMXTerm Web
+is the separate browser-based SSH broker previously named OMXTerm.
 
 ## Language
 
@@ -45,7 +44,7 @@ _Avoid_: terminal page, terminal card, browser terminal
 **Terminal Theme**:
 The OMXTerm-owned visual palette for the Terminal Surface, including terminal
 foreground, background, cursor, selection, and ANSI colors. Its default is the
-canonical `omtheme` palette also used in Otávio's Ghostty configuration.
+canonical `omtheme` palette.
 _Avoid_: xterm theme, Ghostty theme, application CSS
 
 **Terminal Font Stack**:
