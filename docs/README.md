@@ -23,6 +23,9 @@ contract below is authoritative.
 - [Contributing](../CONTRIBUTING.md) is the single guide for development setup,
   issue and fork-and-pull workflow, engineering boundaries, verification,
   commits, and pull requests.
+- [Security policy](../SECURITY.md) defines supported reports, the private
+  reporting route, required safe details, excluded sensitive data, and
+  disclosure coordination.
 
 ## Normative contracts and language
 
@@ -58,7 +61,7 @@ but they do not replace the maintained product contract.
 
 - [0.9.0 release notes](releases/0.9.0.md) describe the current published
   release, exact accepted artifact identities, native and changed-boundary
-  verification evidence, optional owner observations, compatibility, and known
+  verification evidence, optional observations, compatibility, and known
   limitations.
 - The canonical publication record is the
   [v0.9.0 GitHub Release](https://github.com/luizomf/omxterm/releases/tag/v0.9.0).
