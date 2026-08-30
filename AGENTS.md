@@ -202,6 +202,7 @@ issue or PR is unfinished work.
 
 ## Tests and verification
 
+- Prefer test-driven development (TDD) whenever possible.
 - New behavior needs observable behavior tests. Bug fixes need regression tests.
 - Test public contracts rather than private implementation details.
 - Mock external I/O in unit tests. Use real PTYs, filesystems, packaging, or GUI
