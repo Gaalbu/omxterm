@@ -6,6 +6,7 @@
 .DS_Store
 .claude/
 .hermes/
+.scratch/
 ._.DS_Store
 
 # Node / Electron
