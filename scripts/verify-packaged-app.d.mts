@@ -63,7 +63,24 @@ export function signalProcessGroup(
   signal: NodeJS.Signals | 0,
 ): boolean;
 
-export function verifyPackagedApplication(applicationPath?: string): Promise<{
+export function verifyPackagedStartupWithCleanup<T>(operations: {
+  verify(): Promise<T>;
+  stop(): Promise<unknown>;
+  removeProfile(): Promise<unknown>;
+}): Promise<T>;
+
+export function verifyPackagedApplication(
+  applicationPath?: string,
+  options?: {
+    readonly windowsUnpackedOnly?: boolean;
+    readonly disposableVm?: boolean;
+  },
+): Promise<{
   readonly applicationPath: string;
   readonly records: number;
+  readonly verification: string;
+  readonly installerVerification?: {
+    readonly replacedExisting: boolean;
+    readonly sha256: string;
+  };
 }>;

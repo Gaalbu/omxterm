@@ -73,6 +73,16 @@ immutable: never move their tags, replace their artifacts or checksums, or reuse
 their GitHub Releases. Later documentation corrections ship from `main` or with
 a future release without rewriting the published one.
 
+## Accepted 0.11.0 artifacts
+
+The [0.11.0 release record](releases/0.11.0.md) binds all three native builds to
+`741a1cc67597bfdbe5aacf4933a01760c658f352`, records passing automated checks,
+exact filenames/sizes/checksums, completed verifier cleanup, remaining platform
+risk, owner acceptance and separate publication authorization. Publish those
+unchanged files; release documentation and squash integration do not rebuild
+them. The tag retains the build commit's ancestry with only eligible Markdown
+changes, and the squash-integrated source tree must match the tagged tree.
+
 ## Version selection and consistency
 
 Select the release version under the [versioning policy](versioning.md) in an
@@ -92,6 +102,14 @@ produces `OMXTerm-X.Y.Z-arm64.AppImage-installer.sh`; its embedded `--version`,
 filename, and checksum must identify the same version.
 
 ## Build and automated verification
+
+Portable checks include the production-Chromium image fixture with its own
+Electron userData/sessionData directories. On Windows and Linux it shows a
+non-activating native window before loading the fixture; macOS keeps it hidden.
+Hidden Windows/Linux windows can stall real image-frame progress even with
+background throttling disabled. All 63 original checks, real animation frames,
+deadlines, production CSP and renderer isolation remain required; visibility is
+a test-harness requirement, not a Terminal Surface behavior change.
 
 ### macOS arm64
 
@@ -134,8 +152,9 @@ shared folder. Install Node.js 22.13 or later in the Node.js 22 line, or
 Node.js 24 or newer, plus `python3`, `make`, a C++ compiler
 (`build-essential` on Ubuntu), `readelf` (`binutils` on Ubuntu), the `fontconfig`
 utilities, and an X11 display or XWayland in a Wayland session. Native Wayland
-is not currently claimed. Then run
-from the accepted source commit:
+is not currently claimed. Run as an ordinary user. OMXTerm uses an unconditional
+Linux-only `--no-sandbox` policy (ADR 0024); no administrator sandbox setup or
+host-policy changes are required. Then run from the accepted source commit:
 
 ```sh
 npm ci
@@ -156,10 +175,18 @@ isolated home, and launches the installed result through
 host's installation-time probe establishes that direct seam is available. Each
 available startup path must reach a running PTY, and its Operational Event logs
 must not contain the environment canary; an unavailable direct seam is not
-inferred as passing.
+inferred as passing. Before startup, the extracted AppRun must match the exact
+reviewed launcher with its unconditional `--no-sandbox` flag. Chromium image
+coverage uses the same Linux policy and retains the production CSP and renderer
+isolation settings; it does not claim Chromium sandbox protection.
 
 For packaging alone, run `npm run package:linux`, followed on the same native
-host by `npm run package:verify`. Packaging creates the AppImage, helper, and
+host by `npm run package:verify`. The Linux packaging command first applies a
+checksum-guarded correction to the pinned packager's launcher generator before
+loading electron-builder. Unknown dependency bytes fail preparation; direct
+packager invocation without prepared bytes is rejected by `beforePack`.
+Dependency upgrades require reviewing and regenerating the correction and
+launcher digest together. No finished artifact is patched. Packaging creates the AppImage, helper, and
 both matching `.sha256` files without downloading or publishing anything. The statically linked AppImage runtime needs
 neither zlib development headers nor a system `libfuse2` library. Normal
 mounting uses kernel FUSE support. When mounting is unavailable, the safe manual
@@ -168,6 +195,10 @@ fallback is:
 ```sh
 ./release/OMXTerm-<version>-arm64.AppImage --appimage-extract-and-run
 ```
+
+Extraction addresses FUSE mounting only; both launch paths use the same
+no-sandbox policy. Release notes must disclose this Linux limitation and link
+to the [launch decision](adr/0024-disable-the-chromium-sandbox-on-linux.md).
 
 The AppImage is intentionally unsigned and provides no verified publisher
 identity. It is not a release candidate until all automated checks pass and
@@ -181,30 +212,105 @@ in the Node.js 22 line, or Node.js 24 or newer, and the Visual C++ Redistributab
 allow script execution for npm's cmd shims, and clone with
 `core.autocrlf=false` and `core.symlinks=true` (symlinked repository files
 must check out as symlinks; Developer Mode enables unprivileged symlinks).
-Then run from the accepted source commit:
+Exact NSIS verification must run only in an explicitly authorized disposable VM
+with a recoverable snapshot. It is **not** isolated by a temporary destination:
+NSIS can uninstall an existing OMXTerm and replace registration and shortcuts.
+Do not run this installation seam on a daily-use machine. Check that no OMXTerm
+sessions or installers are running; the verifier refuses those conflicts even
+with opt-in and never closes them for you. tmux alone is not evidence that
+closing an app preserves its sessions.
+
+From the accepted source commit in that disposable VM, after separately obtaining
+permission for these install/uninstall effects, run:
 
 ```powershell
 npm ci
-npm run check:win
+npm run check:win -- --disposable-vm-allow-omxterm-replacement
 ```
+
+Without that literal CLI opt-in, `npm run check:win` fails closed at the exact
+installer seam. Environment variables do not authorize replacement. Unknown or
+inaccessible installation inspection also fails closed. Existing registration
+is checked in HKCU and HKLM, in both registry views, along with default install
+locations, shortcut conflicts, and matching running processes. Existing paths
+must belong to the accepted per-user installation: path-only, machine-location,
+reparse-point, or differently targeted shortcut conflicts are refused. Existing
+installation trees and the transaction tree are inspected without following
+reparse points, including their directory ancestors. Unreadable or oversized
+trees fail closed. Matching registry pairs are insufficient: the previous
+directory and its regular application/uninstaller files must exist. Process
+inspection mirrors both NSIS's name-based fallback and its case-insensitive path
+prefix for registered installations and the new transaction destination. The
+pinned dependency can target a sibling path sharing that prefix; the verifier
+refuses that conflict rather than terminating the unrelated process. Paths
+that break the pinned installer's PowerShell quoting are refused too. The
+verifier's temporary directory must also contain no spaces: NSIS expects an
+unquoted raw `/D=` tail, not Windows argv quoting. Choose a compatible temporary
+location inside the disposable VM; this does not grant replacement consent.
+The pinned
+NSIS installer also writes `%LOCALAPPDATA%\\omxterm-updater\\installer.exe`, even
+though OMXTerm has no automatic updates. Any pre-existing cache directory/file
+or cache reparse point is refused even with opt-in; do not delete guessed cache
+contents to bypass this guard. Use a clean disposable VM or separately coordinate
+preservation of the existing cache. Deliberate
+replacement supports only the known per-user installation; orphan, machine, or
+unexpected registration requires a clean disposable VM, not a force bypass.
+Preflight is not a guarantee against host races or installer-wide effects, so the
+disposable-VM requirement applies even when no existing installation is found.
+No credential collection, elevation or OS security-policy change is authorized.
 
 `npm run check:win` runs all portable and real-ConPTY checks, creates the
 non-published `release/OMXTerm-<version>-arm64.exe` NSIS installer, inspects
 the unpacked application's arm64 PE executables and win32-arm64 node-pty
 runtime, version, licenses, and forbidden/private-looking files, installs the
-exact installer into a throwaway directory to confirm it extracts every
-executable, then launches the unpacked application with isolated
-configuration, state, and user data. Startup must reach a running PTY and its
-Operational Event log must not contain the environment canary.
+exact installer into a transaction-owned temporary directory, compares every
+extracted payload file with the unpacked application, and verifies startup from
+both the unpacked and installed trees with isolated configuration, state, and
+user data. Startup must reach a running PTY and its Operational Event log must
+not contain the environment or launch-argument canaries.
 
-For packaging alone, run `npm run package:win`, followed on the same native
-host by `npm run package:verify`. The automated check installs the exact
-installer to a temporary location — its one-click `/D=` never touches the
-real per-user install — and asserts that every packaged executable and DLL
-lands, then uninstalls. A real Start Menu installation is optional; when
-installer or desktop-integration behavior changes beyond this automated seam,
-record the remaining Windows behavior as unverified rather than requiring a
-manual installation.
+For packaging alone, run `npm run package:win`. For non-installing content and
+startup diagnostics on the same native host, run:
+
+```powershell
+npm run package:verify -- --windows-unpacked-only
+```
+
+This explicitly reports **UNPACKED DIAGNOSTIC ONLY**: it neither launches the
+installer nor proves exact-installer acceptance. It does launch the unpacked
+application with an isolated test profile and a synthetic PTY command.
+Full `package:verify` requires the same disposable-VM opt-in as `check:win`:
+
+```powershell
+npm run package:verify -- --disposable-vm-allow-omxterm-replacement
+```
+
+The exact installer seam remains mandatory for release. A different application
+identity, repacked installer, or archive-only extraction is not equivalent.
+`/D=` selects the destination only; the existing OMXTerm may be removed and is
+**not restored** by the test. Registration and shortcuts are changed during
+installation. The verifier checks ownership before invoking only the new
+transaction's byte-identical uninstaller from a separate owned directory outside
+the install-path termination prefix. Its `_?=` argument selects the transaction
+root without spawning a detached copy, so completion stays observable. The
+verifier waits for bounded registration/shortcut/process cleanup, then removes
+both owned temporary directories. It also verifies the newly created cached
+installer against the exact installer digest and removes only that unchanged
+file and its empty cache directory, never pre-existing or unrelated cache data.
+A changed cache or nonempty directory fails cleanup and retains uncertain state.
+User data is not deleted. Startup, process-termination and profile-cleanup errors are preserved together;
+a profile is retained when process termination cannot be confirmed. Installer
+cleanup errors fail verification alongside any primary error; unknown
+ownership leaves evidence for inspection rather than deleting guessed state.
+Restore/discard the VM only after preserving artifacts and evidence outside the
+snapshot's rollback scope.
+
+The inspection supports the pinned builder and reviewed packaging footprint;
+changes to those inputs require reviewing its registry identities, locations,
+shortcuts and NSIS templates together. A footprint mismatch is a refusal, not
+permission to bypass the check. A real Start Menu installation is optional;
+installer or desktop-integration behavior beyond the automated seam remains
+unverified rather than requiring manual installation.
 
 The installer carries a zip-compressed application payload rather than the
 smaller default LZMA archive. On an ARM64 build host electron-builder
@@ -290,7 +396,9 @@ seam. State the affected platform, the unobserved outcome, and the user-facing
 risk in the exact-artifact record or release notes. The absence of a report is
 not evidence that the boundary passed.
 
-Security protections are never disabled to manufacture a result. An optional
+Verification uses the shipped platform policy, including Linux's documented
+Chromium sandbox exception. It never relaxes additional security protections
+to manufacture a result. An optional
 observation may be recorded factually, but it does not become a reusable release
 gate or imply coverage of another artifact.
 

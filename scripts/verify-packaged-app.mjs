@@ -15,6 +15,9 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 import { linuxHelperName } from "./package-linux-assets.mjs";
+import { verifyExactWindowsInstaller } from "./windows-installer-transaction.mjs";
+import { windowsVerificationOptions } from "./windows-verification-options.mjs";
+import { inspectLinuxAppRun } from "./verify-linux-launcher.mjs";
 
 const execFile = promisify(execFileCallback);
 const projectRoot = path.resolve(
@@ -433,55 +436,6 @@ async function listTreeEntries(root, directory = root) {
   return entries;
 }
 
-// The Windows installer bug this guards against dropped every PE file at
-// install time while the unpacked tree stayed intact, so inspecting only the
-// unpacked directory missed it. This installs the exact NSIS one-click
-// installer into a throwaway directory (its `/D=` never touches the real
-// per-user location) and asserts every executable and DLL the unpacked tree
-// contains actually lands, then uninstalls to remove its shortcut and
-// registry entry.
-async function verifyWindowsInstallerExtraction(installer, unpackedRoot) {
-  const expectedPeFiles = (await listTreeEntries(unpackedRoot)).filter(
-    (entry) => /\.(?:exe|dll|node)$/iu.test(entry),
-  );
-  const installRoot = await mkdtemp(path.join(tmpdir(), "omxterm-installed-"));
-  try {
-    await execFile(installer, ["/S", `/D=${installRoot}`]);
-    const installedExe = path.join(installRoot, "OMXTerm.exe");
-    await stat(installedExe);
-    await inspectArchitecture(installedExe, "installed OMXTerm.exe", "win32");
-    const missing = [];
-    for (const relative of expectedPeFiles) {
-      try {
-        await stat(path.join(installRoot, ...relative.slice(1).split("/")));
-      } catch {
-        missing.push(relative);
-      }
-    }
-    if (missing.length > 0)
-      throw new Error(
-        `Installer did not extract ${missing.length} executable file(s): ${missing.join(", ")}`,
-      );
-  } finally {
-    const uninstaller = path.join(installRoot, "Uninstall OMXTerm.exe");
-    try {
-      await execFile(uninstaller, ["/S"]);
-      // The uninstaller relaunches a copy of itself and returns before that
-      // copy finishes clearing installRoot; wait briefly so cleanup succeeds.
-      await new Promise((resolve) => setTimeout(resolve, 3_000));
-    } catch {
-      // A failed uninstall must not mask a real extraction assertion; the
-      // throwaway directory is removed next regardless.
-    }
-    await rm(installRoot, {
-      recursive: true,
-      force: true,
-      maxRetries: 10,
-      retryDelay: 200,
-    });
-  }
-}
-
 export function signalProcessGroup(processGroupId, signal) {
   try {
     process.kill(-processGroupId, signal);
@@ -601,7 +555,45 @@ async function waitForStartup(logFile, readinessFile, child, stderrText) {
   );
 }
 
-export async function verifyPackagedApplication(applicationPath) {
+export async function verifyPackagedStartupWithCleanup({
+  verify,
+  stop,
+  removeProfile,
+}) {
+  const failures = [];
+  let result;
+  try {
+    result = await verify();
+  } catch (cause) {
+    failures.push(cause);
+  }
+  let stopped = false;
+  try {
+    await stop();
+    stopped = true;
+  } catch (cause) {
+    failures.push(cause);
+  }
+  // An unconfirmed process tree may still use its profile; retain it for diagnosis.
+  if (stopped) {
+    try {
+      await removeProfile();
+    } catch (cause) {
+      failures.push(cause);
+    }
+  }
+  if (failures.length)
+    throw new AggregateError(
+      failures,
+      `Packaged startup or cleanup failed: ${failures.map((error) => (error instanceof Error ? error.message : String(error))).join("; ")}`,
+    );
+  return result;
+}
+
+export async function verifyPackagedApplication(
+  applicationPath,
+  { windowsUnpackedOnly = false, disposableVm = false } = {},
+) {
   if (
     (process.platform !== "darwin" &&
       process.platform !== "linux" &&
@@ -697,6 +689,7 @@ export async function verifyPackagedApplication(applicationPath) {
         maxBuffer: 16 * 1024 * 1024,
       });
       applicationRoot = path.join(extractionRoot, "squashfs-root");
+      inspectLinuxAppRun(await readFile(path.join(applicationRoot, "AppRun")));
       const forbidden = inspectForbiddenPackagedEntries(
         await listTreeEntries(applicationRoot),
       );
@@ -705,6 +698,15 @@ export async function verifyPackagedApplication(applicationPath) {
           `Development/private-looking files were packaged outside app.asar: ${forbidden.join(", ")}`,
         );
     }
+
+    if (
+      platform === "win32" &&
+      inspectForbiddenPackagedEntries(await listTreeEntries(applicationRoot))
+        .length > 0
+    )
+      throw new Error(
+        "Development/private-looking files were packaged outside app.asar",
+      );
 
     const resources =
       platform === "darwin"
@@ -779,15 +781,6 @@ export async function verifyPackagedApplication(applicationPath) {
       platform,
       artifactPath: packagedPath,
     });
-
-    if (platform === "win32") {
-      const installer = path.join(
-        projectRoot,
-        "release",
-        `OMXTerm-${await sourceVersion()}-arm64.exe`,
-      );
-      await verifyWindowsInstallerExtraction(installer, applicationRoot);
-    }
 
     const asarInspection = inspectAsarEntries(
       await listPackage(asar),
@@ -931,7 +924,7 @@ export async function verifyPackagedApplication(applicationPath) {
       // The packaged Linux app relaunches itself onto X11 when Electron seeds
       // a Wayland session backend (ADR 0020), and this harness cannot follow a
       // relaunch. Pin the backend explicitly; default-backend selection is
-      // covered by unit tests and the manual exact-artifact checklist.
+      // covered by unit tests; this explicit override does not prove native defaults.
       const child = spawn(launchPath, launchArguments, {
         detached: true,
         env: {
@@ -951,44 +944,74 @@ export async function verifyPackagedApplication(applicationPath) {
         if (stderr.length < 16_384) stderr += chunk;
       });
 
-      try {
-        const logFile = path.join(
-          stateRoot,
-          "omxterm",
-          "logs",
-          "omxterm.jsonl",
-        );
-        const records = await waitForStartup(
-          logFile,
-          readinessFile,
-          child,
-          () => stderr.trim(),
-        );
-        const logText = await readFile(logFile, "utf8");
-        const diagnostics = `${logText}\n${stderr}`;
-        const privateLaunchValues = [
-          canary,
-          argumentCanary,
-          explicitCommand.executable,
-          ...explicitCommand.arguments,
-        ];
-        if (privateLaunchValues.some((value) => diagnostics.includes(value)))
-          throw new Error(
-            "Packaged startup diagnostics disclosed explicit launch data",
+      verifiedRecords += await verifyPackagedStartupWithCleanup({
+        async verify() {
+          const logFile = path.join(
+            stateRoot,
+            "omxterm",
+            "logs",
+            "omxterm.jsonl",
           );
-        verifiedRecords += records.length;
-      } finally {
-        await stopProcessGroup(child);
+          const records = await waitForStartup(
+            logFile,
+            readinessFile,
+            child,
+            () => stderr.trim(),
+          );
+          const logText = await readFile(logFile, "utf8");
+          const diagnostics = `${logText}\n${stderr}`;
+          const privateLaunchValues = [
+            canary,
+            argumentCanary,
+            explicitCommand.executable,
+            ...explicitCommand.arguments,
+          ];
+          if (privateLaunchValues.some((value) => diagnostics.includes(value)))
+            throw new Error(
+              "Packaged startup diagnostics disclosed explicit launch data",
+            );
+          return records.length;
+        },
+        stop: () => stopProcessGroup(child),
         // Windows releases the stopped tree's file locks asynchronously.
-        await rm(temporaryRoot, {
-          recursive: true,
-          force: true,
-          maxRetries: 10,
-          retryDelay: 200,
-        });
-      }
+        removeProfile: () =>
+          rm(temporaryRoot, {
+            recursive: true,
+            force: true,
+            maxRetries: 10,
+            retryDelay: 200,
+          }),
+      });
     }
-    return { applicationPath: packagedPath, records: verifiedRecords };
+    let installerVerification;
+    if (platform === "win32" && !windowsUnpackedOnly) {
+      installerVerification = await verifyExactWindowsInstaller({
+        installer: path.join(
+          projectRoot,
+          "release",
+          `OMXTerm-${await sourceVersion()}-arm64.exe`,
+        ),
+        unpackedRoot: applicationRoot,
+        projectRoot,
+        disposableVm,
+        verifyInstalled: (installedRoot) =>
+          verifyPackagedApplication(installedRoot, {
+            windowsUnpackedOnly: true,
+          }),
+      });
+      console.log(
+        `Verified exact NSIS payload, installed startup and cleanup: ${JSON.stringify(installerVerification)}`,
+      );
+    }
+    return {
+      applicationPath: packagedPath,
+      records: verifiedRecords,
+      verification:
+        platform === "win32" && windowsUnpackedOnly
+          ? "UNPACKED DIAGNOSTIC ONLY (exact installer NOT verified)"
+          : "FULL",
+      installerVerification,
+    };
   } finally {
     if (extractionRoot)
       await rm(extractionRoot, { recursive: true, force: true });
@@ -1001,10 +1024,19 @@ if (
   process.argv[1] &&
   import.meta.url === pathToFileURL(process.argv[1]).href
 ) {
-  verifyPackagedApplication(process.argv[2])
-    .then(({ applicationPath, records }) => {
+  const args = process.argv.slice(2);
+  const applicationPath =
+    args[0] && !args[0].startsWith("--") ? args.shift() : undefined;
+  Promise.resolve()
+    .then(() =>
+      verifyPackagedApplication(
+        applicationPath,
+        windowsVerificationOptions(args),
+      ),
+    )
+    .then(({ applicationPath, records, verification }) => {
       console.log(
-        `Verified packaged arm64 startup: ${applicationPath} (${records} operational events)`,
+        `${verification}: verified packaged arm64 startup: ${applicationPath} (${records} operational events)`,
       );
     })
     .catch((cause) => {

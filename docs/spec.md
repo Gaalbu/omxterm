@@ -14,8 +14,13 @@ The initial Supported Platforms are macOS arm64, Linux arm64, and Windows
 arm64. Linux rendering defaults to X11 and requires XWayland when the desktop
 session is Wayland; native Wayland rendering is not currently claimed. An
 explicit Electron `--ozone-platform` switch overrides the Linux default for
-diagnosis. x64, Intel macOS, and other operating systems are deferred rather
-than current support commitments.
+diagnosis. Linux deliberately uses `--no-sandbox` as an unconditional launch
+policy for ordinary-user runtime, direct AppImage, extraction, desktop entry
+and X11 relaunch. It is not a fallback or configurable mode. OMXTerm does not
+install a privileged sandbox helper or change host security policy. Sandboxed
+Linux support is outside the current maintenance scope (ADR 0024). x64, Intel
+macOS, and other operating systems are deferred rather than current support
+commitments.
 
 ## Product scope
 
@@ -500,9 +505,11 @@ no mode discovery.
 ## Architecture boundaries
 
 Electron main owns native windows, PTYs, filesystem access, configuration,
-logs, clipboard capabilities, and external-link opening. The renderer is
-sandboxed with context isolation and no Node integration. A minimal typed
-preload bridge validates every IPC message and sender.
+logs, clipboard capabilities, and external-link opening. The renderer keeps
+context isolation and no Node integration. A minimal typed preload bridge
+validates every IPC message and sender. Chromium sandboxing remains enabled on
+macOS and Windows and is disabled on Linux. The retained isolation and bridge
+controls do not provide equivalent protection to the Chromium sandbox.
 
 The framework-independent DOM+xterm Terminal Surface is the portable deep
 Module. Its small Interface hides xterm setup, addons, text and Kitty image
@@ -526,6 +533,17 @@ clones using the VM's native filesystem, never shared folders. The initial
 application-package formats are DMG, AppImage, and NSIS respectively. A Linux
 release also includes the optional versioned AppImage desktop-installer shell
 asset and its checksum; it is not another application package format.
+
+Windows exact-installer verification is an installation side-effect boundary:
+`/D=` changes the destination but does not isolate old-version removal,
+registration, shortcuts, or processes. Verification refuses installation by
+default and on unknown inspection or conflicting live processes. Deliberate
+replacement requires an explicitly authorized disposable VM and a literal CLI
+opt-in, never an environment sentinel. Cleanup is ownership-checked, preserves
+User Configuration and other user data, and must succeed for full verification.
+Non-installing unpacked diagnostics remain explicitly partial; exact NSIS
+installation, payload, installed startup, and cleanup verification remain
+mandatory for every Windows Release Artifact.
 
 Each exact artifact requires its own recorded native automated verification and
 owner acceptance. Manual testing is optional and never a release gate. The
@@ -556,6 +574,12 @@ restrictions, log redaction/rotation, renderer IPC boundaries, and packaged
 startup. Every exact
 release candidate receives native automated package, architecture, content,
 version, startup, PTY, and applicable contract verification on its target.
+Linux package verification rejects unexpected AppRun bytes before startup and
+exercises the explicit no-sandbox policy through every available installed
+launch mode. Launcher regressions preserve literal command arguments and prove
+that host namespace-probe results do not change the policy. Chromium image tests
+use the same platform policy while retaining context isolation, disabled Node
+integration and the production CSP.
 
 Release evidence is risk-based. Each release records the boundaries changed
 since the previous version and maps each to existing automation. A material
