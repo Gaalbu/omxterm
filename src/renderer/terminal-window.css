@@ -6,11 +6,17 @@
 }
 
 @font-face {
-  font-family: "JetBrainsMono Nerd Font Mono";
+  font-family: 'JetBrainsMono Nerd Font Mono';
   font-style: normal;
   font-weight: 400;
   font-display: block;
-  src: url("./fonts/JetBrainsMonoNerdFontMono-Regular.woff2") format("woff2");
+  src: url('./fonts/JetBrainsMonoNerdFontMono-Regular.woff2') format('woff2');
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
 }
 
 html,
@@ -93,7 +99,7 @@ body {
   background: color-mix(
     in srgb,
     var(--terminal-background, #000000),
-    var(--terminal-chrome-neutral) 12%
+    var(--terminal-chrome-neutral) 10%
   );
   border: none;
   border-radius: 6px;
@@ -107,15 +113,15 @@ body {
   background: color-mix(
     in srgb,
     var(--terminal-background, #000000),
-    var(--terminal-chrome-neutral) 20%
+    var(--terminal-chrome-neutral) 15%
   );
 }
 
-#tab-strip button[aria-selected="true"] {
+#tab-strip button[aria-selected='true'] {
   background: color-mix(
     in srgb,
     var(--terminal-background, #000000),
-    var(--terminal-chrome-neutral) 32%
+    var(--terminal-chrome-neutral) 20%
   );
 }
 
@@ -124,7 +130,6 @@ body {
   flex: none;
   flex-direction: column;
   gap: 8px;
-  box-sizing: border-box;
   width: 280px;
   padding: calc(var(--native-title-inset) + 8px) 12px 12px;
   overflow-y: auto;
@@ -136,7 +141,7 @@ body {
   background: color-mix(
     in srgb,
     var(--terminal-background, #000000),
-    var(--terminal-chrome-neutral) 5%
+    var(--terminal-chrome-neutral) 15%
   );
 }
 
@@ -144,7 +149,7 @@ body {
   display: none;
 }
 
-#snippets-sidebar input[type="search"] {
+#snippets-sidebar input[type='search'] {
   box-sizing: border-box;
   width: 100%;
   padding: 6px 8px;
@@ -153,19 +158,19 @@ body {
   background: color-mix(
     in srgb,
     var(--terminal-background, #000000),
-    var(--terminal-chrome-neutral) 10%
+    var(--terminal-chrome-neutral) 15%
   );
   border: 1px solid
     color-mix(
       in srgb,
       var(--terminal-background, #000000),
-      var(--terminal-foreground, #e6e6e6) 50%
+      var(--terminal-foreground, #e6e6e6) 30%
     );
   border-radius: 6px;
   outline: none;
 }
 
-#snippets-sidebar input[type="search"]::placeholder {
+#snippets-sidebar input[type='search']::placeholder {
   color: color-mix(
     in srgb,
     var(--terminal-background, #000000),
@@ -173,11 +178,11 @@ body {
   );
 }
 
-#snippets-sidebar input[type="search"]:focus {
+#snippets-sidebar input[type='search']:focus {
   border-color: color-mix(
     in srgb,
     var(--terminal-background, #000000),
-    var(--terminal-foreground, #e6e6e6) 60%
+    var(--terminal-foreground, #e6e6e6) 50%
   );
 }
 
@@ -210,12 +215,16 @@ body {
   background: color-mix(
     in srgb,
     var(--terminal-background, #000000),
-    var(--terminal-chrome-neutral) 28%
+    var(--terminal-chrome-neutral) 30%
   );
 }
 
 #snippets-sidebar li button:focus-visible {
-  background: transparent;
+  background: color-mix(
+    in srgb,
+    var(--terminal-background, #000000),
+    var(--terminal-chrome-neutral) 25%
+  );
   outline: 2px solid
     color-mix(
       in srgb,
@@ -286,7 +295,7 @@ body {
 }
 
 .terminal-surface::before {
-  content: "";
+  content: '';
   position: fixed;
   z-index: 1;
   top: 0;
@@ -326,4 +335,8 @@ body.tabs-visible #snippets-sidebar {
 .terminal-surface .xterm .xterm-viewport {
   overflow-y: hidden;
   background-color: var(--terminal-background, transparent);
+}
+
+.terminal-surface .xterm .xterm-screen {
+  background: transparent;
 }
