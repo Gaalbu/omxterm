@@ -6,11 +6,11 @@
 }
 
 @font-face {
-  font-family: 'JetBrainsMono Nerd Font Mono';
+  font-family: "JetBrainsMono Nerd Font Mono";
   font-style: normal;
   font-weight: 400;
   font-display: block;
-  src: url('./fonts/JetBrainsMonoNerdFontMono-Regular.woff2') format('woff2');
+  src: url("./fonts/JetBrainsMonoNerdFontMono-Regular.woff2") format("woff2");
 }
 
 *,
@@ -117,7 +117,7 @@ body {
   );
 }
 
-#tab-strip button[aria-selected='true'] {
+#tab-strip button[aria-selected="true"] {
   background: color-mix(
     in srgb,
     var(--terminal-background, #000000),
@@ -149,7 +149,7 @@ body {
   display: none;
 }
 
-#snippets-sidebar input[type='search'] {
+#snippets-sidebar input[type="search"] {
   box-sizing: border-box;
   width: 100%;
   padding: 6px 8px;
@@ -170,7 +170,7 @@ body {
   outline: none;
 }
 
-#snippets-sidebar input[type='search']::placeholder {
+#snippets-sidebar input[type="search"]::placeholder {
   color: color-mix(
     in srgb,
     var(--terminal-background, #000000),
@@ -178,7 +178,7 @@ body {
   );
 }
 
-#snippets-sidebar input[type='search']:focus {
+#snippets-sidebar input[type="search"]:focus {
   border-color: color-mix(
     in srgb,
     var(--terminal-background, #000000),
@@ -295,7 +295,7 @@ body {
 }
 
 .terminal-surface::before {
-  content: '';
+  content: "";
   position: fixed;
   z-index: 1;
   top: 0;
