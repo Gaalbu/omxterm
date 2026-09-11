@@ -100,6 +100,11 @@ relevant formatting and diff checks.
    unmerged, or unrelated work. After a squash merge, verify the PR's merged state
    and included changes rather than relying only on commit ancestry.
 
+Before reviewing, updating, or commenting on a pull request, verify its current
+state. Treat merged or closed pull requests as read-only historical records: do
+not modify or comment on them unless explicitly requested; put follow-up work in
+an issue or a new pull request.
+
 ### Build delivery and cleanup
 
 - Build inside each platform's working copy, but collect maintainer-facing
