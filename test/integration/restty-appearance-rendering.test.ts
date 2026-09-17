@@ -35,6 +35,10 @@ interface Measurement {
 }
 
 interface Result {
+  readonly configuredFont: {
+    readonly regularInk: number;
+    readonly preservesConfiguredRendering: boolean;
+  };
   readonly measurements: readonly Measurement[];
   readonly live: Measurement & {
     readonly sameCanvas: boolean;
@@ -48,6 +52,14 @@ interface Result {
     readonly externalLinks: number;
   };
   readonly colorCounts: Record<string, number>;
+  readonly fontRendering: {
+    readonly regularInk: number;
+    readonly boldInk: number;
+    readonly firaCoverageInk: number;
+    readonly dejaVuCoverageInk: number;
+    readonly firaDiffersFromMissing: boolean;
+    readonly dejaVuDiffersFromMissing: boolean;
+  };
   readonly devicePixelRatio: number;
   readonly security: {
     readonly contextIsolation: boolean;
@@ -173,6 +185,15 @@ describe("Restty OMXTerm appearance under production Electron policy", () => {
       expect(result!.colorCounts["#201012"]).toBeGreaterThan(
         result!.colorCounts["#90105a"]!,
       );
+      expect(result!.fontRendering.boldInk).toBeGreaterThan(
+        result!.fontRendering.regularInk,
+      );
+      expect(result!.fontRendering.firaCoverageInk).toBeGreaterThan(20);
+      expect(result!.fontRendering.dejaVuCoverageInk).toBeGreaterThan(20);
+      expect(result!.fontRendering.firaDiffersFromMissing).toBe(true);
+      expect(result!.fontRendering.dejaVuDiffersFromMissing).toBe(true);
+      expect(result!.configuredFont.regularInk).toBeGreaterThan(20);
+      expect(result!.configuredFont.preservesConfiguredRendering).toBe(true);
       expect(result!.security).toEqual({
         contextIsolation: true,
         nodeIntegration: false,
@@ -190,6 +211,34 @@ async function buildFixture(root: string): Promise<void> {
     absWorkingDir: projectRoot,
     bundle: true,
     entryPoints: ["test/fixtures/restty-appearance-renderer.ts"],
+    plugins: [
+      {
+        name: "configured-font-reference",
+        setup(builder) {
+          builder.onLoad(
+            { filter: /terminal-font-stack\.ts$/ },
+            async ({ path: sourcePath }) => {
+              // Differential rendering reference: the existing configured-family
+              // policy has regular faces only. Keep the production caller/runtime.
+              const source = await readFile(sourcePath, "utf8");
+              return {
+                loader: "ts",
+                contents:
+                  source.replace(
+                    "export function terminalFontInputs",
+                    "function productionTerminalFontInputs",
+                  ) +
+                  `
+export function terminalFontInputs(data: TerminalFontData): TerminalFontInput[] {
+  const fonts = productionTerminalFontInputs(data);
+  return document.body.dataset.referenceFonts === 'true' ? fonts.filter(font => font.weight !== 700) : fonts;
+}`,
+              };
+            },
+          );
+        },
+      },
+    ],
     format: "iife",
     loader: { ".ttf": "binary" },
     logLevel: "silent",
@@ -252,6 +301,8 @@ async function waitForResult(window) {
   while (Date.now() < deadline) {
     const result = await window.webContents.executeJavaScript("globalThis.__omxtermResttyAppearanceResult ?? null", true);
     if (result) return result;
+    const error = await window.webContents.executeJavaScript('document.body.dataset.fixtureError ?? null', true);
+    if (error) throw new Error(error);
     await new Promise((resolve) => setTimeout(resolve, 25));
   }
   throw new Error("Restty appearance fixture timed out");
@@ -264,9 +315,9 @@ app.whenReady().then(async () => {
     webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false, webSecurity: true, backgroundThrottling: false },
   });
   await window.loadFile(path.join(__dirname, "index.html"));
-  const result = await waitForResult(window);
+  let result = await waitForResult(window);
   window.focus();
-  const bounds = await window.webContents.executeJavaScript("(() => { const r = document.querySelector('canvas').getBoundingClientRect(); return { x:r.x, y:r.y, width:r.width, height:r.height }; })()", true);
+  let bounds = await window.webContents.executeJavaScript("(() => { const r = document.querySelector('canvas').getBoundingClientRect(); return { x:r.x, y:r.y, width:r.width, height:r.height }; })()", true);
   const cellWidth = result.live.cellWidth / result.devicePixelRatio;
   const cellHeight = result.live.cellHeight / result.devicePixelRatio;
   const x = Math.round(bounds.x + cellWidth * 0.5);
@@ -283,10 +334,34 @@ app.whenReady().then(async () => {
   const image = await window.webContents.capturePage();
   if (process.env.OMXTERM_RESTTY_APPEARANCE_SCREENSHOT_PATH)
     fs.writeFileSync(process.env.OMXTERM_RESTTY_APPEARANCE_SCREENSHOT_PATH, image.toPNG());
+  const captureInk = async (row) => {
+    const region = await window.webContents.capturePage({
+      x: Math.floor(bounds.x),
+      y: Math.floor(bounds.y + (result.live.cellHeight / result.devicePixelRatio) * (row - 1)),
+      width: Math.ceil((result.live.cellWidth / result.devicePixelRatio) * 8),
+      height: Math.ceil(result.live.cellHeight / result.devicePixelRatio),
+    });
+    const bitmap = region.toBitmap();
+    let ink = 0;
+    for (let offset = 0; offset < bitmap.length; offset += 4)
+      if (Math.max(bitmap[offset], bitmap[offset + 1], bitmap[offset + 2]) > 40) ink += 1;
+    return { ink, bitmap };
+  };
+  const [regular, bold, firaCoverage, dejaVuCoverage, missing] = await Promise.all(
+    [4, 5, 6, 7, 8].map(captureInk),
+  );
   const preferences = window.webContents.getLastWebPreferences();
   const complete = {
     ...result,
     colorCounts: countColors(image.toBitmap()),
+    fontRendering: {
+      regularInk: regular.ink,
+      boldInk: bold.ink,
+      firaCoverageInk: firaCoverage.ink,
+      dejaVuCoverageInk: dejaVuCoverage.ink,
+      firaDiffersFromMissing: !firaCoverage.bitmap.equals(missing.bitmap),
+      dejaVuDiffersFromMissing: !dejaVuCoverage.bitmap.equals(missing.bitmap),
+    },
     security: {
       contextIsolation: preferences.contextIsolation,
       nodeIntegration: preferences.nodeIntegration,
@@ -294,6 +369,16 @@ app.whenReady().then(async () => {
       webSecurity: preferences.webSecurity,
     },
   };
+  await window.webContents.executeJavaScript('globalThis.__omxtermRenderConfiguredFont(false)', true);
+  result = await waitForResult(window);
+  bounds = await window.webContents.executeJavaScript("(() => { const r = document.querySelector('canvas').getBoundingClientRect(); return { x:r.x, y:r.y, width:r.width, height:r.height }; })()", true);
+  const configuredRegular = await captureInk(4);
+  const configuredBold = await captureInk(5);
+  await window.webContents.executeJavaScript('globalThis.__omxtermRenderConfiguredFont(true)', true);
+  result = await waitForResult(window);
+  const referenceRegular = await captureInk(4);
+  const referenceBold = await captureInk(5);
+  complete.configuredFont = { regularInk: configuredRegular.ink, preservesConfiguredRendering: configuredRegular.bitmap.equals(referenceRegular.bitmap) && configuredBold.bitmap.equals(referenceBold.bitmap) };
   process.stdout.write(${JSON.stringify(resultPrefix)} + JSON.stringify(complete) + "\\n");
   window.destroy();
   app.exit(0);

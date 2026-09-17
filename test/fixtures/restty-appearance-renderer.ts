@@ -1,3 +1,4 @@
+import configuredFontBytes from "../../assets/fonts/JetBrainsMonoNerdFontMono-Regular.ttf";
 import { mountResttyTerminalSurface } from "../../src/terminal-surface/restty-terminal-surface";
 import {
   DEFAULT_TERMINAL_THEME,
@@ -44,6 +45,7 @@ interface AppearanceResult {
 
 declare global {
   var __omxtermResttyAppearanceResult: AppearanceResult | undefined;
+  var __omxtermRenderConfiguredFont: (reference: boolean) => Promise<void>;
 }
 
 const customTheme: TerminalTheme = {
@@ -164,9 +166,10 @@ async function run() {
     [16, 1, 0, true, 0],
     [16, 1, 0, false, 30],
   ] as const)
-    measurements.push(
-      await measure(size, lineHeight, padding, zoom, nativeTitleInset),
-    );
+    if (document.body.dataset.configuredFont !== "true")
+      measurements.push(
+        await measure(size, lineHeight, padding, zoom, nativeTitleInset),
+      );
 
   document.documentElement.style.setProperty("--native-title-inset", "0px");
   const container = document.createElement("main");
@@ -203,7 +206,29 @@ async function run() {
       },
     },
     {
-      appearance: { fontSize: 8, lineHeight: 1 },
+      appearance: {
+        fontSize: 8,
+        lineHeight: 1,
+        ...(document.body.dataset.configuredFont === "true"
+          ? {
+              systemFont: {
+                family: "JetBrainsMono Nerd Font Mono",
+                available: true,
+              },
+            }
+          : {}),
+      },
+      ...(document.body.dataset.configuredFont === "true"
+        ? {
+            loadFontData: async () => ({
+              configured: {
+                family: "JetBrainsMono Nerd Font Mono",
+                data: configuredFontBytes,
+              },
+              fallbacks: [],
+            }),
+          }
+        : {}),
       padding: { top: 0, right: 0, bottom: 0, left: 0 },
       theme: DEFAULT_TERMINAL_THEME,
       onExternalLink() {
@@ -235,13 +260,20 @@ async function run() {
     (_, index) => `\u001b[${90 + index}m██`,
   ).join("");
   handlers?.onOutput(
-    `${normalForeground}\r\n${brightForeground}\r\n\u001b[31m██\u001b[1m██\u001b[22;91m██\u001b[38;2;18;58;188m██ https://example.com\u001b[0m\u001b[${latest.rows};1H\u001b[48;2;171;205;239m  \u001b[0m\u001b[16t`,
+    `${normalForeground}\r\n${brightForeground}\r\n\u001b[31m██\u001b[1m██\u001b[22;91m██\u001b[38;2;18;58;188m██ https://example.com\u001b[0m\u001b[4;1HMMMMMMMM\u001b[5;1H\u001b[1mMMMMMMMM\u001b[22m\u001b[6;1H${"\ue8f0".repeat(8)}\u001b[7;1H${"ƀ".repeat(8)}\u001b[8;1H${"͸".repeat(8)}\u001b[${latest.rows};1H\u001b[48;2;171;205;239m  \u001b[0m\u001b[16t`,
   );
   await new Promise((resolve) => setTimeout(resolve, 100));
   const liveCanvas = container.querySelector("canvas");
   const canvasBounds = liveCanvas?.getBoundingClientRect();
   const containerStyle = getComputedStyle(container);
   const ime = container.querySelector<HTMLElement>("textarea, input");
+  globalThis.__omxtermRenderConfiguredFont = async (reference) => {
+    surface.dispose();
+    document.body.dataset.configuredFont = "true";
+    document.body.dataset.referenceFonts = String(reference);
+    globalThis.__omxtermResttyAppearanceResult = undefined;
+    await run();
+  };
   globalThis.__omxtermResttyAppearanceResult = {
     measurements,
     live: {
@@ -269,4 +301,7 @@ async function run() {
   };
 }
 
-void run();
+void run().catch((error: unknown) => {
+  const cause = error instanceof Error ? error.cause : undefined;
+  document.body.dataset.fixtureError = String(error) + ": " + String(cause);
+});
