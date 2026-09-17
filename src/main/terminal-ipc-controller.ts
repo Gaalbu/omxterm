@@ -20,6 +20,7 @@ import type { TerminalRendererConfiguration } from "../shared/user-configuration
 import type { TerminalSnippetsResponse } from "../shared/terminal-snippets";
 import type { OperationalEventLog } from "./operational-events";
 import { isTerminalRendererConfiguration } from "../shared/user-configuration";
+import type { TerminalFontData } from "../shared/terminal-font-data";
 
 export interface TrustedWebContents {
   readonly mainFrame: object;
@@ -111,11 +112,17 @@ export interface TerminalIpcController {
   dispose(): void;
 }
 
+export interface ResttySurfaceFontConfiguration {
+  readonly fontFamily?: string;
+  readonly fontLineHeight: number;
+}
+
 export interface TerminalIpcRouter {
   registerController(
     options: TerminalIpcControllerOptions,
   ): TerminalIpcController;
   applyConfiguration(configuration: TerminalRendererConfiguration): void;
+  activeResttySurfaceFontConfigurations(): readonly ResttySurfaceFontConfiguration[];
   dispose(): void;
 }
 
@@ -134,11 +141,16 @@ interface RoutedTerminalIpcController extends TerminalIpcController {
   bell(payload?: unknown): void;
   openExternalLink(payload?: unknown): void;
   snippets(payload?: unknown): Promise<TerminalSnippetsResponse>;
+  fontData(payload?: unknown): Promise<TerminalFontData>;
+  activeResttySurfaceFontConfigurations(): readonly ResttySurfaceFontConfiguration[];
 }
 
 export function registerTerminalIpcRouter(
   ipcMain: IpcMainPort,
   operationalEvents?: Pick<OperationalEventLog, "write">,
+  loadTerminalFontData: (
+    family: string | undefined,
+  ) => Promise<TerminalFontData> = async () => ({ fallbacks: [] }),
 ): TerminalIpcRouter {
   const controllers = new Map<
     TrustedWebContents,
@@ -250,6 +262,19 @@ export function registerTerminalIpcRouter(
     controller.showClipboardContextMenu(payload);
   };
 
+  const fontData: IpcHandler = (event, payload) => {
+    const controller = controllerFor(event);
+    if (!controller) {
+      operationalEvents?.write({
+        name: "boundary.rejected",
+        boundary: "ipc",
+        reason: "untrusted-sender",
+      });
+      throw new Error("Rejected Terminal Font IPC from an untrusted sender");
+    }
+    return controller.fontData(payload);
+  };
+
   const snippets: IpcHandler = (event, payload) => {
     const controller = controllerFor(event);
     if (!controller) {
@@ -265,6 +290,7 @@ export function registerTerminalIpcRouter(
 
   ipcMain.handle(terminalIpc.start, start);
   ipcMain.handle(terminalIpc.configuration, configuration);
+  ipcMain.handle(terminalIpc.fontData, fontData);
   ipcMain.handle(terminalIpc.snippets, snippets);
   ipcMain.on(terminalIpc.input, input);
   ipcMain.on(terminalIpc.resize, resize);
@@ -288,6 +314,7 @@ export function registerTerminalIpcRouter(
       controller = createTerminalIpcController(
         options,
         operationalEvents,
+        loadTerminalFontData,
         () => {
           if (controllers.get(options.webContents) === controller)
             controllers.delete(options.webContents);
@@ -302,12 +329,20 @@ export function registerTerminalIpcRouter(
       for (const controller of controllers.values())
         controller.applyConfiguration(configuration);
     },
+    activeResttySurfaceFontConfigurations() {
+      return Object.freeze(
+        [...controllers.values()].flatMap((controller) =>
+          controller.activeResttySurfaceFontConfigurations(),
+        ),
+      );
+    },
     dispose() {
       if (disposed) return;
       disposed = true;
       for (const controller of [...controllers.values()]) controller.dispose();
       ipcMain.removeHandler(terminalIpc.start);
       ipcMain.removeHandler(terminalIpc.configuration);
+      ipcMain.removeHandler(terminalIpc.fontData);
       ipcMain.removeHandler(terminalIpc.snippets);
       ipcMain.removeListener(terminalIpc.input, input);
       ipcMain.removeListener(terminalIpc.resize, resize);
@@ -329,6 +364,7 @@ export function registerTerminalIpcRouter(
 
 interface RoutedSessionState {
   readonly session: LocalTerminalSession;
+  readonly resttyFontConfiguration?: ResttySurfaceFontConfiguration;
   closed: boolean;
   exited: boolean;
 }
@@ -336,10 +372,14 @@ interface RoutedSessionState {
 function createTerminalIpcController(
   options: TerminalIpcControllerOptions,
   operationalEvents: Pick<OperationalEventLog, "write"> | undefined,
+  loadTerminalFontData: (
+    family: string | undefined,
+  ) => Promise<TerminalFontData>,
   unregister: () => void,
 ): RoutedTerminalIpcController {
   let disposed = false;
   let rendererConfiguration = options.configuration;
+  let fontRequestInFlight = false;
   const sessions = new Map<TerminalSessionId, RoutedSessionState>();
   let nextSessionNumber = 1;
   let selectedSessionId: TerminalSessionId | undefined;
@@ -472,6 +512,16 @@ function createTerminalIpcController(
 
     sessions.set(sessionId, {
       session: createdSession,
+      ...(rendererConfiguration.terminalSurface === "restty"
+        ? {
+            resttyFontConfiguration: Object.freeze({
+              ...(rendererConfiguration.fontFamily === undefined
+                ? {}
+                : { fontFamily: rendererConfiguration.fontFamily }),
+              fontLineHeight: rendererConfiguration.fontLineHeight,
+            }),
+          }
+        : {}),
       closed: false,
       exited: exitedBeforeRegistration,
     });
@@ -563,6 +613,29 @@ function createTerminalIpcController(
     if (payload === undefined) options.showClipboardContextMenu();
     else reject("clipboard", "invalid-payload");
   };
+  const fontData = async (payload?: unknown) => {
+    const family = rendererConfiguration.fontFamily;
+    if (payload !== family) {
+      reject("ipc", "invalid-payload");
+      throw new TypeError(
+        "Terminal Font request does not match the active configured family",
+      );
+    }
+    if (disposed) throw new Error("Terminal IPC controller is disposed");
+    if (fontRequestInFlight) {
+      reject("ipc", "invalid-payload");
+      throw new Error("A Terminal Font request is already in progress");
+    }
+    fontRequestInFlight = true;
+    try {
+      const loaded = await loadTerminalFontData(family);
+      if (disposed || rendererConfiguration.fontFamily !== family)
+        throw new Error("Terminal Font request was superseded");
+      return loaded;
+    } finally {
+      fontRequestInFlight = false;
+    }
+  };
   const snippets = async (payload?: unknown) => {
     if (payload !== undefined) {
       reject("ipc", "invalid-payload");
@@ -631,6 +704,16 @@ function createTerminalIpcController(
     bell,
     openExternalLink,
     snippets,
+    fontData,
+    activeResttySurfaceFontConfigurations() {
+      return Object.freeze(
+        [...sessions.values()].flatMap((state) =>
+          state.exited || state.resttyFontConfiguration === undefined
+            ? []
+            : [state.resttyFontConfiguration],
+        ),
+      );
+    },
     dispose() {
       if (disposed) return;
       disposed = true;

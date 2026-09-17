@@ -3,6 +3,7 @@ import {
   registerTerminalIpcRouter,
   type IpcEvent,
   type IpcMainPort,
+  type TerminalIpcControllerOptions,
   type TrustedWebContents,
 } from "../../src/main/terminal-ipc-controller";
 import {
@@ -130,7 +131,7 @@ describe("terminal IPC controller", () => {
     expect(secondSession.write).toHaveBeenCalledWith("second window input");
     expect(firstSession.close).toHaveBeenCalledOnce();
     expect(secondSession.close).not.toHaveBeenCalled();
-    expect(ipc.handlers.size).toBe(6);
+    expect(ipc.handlers.size).toBe(7);
     expect(ipc.listeners.size).toBe(8);
   });
 
@@ -1302,6 +1303,138 @@ describe("terminal IPC controller", () => {
     for (const session of sessions)
       expect(session.close).toHaveBeenCalledOnce();
     expect(() => start(trusted)).toThrow("untrusted sender");
+    router.dispose();
+  });
+});
+
+describe("Terminal Font IPC", () => {
+  it("reads bytes only for the active configured family and a trusted main frame", async () => {
+    const ipc = createIpcHarness();
+    const loadFontData = vi.fn(async (family: string | undefined) => ({
+      ...(family === undefined
+        ? {}
+        : { configured: { family, data: new Uint8Array([0, 1, 0, 0]) } }),
+      fallbacks: [],
+    }));
+    const router = registerTerminalIpcRouter(
+      ipc.ipcMain,
+      undefined,
+      loadFontData,
+    );
+    const mainFrame = {};
+    const webContents: TrustedWebContents = {
+      mainFrame,
+      isDestroyed: () => false,
+      send: vi.fn(),
+    };
+    const controller = router.registerController({
+      ...clipboardOptions(),
+      configuration: {
+        ...clipboardOptions().configuration,
+        terminalSurface: "restty",
+        fontFamily: "Exact Família",
+      },
+      webContents,
+      createSession: vi.fn(),
+      onSessionStartError: vi.fn(),
+      onSessionExit: vi.fn(),
+    });
+    const handler = ipc.handlers.get(terminalIpc.fontData)! as unknown as (
+      event: IpcEvent,
+      payload?: unknown,
+    ) => Promise<unknown>;
+    const trusted = { sender: webContents, senderFrame: mainFrame };
+
+    await expect(handler(trusted, "Exact Família")).resolves.toMatchObject({
+      configured: { family: "Exact Família" },
+      fallbacks: [],
+    });
+    await expect(handler(trusted, "/tmp/arbitrary.ttf")).rejects.toThrow(
+      "does not match",
+    );
+    expect(() =>
+      handler({ sender: webContents, senderFrame: {} }, "Exact Família"),
+    ).toThrow("untrusted sender");
+    expect(loadFontData).toHaveBeenCalledExactlyOnceWith("Exact Família");
+
+    let finishLookup: (
+      value: Awaited<ReturnType<typeof loadFontData>>,
+    ) => void = () => {};
+    loadFontData.mockImplementationOnce(
+      (family) =>
+        new Promise((resolve) => {
+          finishLookup = resolve;
+          expect(family).toBe("Exact Família");
+        }),
+    );
+    const superseded = handler(trusted, "Exact Família");
+    await expect(handler(trusted, "Exact Família")).rejects.toThrow(
+      "already in progress",
+    );
+    controller.applyConfiguration({
+      ...clipboardOptions().configuration,
+      terminalSurface: "restty",
+      fontFamily: "New Family",
+    });
+    finishLookup({
+      configured: {
+        family: "Exact Família",
+        data: new Uint8Array([0, 1, 0, 0]),
+      },
+      fallbacks: [],
+    });
+    await expect(superseded).rejects.toThrow("superseded");
+    router.dispose();
+  });
+
+  it("reports the restart-only font settings of every live Restty Surface", () => {
+    const ipc = createIpcHarness();
+    const router = registerTerminalIpcRouter(ipc.ipcMain);
+    const mainFrame = {};
+    const webContents: TrustedWebContents = {
+      mainFrame,
+      isDestroyed: () => false,
+      send: vi.fn(),
+    };
+    let onExit:
+      ((exit: { exitCode: number; signal: number }) => void) | undefined;
+    const controller = router.registerController({
+      ...clipboardOptions(),
+      configuration: {
+        ...clipboardOptions().configuration,
+        terminalSurface: "restty",
+        fontFamily: "Initial Family",
+        fontLineHeight: 1.25,
+      },
+      webContents,
+      createSession: vi.fn(
+        (
+          callbacks: Parameters<
+            TerminalIpcControllerOptions["createSession"]
+          >[0],
+        ) => {
+          onExit = callbacks.onExit;
+          return {
+            write: vi.fn(),
+            resize: vi.fn(),
+            hasForegroundChildProcess: () => false,
+            close: vi.fn(),
+          };
+        },
+      ),
+      onSessionStartError: vi.fn(),
+      onSessionExit: vi.fn(),
+    });
+    const trusted = { sender: webContents, senderFrame: mainFrame };
+    ipc.handlers.get(terminalIpc.start)!(trusted);
+
+    expect(router.activeResttySurfaceFontConfigurations()).toEqual([
+      { fontFamily: "Initial Family", fontLineHeight: 1.25 },
+    ]);
+    onExit?.({ exitCode: 0, signal: 0 });
+    expect(router.activeResttySurfaceFontConfigurations()).toEqual([]);
+
+    controller.dispose();
     router.dispose();
   });
 });
