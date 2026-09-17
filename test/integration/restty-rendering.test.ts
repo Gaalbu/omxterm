@@ -27,6 +27,7 @@ interface FixtureResult {
     readonly clipboardReads?: number;
     readonly clipboardWrites?: number;
     readonly terminalReplies?: number;
+    readonly optionInput?: readonly string[];
     readonly resize?: { readonly cols: number; readonly rows: number };
   };
   readonly unavailable: {
@@ -73,7 +74,20 @@ describe("Restty under production Electron policy", () => {
         ptyStarts: 1,
         clipboardReads: 0,
         clipboardWrites: 0,
-        terminalReplies: 0,
+        terminalReplies: 11,
+        optionInput: [
+          "å",
+          "é",
+          "∫",
+          "\u001ba",
+          "∫",
+          "å",
+          "\u001bb",
+          "\u001ba",
+          "\u001bb",
+          "\u001be",
+          "\u001bA",
+        ],
       });
       expect(result?.available.resize?.cols).toBeGreaterThan(1);
       expect(result?.available.resize?.rows).toBeGreaterThan(0);
