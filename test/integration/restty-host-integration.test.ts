@@ -28,6 +28,10 @@ interface HostResult {
   };
   readonly clipboardReads: number;
   readonly clipboardWrites: number;
+  readonly selectAllCoveredScrollback: boolean;
+  readonly protectedPasteConfirmations: number;
+  readonly contextMenus: number;
+  readonly largePasteLength: number;
   readonly externalLinks: number;
   readonly titles: number;
   readonly bells: number;
@@ -103,8 +107,12 @@ describe.skipIf(process.platform !== "darwin")(
           { closeRequested: false, liveSessions: 0 },
         ]);
         expect(result).toMatchObject({
-          clipboardReads: 0,
-          clipboardWrites: 0,
+          clipboardReads: 1,
+          clipboardWrites: 2,
+          selectAllCoveredScrollback: true,
+          protectedPasteConfirmations: 1,
+          contextMenus: 1,
+          largePasteLength: 79_000,
           externalLinks: 0,
           titles: 0,
           bells: 0,

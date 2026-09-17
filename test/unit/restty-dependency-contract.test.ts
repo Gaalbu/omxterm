@@ -119,7 +119,7 @@ describe("Restty dependency contract", () => {
       path.join(packageRoot, "dist", "chunk-c0rcpsc5.js"),
     );
     expect(digest(runtime)).toBe(
-      "c8580ea08273aa17dc3ae1f658aafe8340114a751e2a36e09e933e3bcabb3bad",
+      "595f72d3be87f0965dea3733180264768720f7cba0c7c35aad797e2a22689665",
     );
     const core = readFileSync(
       path.join(packageRoot, "dist", "chunk-6dxqza9q.js"),
@@ -139,6 +139,14 @@ describe("Restty dependency contract", () => {
     expect(source).toContain("required font decode failed");
     expect(source).toContain("setScrollbackLines");
     expect(source).toContain("setScrollbackLimits");
+    expect(source).toContain('runBeforeInputHook(text, "paste")');
+    expect(source).toContain("isBracketedPasteEnabled");
+    expect(source).toContain("getSelectionText");
+    expect(source).toContain("selectAll");
+    expect(source).toContain("row: -viewportOffset");
+    expect(source).toContain("totalRows - viewportOffset - 1");
+    expect(source).toContain("onOsc: services.onOsc");
+    expect(source).toContain("code === 24 || code === 26");
     expect(source).not.toContain(
       "Math.max(10, Math.min(64, Math.round(value)))",
     );
