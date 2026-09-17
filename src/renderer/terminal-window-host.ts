@@ -26,6 +26,11 @@ import {
   type SnippetsSidebar,
 } from "./snippets-sidebar";
 import { renderUserFileErrorBanner } from "./user-file-error-banner";
+import {
+  createLocalImagePreview,
+  type LocalImagePreview,
+} from "./local-image-preview";
+import type { LocalImageData } from "../shared/local-image";
 
 type MountTerminalSurface = (
   container: HTMLElement,
@@ -73,6 +78,10 @@ interface TerminalWindowPageOptions {
   ) => void;
   readonly onBell?: (sessionId: TerminalSessionId) => void;
   readonly onExternalLink?: (url: string) => void;
+  readonly loadLocalImage?: (
+    fileUrl?: string,
+  ) => Promise<LocalImageData | null>;
+  readonly subscribeToLocalImageOpen?: (listener: () => void) => () => void;
   readonly snippets?: {
     readonly element: HTMLElement;
     readonly load: () => Promise<TerminalSnippetsResponse>;
@@ -99,6 +108,8 @@ export function mountTerminalWindowPage(
   let removeTabTitleListener: (() => void) | undefined;
   let snippetsSidebar: SnippetsSidebar | undefined;
   let removeSnippetsToggleListener: (() => void) | undefined;
+  let removeLocalImageOpenListener: (() => void) | undefined;
+  let localImagePreview: LocalImagePreview | undefined;
   let activeSurfaceConfiguration = options.configuration
     ? surfaceConfiguration(options.configuration)
     : undefined;
@@ -135,6 +146,11 @@ export function mountTerminalWindowPage(
     ...(options.onExternalLink
       ? { onExternalLink: options.onExternalLink }
       : {}),
+    ...(options.loadLocalImage
+      ? {
+          onLocalImageLink: (url: string) => void localImagePreview?.open(url),
+        }
+      : {}),
     ...(options.onSurfaceFailure
       ? { onFatalError: options.onSurfaceFailure }
       : {}),
@@ -156,18 +172,35 @@ export function mountTerminalWindowPage(
     },
   );
 
-  const onPageFocus = () => tabs.focusSelected();
+  if (options.loadLocalImage) {
+    localImagePreview = createLocalImagePreview(page.document, {
+      loadImage: options.loadLocalImage,
+      focusTerminal: () => tabs.focusSelected(),
+    });
+    removeLocalImageOpenListener = options.subscribeToLocalImageOpen?.(
+      () => void localImagePreview?.open(),
+    );
+  }
+
+  const previewActive = () => localImagePreview?.isActive() ?? false;
+  const onPageFocus = () => {
+    if (!previewActive()) tabs.focusSelected();
+  };
   const isInternalTabDrag = (event: DragEvent) =>
     [...(event.dataTransfer?.types ?? [])].includes(
       TERMINAL_TAB_DRAG_DATA_TYPE,
     );
   const onDragOver = (event: DragEvent) => {
     event.preventDefault();
-    if (!isInternalTabDrag(event)) event.stopPropagation();
+    if (previewActive() || !isInternalTabDrag(event)) event.stopPropagation();
   };
   const onDrop = (event: DragEvent) => {
     // Capture before the Terminal Surface or another target can interpret a native file URI.
     event.preventDefault();
+    if (previewActive()) {
+      event.stopPropagation();
+      return;
+    }
     if (isInternalTabDrag(event)) return;
     event.stopPropagation();
     const files = event.dataTransfer?.files;
@@ -189,6 +222,9 @@ export function mountTerminalWindowPage(
     removeTabCommandListener?.();
     removeTabTitleListener?.();
     removeSnippetsToggleListener?.();
+    removeLocalImageOpenListener?.();
+    localImagePreview?.dispose();
+    localImagePreview = undefined;
     snippetsSidebar?.dispose();
     snippetsSidebar = undefined;
     tabs.dispose();
@@ -227,11 +263,13 @@ export function mountTerminalWindowPage(
 
   const ready = tabs.ready.then(() => {
     if (disposed) return;
-    removeZoomListener = options.subscribeToFontZoom?.((command) =>
-      tabs.zoom(command),
-    );
+    removeZoomListener = options.subscribeToFontZoom?.((command) => {
+      if (!previewActive()) tabs.zoom(command);
+    });
     removeClipboardActionListener = options.subscribeToClipboardActions?.(
-      (action) => tabs.clipboardAction(action),
+      (action) => {
+        if (!previewActive()) tabs.clipboardAction(action);
+      },
     );
     removeTabCommandListener = options.subscribeToTabCommands?.((command) =>
       tabs.handleCommand(command),
@@ -242,14 +280,16 @@ export function mountTerminalWindowPage(
     if (options.snippets) {
       const sidebar = createSnippetsSidebar(options.snippets.element, {
         loadSnippets: options.snippets.load,
-        inject: (snippet) =>
-          tabs.injectSnippet(snippet.body, { submit: snippet.execute }),
-        focusTerminal: () => tabs.focusSelected(),
+        inject: (snippet) => {
+          if (!previewActive())
+            tabs.injectSnippet(snippet.body, { submit: snippet.execute });
+        },
+        focusTerminal: onPageFocus,
       });
       snippetsSidebar = sidebar;
-      removeSnippetsToggleListener = options.snippets.subscribeToToggle(
-        () => void sidebar.toggle(),
-      );
+      removeSnippetsToggleListener = options.snippets.subscribeToToggle(() => {
+        if (!previewActive()) void sidebar.toggle();
+      });
     }
   });
 
