@@ -62,6 +62,37 @@ body {
   display: none;
 }
 
+.restty-terminal-surface {
+  padding-top: var(--native-title-inset);
+}
+
+body.tabs-visible .restty-terminal-surface {
+  padding-top: 0;
+}
+
+.restty-terminal-surface .pane-split {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+
+.restty-terminal-surface .pane {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.restty-terminal-surface canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  outline: none;
+}
+
 /* The tab strip occupies its own full-width row below any app-controlled
    native title inset and only exists with two or more tabs (body.tabs-visible). */
 #tab-strip {
@@ -113,7 +144,7 @@ body {
   background: color-mix(
     in srgb,
     var(--terminal-background, #000000),
-    var(--terminal-chrome-neutral) 15%
+    var(--terminal-chrome-neutral) 25%
   );
 }
 
@@ -121,7 +152,7 @@ body {
   background: color-mix(
     in srgb,
     var(--terminal-background, #000000),
-    var(--terminal-chrome-neutral) 20%
+    var(--terminal-chrome-neutral) 40%
   );
 }
 
@@ -164,7 +195,7 @@ body {
     color-mix(
       in srgb,
       var(--terminal-background, #000000),
-      var(--terminal-foreground, #e6e6e6) 30%
+      var(--terminal-foreground, #e6e6e6) 60%
     );
   border-radius: 6px;
   outline: none;
@@ -182,7 +213,7 @@ body {
   border-color: color-mix(
     in srgb,
     var(--terminal-background, #000000),
-    var(--terminal-foreground, #e6e6e6) 50%
+    var(--terminal-foreground, #e6e6e6) 70%
   );
 }
 
@@ -215,21 +246,17 @@ body {
   background: color-mix(
     in srgb,
     var(--terminal-background, #000000),
-    var(--terminal-chrome-neutral) 30%
+    var(--terminal-chrome-neutral) 45%
   );
 }
 
 #snippets-sidebar li button:focus-visible {
-  background: color-mix(
-    in srgb,
-    var(--terminal-background, #000000),
-    var(--terminal-chrome-neutral) 25%
-  );
+  background: transparent;
   outline: 2px solid
     color-mix(
       in srgb,
       var(--terminal-background, #000000),
-      var(--terminal-foreground, #e6e6e6) 50%
+      var(--terminal-foreground, #e6e6e6) 70%
     );
   outline-offset: -2px;
 }
@@ -267,7 +294,8 @@ body {
   border-radius: 6px;
 }
 
-#user-file-errors {
+#user-file-errors,
+#terminal-surface-failure {
   flex: none;
   max-height: 40%;
   margin: 0;
@@ -282,7 +310,8 @@ body {
   user-select: text;
 }
 
-#user-file-errors[hidden] {
+#user-file-errors[hidden],
+#terminal-surface-failure[hidden] {
   display: none;
 }
 
