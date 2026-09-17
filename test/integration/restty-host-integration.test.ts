@@ -42,6 +42,7 @@ interface HostResult {
   readonly largePasteLength: number;
   readonly externalLinks: readonly string[];
   readonly validLinkMouseReports: string;
+  readonly localPathMouseReports: string;
   readonly ordinaryGestureMouseReports: string;
   readonly wheelMouseReports: string;
   readonly alternateScreenMouseReports: string;
@@ -211,6 +212,7 @@ describe.skipIf(
         contextMenus: 1,
         largePasteLength: 79_000,
         validLinkMouseReports: "",
+        localPathMouseReports: "",
         cancelledGestureMouseReports: "",
         titleQueryReplyBytes: 0,
         navigations: 0,
@@ -314,7 +316,13 @@ describe.skipIf(
         result.imageEvidence.afterTabAndThemePixels.greenInBitmap,
       ).toBeGreaterThan(100);
     } finally {
-      await rm(root, { recursive: true, force: true });
+      // Windows can retain Chromium profile handles briefly after child exit.
+      await rm(root, {
+        recursive: true,
+        force: true,
+        maxRetries: 10,
+        retryDelay: 100,
+      });
     }
   }, 270_000);
 });

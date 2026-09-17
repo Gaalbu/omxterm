@@ -1,4 +1,5 @@
 import type { BrowserWindow } from "electron";
+import type { LocalImageRequest } from "../../src/shared/local-image";
 
 interface TerminalSize {
   readonly cols: number;
@@ -11,6 +12,7 @@ interface ResttyLinkGestureOptions {
   readonly inputs: string[];
   readonly resizes: TerminalSize[];
   readonly externalLinks: string[];
+  readonly localImageRequests: LocalImageRequest[];
   readonly waitFor: (
     predicate: () => boolean | Promise<boolean>,
     label: string,
@@ -19,6 +21,7 @@ interface ResttyLinkGestureOptions {
 
 export interface ResttyLinkGestureEvidence {
   readonly validLinkMouseReports: string;
+  readonly localPathMouseReports: string;
   readonly ordinaryGestureMouseReports: string;
   readonly wheelMouseReports: string;
   readonly alternateScreenMouseReports: string;
@@ -89,11 +92,27 @@ async function scrollTerminal(
   );
 }
 
+function gestureInputSince(inputs: readonly string[], start: number): string {
+  // Concurrent native fixtures may change window focus. Ignore only focus
+  // reports; duplicate mouse or other unexpected input still fails assertions.
+  return inputs
+    .join("")
+    .slice(start)
+    .replaceAll(/\u001b\[[IO]/gu, "");
+}
+
 export async function exerciseResttyLinks(
   options: ResttyLinkGestureOptions,
 ): Promise<ResttyLinkGestureEvidence> {
-  const { window, deliverOutput, inputs, resizes, externalLinks, waitFor } =
-    options;
+  const {
+    window,
+    deliverOutput,
+    inputs,
+    resizes,
+    externalLinks,
+    localImageRequests,
+    waitFor,
+  } = options;
   const size = resizes.at(-1);
   if (!size) throw new Error("Restty link fixture has no grid size");
   const visibleUrl = `https://example.test/${"a".repeat(size.cols)}`;
@@ -117,7 +136,29 @@ export async function exerciseResttyLinks(
     () => externalLinks.length === 2,
     "repeated visible link activation",
   );
-  const validLinkMouseReports = inputs.join("").slice(inputBeforeLinks.length);
+  const validLinkMouseReports = gestureInputSince(
+    inputs,
+    inputBeforeLinks.length,
+  );
+
+  const localPath =
+    process.platform === "win32"
+      ? `C:\\tmp\\${"local".repeat(reflowedSize.cols)}%23#fixture.data`
+      : `/tmp/${"local".repeat(reflowedSize.cols)}%23#fixture.data`;
+  deliverOutput(`\u001b[2J\u001b[H${localPath}`);
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  const localPathInputStart = inputs.join("").length;
+  await clickTerminalCell(window, 0, 3, reflowedSize);
+  await waitFor(
+    () => localImageRequests.length === 1,
+    "soft-wrapped native-path activation",
+  );
+  if (
+    localImageRequests[0]?.source !== "native-path" ||
+    localImageRequests[0].path !== localPath
+  )
+    throw new Error("Native-path activation changed the literal destination");
+  const localPathMouseReports = gestureInputSince(inputs, localPathInputStart);
 
   deliverOutput("\u001b[2J\u001b[Hhttps://one.test/a,\r\nhttps://two.test/b");
   await new Promise((resolve) => setTimeout(resolve, 100));
@@ -305,13 +346,14 @@ export async function exerciseResttyLinks(
     true,
   );
   await new Promise((resolve) => setTimeout(resolve, 100));
-  const cancelledGestureMouseReports = inputs
-    .join("")
-    .slice(cancelledStart)
-    .replaceAll(/\u001b\[[IO]/gu, "");
+  const cancelledGestureMouseReports = gestureInputSince(
+    inputs,
+    cancelledStart,
+  );
 
   return {
     validLinkMouseReports,
+    localPathMouseReports,
     ordinaryGestureMouseReports,
     wheelMouseReports,
     alternateScreenMouseReports,
