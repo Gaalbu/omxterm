@@ -83,6 +83,15 @@ does not apply to `docs/spec.md` or ADR changes that define or revise behavior o
 durable decisions. Keep a direct documentation commit focused and run the
 relevant formatting and diff checks.
 
+### Worktree locations
+
+Create new Git worktrees only at
+`~/sannux-data/worktrees/<repo>/<worktree_name>`, never inside the checkout or
+beside it as a sibling checkout. This root is host-local and excluded by
+`synchosts`; transfer required work deliberately between hosts. Leave existing
+worktrees where they are. This location policy does not apply to scratch
+folders, vendored source, or generated source copies.
+
 1. Check existing issues, PRs, branches, and working-tree changes before taking
    ownership. Never duplicate an active writer.
 2. Each writer owns one issue at a time in an exclusive branch and worktree.
@@ -133,9 +142,9 @@ issue or PR is unfinished work.
   dependencies alone is not evidence of independence. When independence is
   uncertain, integrate sequentially.
 - Give every parallel writer exclusive ownership of its issue, branch, and
-  worktree. Use the operating system temporary directory for disposable clean
-  reproductions and verification worktrees; use a durable path for
-  implementation that must survive restarts or task recovery.
+  worktree. Use the operating system temporary directory only for disposable
+  clean reproductions that are not Git worktrees. Every new implementation or
+  verification worktree follows the location policy above.
 - Integrate completed issues one at a time. After each merge, synchronize and
   revalidate the remaining branches before accepting them. Remove merged
   branches and worktrees after confirming they contain no uncommitted work.
