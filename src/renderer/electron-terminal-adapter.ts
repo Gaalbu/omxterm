@@ -24,6 +24,19 @@ export function createElectronTerminalAdapter(
   let sessionId: TerminalSessionId | undefined;
   let removeOutputListener: (() => void) | undefined;
   let removeExitListener: (() => void) | undefined;
+  let pendingEvents: Array<
+    | {
+        readonly type: "output";
+        readonly source: TerminalSessionId;
+        readonly data: string;
+        readonly end: number;
+      }
+    | {
+        readonly type: "exit";
+        readonly source: TerminalSessionId;
+        readonly exit: Parameters<TerminalSessionHandlers["onExit"]>[0];
+      }
+  > = [];
 
   return {
     sessionId: () => sessionId,
@@ -31,14 +44,46 @@ export function createElectronTerminalAdapter(
       if (started || closed)
         throw new Error("Terminal Adapter cannot be started twice");
       started = true;
-      removeOutputListener = bridge.onOutput((source, data) => {
-        if (source === sessionId) handlers.onOutput(data);
+      const deliverOutput = (
+        source: TerminalSessionId,
+        data: string,
+        end: number,
+      ) => {
+        if (closed || source !== sessionId) return;
+        handlers.onOutput(data);
+        bridge.acknowledgeOutput(source, end);
+      };
+      const deliverExit = (
+        source: TerminalSessionId,
+        exit: Parameters<TerminalSessionHandlers["onExit"]>[0],
+      ) => {
+        if (!closed && source === sessionId) handlers.onExit(exit);
+      };
+      removeOutputListener = bridge.onOutput((source, data, end) => {
+        if (sessionId === undefined) {
+          // The start response identifies the owner. Preserve every candidate
+          // event until then: main already flow-controls each owned session,
+          // and dropping a crossing native read here could strand it paused.
+          pendingEvents.push({ type: "output", source, data, end });
+          return;
+        }
+        deliverOutput(source, data, end);
       });
       removeExitListener = bridge.onExit((source, exit) => {
-        if (source === sessionId) handlers.onExit(exit);
+        if (sessionId === undefined) {
+          pendingEvents.push({ type: "exit", source, exit });
+          return;
+        }
+        deliverExit(source, exit);
       });
       const startedSessionId = await bridge.start();
       sessionId = startedSessionId;
+      for (const event of pendingEvents) {
+        if (event.type === "output")
+          deliverOutput(event.source, event.data, event.end);
+        else deliverExit(event.source, event.exit);
+      }
+      pendingEvents = [];
       // The adapter owns exactly one Live Terminal Session: a close requested
       // while the start round-trip was in flight still terminates it.
       if (closed) bridge.close(startedSessionId);
@@ -56,6 +101,7 @@ export function createElectronTerminalAdapter(
       closed = true;
       removeOutputListener?.();
       removeExitListener?.();
+      pendingEvents = [];
       if (sessionId !== undefined) bridge.close(sessionId);
     },
   };

@@ -126,7 +126,7 @@ describe("Restty dependency contract", () => {
       path.join(packageRoot, "dist", "chunk-c0rcpsc5.js"),
     );
     expect(digest(runtime)).toBe(
-      "15ca6dc64c45c1f42a88337aec58367a5e69fc0889dfa92c305aa333cba2a651",
+      "ac05624abac2fddea9a38f3e29d26ebbde3f41484b86c0082ce5e3d5cb334e1f",
     );
     const core = readFileSync(
       path.join(packageRoot, "dist", "chunk-6dxqza9q.js"),
@@ -162,6 +162,10 @@ describe("Restty dependency contract", () => {
     expect(source).toContain("code === 24 || code === 26");
     expect(source).toContain("drainParsedEvents");
     expect(source).toContain("options.emitRuntimeEvent(event)");
+    expect(source).toContain("MAX_RETAINED_CONTROL_CODE_UNITS = 1e7");
+    expect(source).toContain('this.discardedControl = "osc"');
+    expect(source).toContain('this.discardedControl = "csi"');
+    expect(source).toContain("code === 24 || code === 26");
     const eventTypes = readFileSync(
       path.join(packageRoot, "dist", "runtime/core/runtime-events.d.ts"),
       "utf8",
