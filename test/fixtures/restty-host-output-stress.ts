@@ -2,9 +2,15 @@ import type { BrowserWindow } from "electron";
 import type { LaunchRequest } from "../../src/main/launch-request";
 import type { LocalTerminalSession } from "../../src/main/local-terminal-session";
 import { terminalIpc } from "../../src/shared/terminal-ipc";
+import { isTerminalSessionOutputAck } from "../../src/shared/terminal-contract";
+import type {
+  IpcMainPort,
+  IpcListener,
+} from "../../src/main/terminal-ipc-types";
 
 const RECORDS = 65_536;
 const RECORD_BYTES = 32;
+const READY = "__OMXTERM_OUTPUT_READY__";
 const BEGIN = "__OMXTERM_OUTPUT_BEGIN__";
 const END = "__OMXTERM_OUTPUT_END__";
 const SESSION_INDEX = 2;
@@ -34,7 +40,7 @@ export function outputStressLaunchRequest(
   const executable = process.env["npm_node_execpath"];
   if (!executable)
     throw new Error("Native output fixture requires npm_node_execpath");
-  const producer = `let i=0;const write=()=>{if(i===0)process.stdout.write("__OMXTERM_"+"OUTPUT_BEGIN__");while(i<${RECORDS}){const line=String(i).padStart(8,"0")+":"+"x".repeat(23);i++;if(!process.stdout.write(line)){process.stdout.once("drain",write);return}}process.stdout.write("__OMXTERM_"+"OUTPUT_END__");process.stdin.once("data",()=>process.exit(0))};process.stdin.once("data",write);process.stdin.resume()`;
+  const producer = `let i=0;const write=()=>{if(i===0)process.stdout.write("__OMXTERM_"+"OUTPUT_BEGIN__");while(i<${RECORDS}){const line=String(i).padStart(8,"0")+":"+"x".repeat(23);i++;if(!process.stdout.write(line)){process.stdout.once("drain",write);return}}process.stdout.write("__OMXTERM_"+"OUTPUT_END__");process.stdin.once("data",()=>process.exit(0))};process.stdin.once("data",write);process.stdin.resume();process.stdout.write("${READY}")`;
   return {
     kind: "explicit-command",
     executable,
@@ -46,6 +52,9 @@ export function createOutputStressHarness() {
   let active = false;
   let bytes = 0;
   let began = false;
+  let producerReady = false;
+  let holdAcknowledgements = false;
+  const pendingAcknowledgements: Array<() => void> = [];
   let nextRecord = 0;
   let remainder = "";
   let endSeen = false;
@@ -55,6 +64,7 @@ export function createOutputStressHarness() {
   const observeOutput = (index: number, data: string): boolean => {
     if (index !== SESSION_INDEX || !active) return false;
     remainder += data;
+    producerReady ||= remainder.includes(READY);
     if (!began) {
       const begin = remainder.indexOf(BEGIN);
       if (begin < 0) remainder = remainder.slice(-BEGIN.length);
@@ -82,6 +92,31 @@ export function createOutputStressHarness() {
   };
 
   return {
+    ipcPort(port: IpcMainPort): IpcMainPort {
+      const wrappers = new Map<IpcListener, IpcListener>();
+      return {
+        handle: (channel, handler) => port.handle(channel, handler),
+        removeHandler: (channel) => port.removeHandler(channel),
+        on(channel, listener) {
+          const wrapped: IpcListener = (event, payload) => {
+            if (
+              channel === terminalIpc.outputAck &&
+              holdAcknowledgements &&
+              isTerminalSessionOutputAck(payload) &&
+              payload.sessionId === "s3"
+            )
+              pendingAcknowledgements.push(() => listener(event, payload));
+            else listener(event, payload);
+          };
+          wrappers.set(listener, wrapped);
+          port.on(channel, wrapped);
+        },
+        removeListener(channel, listener) {
+          port.removeListener(channel, wrappers.get(listener) ?? listener);
+          wrappers.delete(listener);
+        },
+      };
+    },
     observeOutput,
     observeClipboard(text: string) {
       markerVisible ||= text.includes(END);
@@ -109,6 +144,10 @@ export function createOutputStressHarness() {
           options.resizes[SESSION_INDEX]!.length > 0,
         "output-stress Restty tab",
       );
+      // A mounted tab does not prove its native child has finished startup.
+      // Stall only after the producer can consume the trigger; otherwise slow
+      // startup can use the entire stall window without producing any output.
+      await options.waitFor(() => producerReady, "output producer readiness");
       const terminal = options.terminals[SESSION_INDEX]!;
       const resizesBefore = options.resizes[SESSION_INDEX]!.length;
       const rendererStall = options.window.webContents.executeJavaScript(
@@ -117,6 +156,10 @@ export function createOutputStressHarness() {
       );
       void rendererStall.catch(() => undefined);
       await new Promise((resolve) => setTimeout(resolve, 25));
+      // Hold only this synthetic session's ACK delivery until the real native
+      // high-water pause is observed. ConPTY throughput need not fill 64 KiB
+      // during a fixed 350 ms renderer stall on every machine.
+      holdAcknowledgements = true;
       terminal.write("g\r");
       setTimeout(() => {
         const bounds = options.window.getBounds();
@@ -126,6 +169,16 @@ export function createOutputStressHarness() {
         });
       }, 100);
       await new Promise((resolve) => setTimeout(resolve, 400));
+      try {
+        await options.waitFor(
+          () => (terminal.outputFlowMetrics?.().pauseCount ?? 0) > 0,
+          "native high-water pause while output acknowledgements are held",
+        );
+      } finally {
+        holdAcknowledgements = false;
+        for (const acknowledge of pendingAcknowledgements.splice(0))
+          acknowledge();
+      }
       await options.waitFor(() => endSeen, "ordered 2 MiB output end marker");
       await options.waitFor(
         () => (terminal.outputFlowMetrics?.().resumeCount ?? 0) > 0,
