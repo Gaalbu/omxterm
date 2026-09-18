@@ -63,7 +63,20 @@ but they do not replace the maintained product contract.
 
 ## Release status
 
-### Current release: 0.11.0
+### Upcoming release preparation: 0.12.0
+
+- [0.12.0 preparation record](releases/0.12.0.md) describes the candidate
+  source, migration guidance, changed-boundary automation and exact qualified
+  macOS/Linux identities.
+- 0.12.0 is **not published**. Exact-artifact acceptance is pending and
+  publication is blocked pending separate owner decisions; its filenames are
+  not download links.
+- The 0.12.0-specific preparation omits Windows after its native gate failed.
+  Windows ARM64 remains a Supported Platform, and its latest available version
+  is [0.11.0](releases/0.11.0.md) from the existing
+  [v0.11.0 GitHub Release](https://github.com/luizomf/omxterm/releases/tag/v0.11.0).
+
+### Current published release: 0.11.0
 
 - [0.11.0 release notes](releases/0.11.0.md) describe Chafa support, the Linux
   launch policy, the Windows transport fix, exact accepted artifact identities,

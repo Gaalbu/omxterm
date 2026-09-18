@@ -1,6 +1,8 @@
 # OMXTerm
 
-OMXTerm is an open-source personal desktop terminal.
+OMXTerm is an open-source personal desktop terminal. Its Terminal Surface is
+powered by [Restty](https://github.com/wiedymi/restty) and Restty's pinned
+[Ghostty](https://github.com/ghostty-org/ghostty) core.
 
 <p align="center">
   <img src="docs/images/omxterm-hero.png" alt="OMXTerm icon: a light blue terminal prompt on a dark rounded square" width="480" />
@@ -34,6 +36,26 @@ source, `741a1cc67597bfdbe5aacf4933a01760c658f352`.
 The packages carry no verified publisher identity. The macOS app has a verified
 ad-hoc integrity seal, but no Apple Developer ID signature or notarization.
 Previous [0.10.0 release notes](docs/releases/0.10.0.md) remain immutable history.
+
+### Upcoming 0.12.0 preparation
+
+[0.12.0 release preparation](docs/releases/0.12.0.md) records qualified macOS
+and Linux candidates. **0.12.0 is not published:** exact-artifact acceptance is
+pending, publication is blocked, and the filenames below are not download
+links. Until those separate gates complete, 0.11.0 above remains the current
+published release and the installation commands below remain current.
+
+This release-specific preparation omits a Windows 0.12.0 candidate after its
+native gate failed; diagnosis is deferred to
+[#310](https://github.com/luizomf/omxterm/issues/310). Windows ARM64 remains a
+Supported Platform, with 0.11.0 its latest available version.
+
+| Platform                         | Prepared or available package                                                                                  | Status / checksum                                                                                              |
+| -------------------------------- | -------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| macOS ARM64                      | `OMXTerm-0.12.0-arm64.dmg`                                                                                     | Pending acceptance and publication; no download                                                                |
+| Linux ARM64                      | `OMXTerm-0.12.0-arm64.AppImage`                                                                                | Pending acceptance and publication; no download                                                                |
+| Linux optional desktop installer | `OMXTerm-0.12.0-arm64.AppImage-installer.sh`                                                                   | Pending acceptance and publication; no download                                                                |
+| Windows ARM64                    | [0.11.0 NSIS installer](https://github.com/luizomf/omxterm/releases/download/v0.11.0/OMXTerm-0.11.0-arm64.exe) | [0.11.0 SHA-256](https://github.com/luizomf/omxterm/releases/download/v0.11.0/OMXTerm-0.11.0-arm64.exe.sha256) |
 
 ### Publication visibility
 
@@ -149,7 +171,9 @@ or other system-wide Windows security protections.
 
 Launch OMXTerm to open one Terminal Window and one Terminal Tab running the
 Default Shell in your home directory. New tabs and windows run independent Live
-Terminal Sessions; closing one terminates its session.
+Terminal Sessions; closing one terminates its session. The Terminal Surface
+requires working WebGL2; there is no software or second-renderer fallback, and a
+Surface initialization failure starts no shell.
 
 - Learn tabs, controls, shortcuts, copy and paste, file-path insertion, and
   privacy-safe local logs in [Everyday OMXTerm use](docs/usage.md).
