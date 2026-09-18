@@ -166,7 +166,7 @@ The lockfile restores the npm tarballs identified by that manifest. `npm ci`
 then runs `scripts/prepare-restty-runtime.mjs`, which accepts only the reviewed
 Restty runtime, declarations and embedded-core SHA-256 values and produces
 corrected runtime SHA-256
-`6a7b5297bf4f7a4509c9f64ad22a29c521b0c5f48882a4451872a335e0847ccd`,
+`f3434c66a9ef1ebe817f9debcb8ecf49f8477c4d481af2d6791c122967b2bee4`,
 embedded-core chunk SHA-256
 `3b3f4ef21e2fe5d5bfc7d5ad47b2557c1e12cca33619dbd5f15df9572e038f4d`,
 and event declarations SHA-256
@@ -174,8 +174,9 @@ and event declarations SHA-256
 The narrow correction preserves font acquisition/lease cleanup under cache
 pressure and late completion, makes font-load failure reject initialization, disables
 Restty's direct browser clipboard and link-opening callbacks, preserves native
-Option Unicode/composition versus configured physical-side Alt input, leaves
-all renderer-received Ctrl+C/Ctrl+V events as PTY input, gives DA2 its own
+Option Unicode/composition versus configured physical-side Alt input, defers
+bare DOM dead keys to composition even when extended keyboard reporting is
+active, leaves all renderer-received Ctrl+C/Ctrl+V events as PTY input, gives DA2 its own
 deterministic response, bounds unfinished OSC/CSI control bodies with
 whole-control recovery, and exposes raw paste
 origin, current bracketed mode, selection/Select All, parsed OSC and OSC
@@ -236,7 +237,7 @@ router, preload bridge, Electron Adapter, Restty Surface and owned native PTYs
 under the production CSP. It covers Unicode and bare-control-key
 input, large chunked DOM paste through a real owned PTY, explicit host
 copy/paste, Select All, context menu and OSC 52, parsed title/BEL ownership,
-title-query silence, disposal, resize, focus return, two isolated tabs, Default
+title-query silence, disposal, resize, renderer-event focus restoration, two isolated tabs, Default
 Shell and explicit-command startup, owned session
 termination, explicit close, renderer-process loss, a numbered 2 MiB producer
 through production IPC during a 350 ms renderer stall and resize, cumulative
@@ -249,6 +250,15 @@ producer readiness and holds only its synthetic session's output ACKs until the
 real high-water pause is observed, then releases them and asserts native resume,
 complete ordered content and zero pending bytes. This avoids depending on
 platform throughput during the fixed renderer-stall interval.
+
+Native Electron fixtures run serially and show painting windows without native
+activation. The focus-restoration fixture first moves DOM focus outside the
+selected Surface, then dispatches a renderer focus event and verifies return to
+that Surface. This does not verify native application/window activation. The
+keyboard regression similarly uses synthetic DOM dead-key/composition events
+through installed Restty and captures Surface Adapter writes under legacy,
+modifyOtherKeys and Kitty flags 1, 2, 4 and 1|2|4; it does not establish an
+untested native keyboard layout's event sequence.
 
 The complete native package commands run this host/runtime coverage on macOS,
 Linux and Windows ARM64. Native glyph rasterization and platform security UI
