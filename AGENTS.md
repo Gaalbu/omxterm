@@ -161,6 +161,59 @@ issue or PR is unfinished work.
   mapping, verification evidence, and documentation impact. A PR is not an
   execution diary.
 
+### Planning, comprehension audits, and delivery scale
+
+Scale the workflow to the work instead of imposing a large mission on every fix:
+
+- **Large, multi-ticket work:** record findings and a concise plan first, normally
+  under `.scratch/`. Use `to-spec` when useful; change specs or ADRs only for
+  actual product contracts or durable decisions. Use `to-tickets` to map the
+  complete breakdown and its blocking and conflict edges.
+- **Medium work:** use `to-tickets` to determine whether the work fits one ticket
+  or needs splitting. Do not manufacture extra tickets.
+- **Small work:** the conversational root may coordinate issue creation, audit,
+  and `orchestrate` directly, retaining independent review and any required
+  fresh-context separation.
+
+Run `prompt-comprehension-audits` before implementation. Comprehension agents
+interpret the tickets, a separate adjudicator evaluates their findings, and the
+conversational root makes the final decision. Do not implement during planning
+or auditing. Before delivery starts, every ticket in the selected plan must have
+an applicable PASS and `ready-for-agent`; readiness alone does not authorize or
+select work. Honor breakdown approval without asking again when the user has
+already approved the same scope.
+
+For large missions, the conversational root uses `tmux-worker` with
+`dispatch-tickets`; for medium work, use `tmux-worker` with `orchestrate`.
+Read the applicable skills before dispatch. Keep implementation in a fresh
+coordinator context when required by the audit contract, even when the same
+conversational root retains responsibility. Parallelize all work demonstrated
+safe by repository evidence and supported orchestration capacity; otherwise
+state the conflict or uncertainty and integrate sequentially. Existing ownership,
+review, branch/PR, integration, and cleanup requirements still apply.
+
+#### Model selection
+
+Use capability tiers rather than requiring a particular provider or model:
+
+| Role                               | Model tier | Reasoning level, where supported |
+| ---------------------------------- | ---------- | -------------------------------- |
+| Comprehension                      | Smaller    | Extra high                       |
+| Audit adjudication                 | Medium     | Medium                           |
+| Conversational root / orchestrator | Frontier   | Medium                           |
+| Writer                             | Medium     | Medium                           |
+| Reviewer                           | Frontier   | High                             |
+| Unspecified role                   | Frontier   | Medium                           |
+
+Ask the user which concrete models to use for these roles before delegation
+unless they have already supplied an applicable mapping. Do not infer model
+identifiers from tier names, silently substitute unavailable models, or claim a
+route was used without evidence. Follow the current harness rules for routing
+and overrides. If the named skills or orchestration capabilities are unavailable,
+surface that limitation and agree on an equivalent workflow preserving the gates;
+never silently skip them. These preferences grant no additional repository or
+release authority.
+
 ## Documentation
 
 - Update user-facing documentation in the same PR when a change affects
