@@ -150,6 +150,19 @@ describe("Restty Terminal Surface", () => {
     harness.setInitError(undefined);
   });
 
+  it("rejects a configured family without a font provider before starting a session", async () => {
+    const { adapter } = createAdapter();
+    await expect(
+      mountResttyTerminalSurface(document.createElement("main"), adapter, {
+        appearance: {
+          systemFont: { family: "Requested Native Family", available: true },
+        },
+      }),
+    ).rejects.toThrow("Failed to mount the Restty Terminal Surface");
+    expect(adapter.start).not.toHaveBeenCalled();
+    expect(harness.instances).toHaveLength(0);
+  });
+
   it("delivers parser replies while the Adapter replays owned startup output", async () => {
     const { adapter } = createAdapter();
     adapter.start.mockImplementation(async (handlers) => {
@@ -305,6 +318,7 @@ describe("Restty Terminal Surface", () => {
     const abort = new AbortController();
     const { adapter } = createAdapter();
     const onFatalError = vi.fn();
+    const releaseFontInputs = vi.fn();
     const { mountResttyTerminalSurface } =
       await import("../../src/terminal-surface/restty-terminal-surface");
     const pending = mountResttyTerminalSurface(
@@ -312,9 +326,9 @@ describe("Restty Terminal Surface", () => {
       adapter,
       {
         abortSignal: abort.signal,
-        loadFontData: async () => {
+        acquireFontInputs: async () => {
           abort.abort();
-          return { fallbacks: [] };
+          return { fonts: [], release: releaseFontInputs };
         },
         onFatalError,
       },
@@ -323,6 +337,7 @@ describe("Restty Terminal Surface", () => {
     await expect(pending).rejects.toThrow(/Restty Terminal Surface/u);
     expect(harness.instances).toHaveLength(0);
     expect(adapter.start).not.toHaveBeenCalled();
+    expect(releaseFontInputs).toHaveBeenCalledOnce();
     expect(onFatalError).toHaveBeenCalledWith(
       expect.stringContaining("cancelled"),
     );
