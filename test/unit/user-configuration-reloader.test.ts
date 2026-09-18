@@ -193,6 +193,7 @@ describe("User Configuration reloader", () => {
     const initial = configuration("initial", {
       fontFamily: "Initial Family",
       fontLineHeight: 1,
+      fontLigatures: true,
     });
     const load = vi
       .fn<() => Promise<UserConfigurationLoad>>()
@@ -201,11 +202,13 @@ describe("User Configuration reloader", () => {
           configuration("changed", {
             fontFamily: "Changed Family",
             fontLineHeight: 1.25,
+            fontLigatures: false,
             fontSize: 24,
           }),
         ),
       )
-      .mockResolvedValueOnce(valid(initial));
+      .mockResolvedValueOnce(valid(initial))
+      .mockResolvedValueOnce(valid({ ...initial, fontLigatures: false }));
     const apply = vi.fn();
     const reloader = createUserConfigurationReloader({
       initial: { configuration: initial, userFileErrors: [] },
@@ -219,6 +222,7 @@ describe("User Configuration reloader", () => {
 
     await reloader.reload();
     expect(reloader.current().configuration.fontSize).toBe(24);
+    expect(reloader.current().configuration.fontLigatures).toBe(false);
     expect(reloader.current().userFileErrors).toEqual([
       expect.stringContaining("font.family and font.lineHeight"),
     ]);
@@ -227,16 +231,23 @@ describe("User Configuration reloader", () => {
     await reloader.reload();
     expect(reloader.current().userFileErrors).toEqual([]);
     expect(apply).toHaveBeenCalledTimes(2);
+
+    await reloader.reload();
+    expect(reloader.current().configuration.fontLigatures).toBe(false);
+    expect(reloader.current().userFileErrors).toEqual([]);
+    expect(apply).toHaveBeenCalledTimes(3);
   });
 
   it("keeps the restart notice when Surfaces from multiple font generations remain live", async () => {
     const initial = configuration("initial", {
       fontFamily: "Initial Family",
       fontLineHeight: 1,
+      fontLigatures: true,
     });
     const changed = configuration("changed", {
       fontFamily: "Changed Family",
       fontLineHeight: 1.25,
+      fontLigatures: true,
     });
     const load = vi
       .fn<() => Promise<UserConfigurationLoad>>()
