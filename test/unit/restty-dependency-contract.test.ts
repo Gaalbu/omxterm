@@ -126,7 +126,7 @@ describe("Restty dependency contract", () => {
       path.join(packageRoot, "dist", "chunk-c0rcpsc5.js"),
     );
     expect(digest(runtime)).toBe(
-      "f3434c66a9ef1ebe817f9debcb8ecf49f8477c4d481af2d6791c122967b2bee4",
+      "e0d54804ec53ada4692691394852eb1f18e82a223283fe26e3ee2117ccd609ad",
     );
     const core = readFileSync(
       path.join(packageRoot, "dist", "chunk-6dxqza9q.js"),
@@ -164,6 +164,9 @@ describe("Restty dependency contract", () => {
     expect(source).toContain("getVisibleLinkAtClientPoint");
     expect(source).toContain("Snapshot every cell before");
     expect(source).toContain("resolveVisibleLink: services.resolveVisibleLink");
+    expect(source).toContain("setVisibleLinkHover");
+    expect(source).toContain("visibleHoverCells.has(idx)");
+    expect(source).toContain("const cells = []");
     expect(source).toContain("row: -viewportOffset");
     expect(source).toContain("totalRows - viewportOffset - 1");
     expect(source).toContain("onOsc: services.onOsc");

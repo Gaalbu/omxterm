@@ -20,6 +20,8 @@ interface ResttyLinkGestureOptions {
 }
 
 export interface ResttyLinkGestureEvidence {
+  readonly modifiedHoverChangedPixels: number;
+  readonly releasedHoverChangedPixels: number;
   readonly validLinkMouseReports: string;
   readonly localPathMouseReports: string;
   readonly ordinaryGestureMouseReports: string;
@@ -46,6 +48,128 @@ async function terminalCellPoint(
     })()`,
     true,
   )) as { x: number; y: number };
+}
+
+async function captureTerminalCanvas(
+  window: BrowserWindow,
+): Promise<{ bitmap: Buffer; width: number; height: number }> {
+  const bounds = (await window.webContents.executeJavaScript(
+    `(() => {
+      const canvas = [...document.querySelectorAll('.restty-terminal-surface canvas')].find((candidate) => candidate.getBoundingClientRect().width > 0);
+      if (!canvas) throw new Error('Visible Restty canvas is missing');
+      const rect = canvas.getBoundingClientRect();
+      return { x: Math.floor(rect.left), y: Math.floor(rect.top), width: Math.floor(rect.width), height: Math.floor(rect.height) };
+    })()`,
+    true,
+  )) as { x: number; y: number; width: number; height: number };
+  const image = await window.webContents.capturePage(bounds);
+  return { bitmap: Buffer.from(image.toBitmap()), ...image.getSize() };
+}
+
+function changedPixels(first: Buffer, second: Buffer): number {
+  if (first.length !== second.length)
+    throw new Error("Restty hover captures changed dimensions");
+  let changed = 0;
+  for (let offset = 0; offset < first.length; offset += 4) {
+    if (
+      first[offset] !== second[offset] ||
+      first[offset + 1] !== second[offset + 1] ||
+      first[offset + 2] !== second[offset + 2] ||
+      first[offset + 3] !== second[offset + 3]
+    )
+      changed += 1;
+  }
+  return changed;
+}
+
+async function captureModifiedHoverEvidence(
+  window: BrowserWindow,
+  point: { readonly x: number; readonly y: number },
+  size: TerminalSize,
+  destinationColumns: number,
+): Promise<{
+  readonly modifiedHoverChangedPixels: number;
+  readonly releasedHoverChangedPixels: number;
+}> {
+  const dispatchPointer = (modified: boolean) =>
+    window.webContents.executeJavaScript(
+      `(() => {
+        const canvas = [...document.querySelectorAll('.restty-terminal-surface canvas')].find((candidate) => candidate.getBoundingClientRect().width > 0);
+        canvas.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, pointerId: 91, pointerType: 'mouse', clientX: ${point.x}, clientY: ${point.y}, metaKey: ${modified && process.platform === "darwin"}, ctrlKey: ${modified && process.platform !== "darwin"} }));
+      })()`,
+      true,
+    );
+  await dispatchPointer(false);
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  const baseline = await captureTerminalCanvas(window);
+  await dispatchPointer(true);
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  const active = await captureTerminalCanvas(window);
+  await window.webContents.executeJavaScript(
+    `window.dispatchEvent(new KeyboardEvent('keyup', { key: '${process.platform === "darwin" ? "Meta" : "Control"}' }))`,
+    true,
+  );
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  const released = await captureTerminalCanvas(window);
+  // Every destination cell, including the wide continuation and soft-wrapped
+  // rows, must gain pixels; prefix and unrelated cells must not change.
+  const checkedCells =
+    Math.ceil((4 + destinationColumns) / size.cols) * size.cols;
+  for (let index = 0; index < checkedCells; index += 1) {
+    const row = Math.floor(index / size.cols);
+    const col = index % size.cols;
+    let count = 0;
+    for (
+      let y = Math.ceil((row * baseline.height) / size.rows);
+      y < Math.floor(((row + 1) * baseline.height) / size.rows);
+      y += 1
+    ) {
+      for (
+        let x = Math.ceil((col * baseline.width) / size.cols);
+        x < Math.floor(((col + 1) * baseline.width) / size.cols);
+        x += 1
+      ) {
+        const offset = (y * baseline.width + x) * 4;
+        if (
+          !baseline.bitmap
+            .subarray(offset, offset + 4)
+            .equals(active.bitmap.subarray(offset, offset + 4))
+        )
+          count += 1;
+      }
+    }
+    if ((index >= 4 && index < 4 + destinationColumns) !== count > 0)
+      throw new Error(`Hover cell geometry mismatch at ${row}:${col}`);
+  }
+  return {
+    modifiedHoverChangedPixels: changedPixels(baseline.bitmap, active.bitmap),
+    releasedHoverChangedPixels: changedPixels(baseline.bitmap, released.bitmap),
+  };
+}
+
+async function exerciseHoverRecognition(
+  options: ResttyLinkGestureOptions,
+  size: TerminalSize,
+): Promise<void> {
+  const nativePath =
+    process.platform === "win32" ? "C:\\tmp\\漢.png" : "/tmp/漢.png";
+  for (const [text, columns] of [
+    ["file:///tmp/image.png", 21],
+    [nativePath, nativePath.length + 1],
+    ["relative.png", 0],
+    ["HTTPS://example.test", 0],
+    ["mailto:person@example.test", 0],
+    ["\u001b]8;;https://hidden.test\u0007label\u001b]8;;\u0007", 0],
+  ] as const) {
+    options.deliverOutput(`\u001b[2J\u001b[H漢e\u0301 ${text}`);
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    await captureModifiedHoverEvidence(
+      options.window,
+      await terminalCellPoint(options.window, 0, 4, size),
+      size,
+      columns,
+    );
+  }
 }
 
 async function clickTerminalCell(
@@ -92,6 +216,31 @@ async function scrollTerminal(
   );
 }
 
+async function exerciseLocalPathActivation(
+  options: Pick<
+    ResttyLinkGestureOptions,
+    "window" | "deliverOutput" | "inputs" | "localImageRequests" | "waitFor"
+  >,
+  size: TerminalSize,
+): Promise<string> {
+  const localPath =
+    process.platform === "win32"
+      ? `C:\\tmp\\${"local".repeat(size.cols)}%23#fixture.data`
+      : `/tmp/${"local".repeat(size.cols)}%23#fixture.data`;
+  options.deliverOutput(`\u001b[2J\u001b[H${localPath}`);
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  const inputStart = options.inputs.join("").length;
+  await clickTerminalCell(options.window, 0, 3, size);
+  await options.waitFor(
+    () => options.localImageRequests.length === 1,
+    "soft-wrapped native-path activation",
+  );
+  const request = options.localImageRequests[0];
+  if (request?.source !== "native-path" || request.path !== localPath)
+    throw new Error("Native-path activation changed the literal destination");
+  return gestureInputSince(options.inputs, inputStart);
+}
+
 function gestureInputSince(inputs: readonly string[], start: number): string {
   // Concurrent native fixtures may change window focus. Ignore only focus
   // reports; duplicate mouse or other unexpected input still fails assertions.
@@ -104,20 +253,13 @@ function gestureInputSince(inputs: readonly string[], start: number): string {
 export async function exerciseResttyLinks(
   options: ResttyLinkGestureOptions,
 ): Promise<ResttyLinkGestureEvidence> {
-  const {
-    window,
-    deliverOutput,
-    inputs,
-    resizes,
-    externalLinks,
-    localImageRequests,
-    waitFor,
-  } = options;
+  const { window, deliverOutput, inputs, resizes, externalLinks, waitFor } =
+    options;
   const size = resizes.at(-1);
   if (!size) throw new Error("Restty link fixture has no grid size");
-  const visibleUrl = `https://example.test/${"a".repeat(size.cols)}`;
+  const visibleUrl = `https://example.test/漢${"a".repeat(size.cols)}`;
   deliverOutput(
-    `\u001b[2J\u001b[H\u001b[?1000h\u001b[?1006h漢e\u0301 \u001b]8;;https://hidden.test/different\u0007${visibleUrl}\u001b]8;;\u0007`,
+    `\u001b[2J\u001b[H\u001b[?25l\u001b[?1000h\u001b[?1006h漢e\u0301 ${visibleUrl}`,
   );
   deliverOutput("\u001b[?1049halternate\u001b[?1049l");
   const resizeCountBeforeReflow = resizes.length;
@@ -129,6 +271,22 @@ export async function exerciseResttyLinks(
   await new Promise((resolve) => setTimeout(resolve, 100));
   const reflowedSize = resizes.at(-1);
   if (!reflowedSize) throw new Error("Restty reflow returned no grid size");
+  const hoverEvidence = await captureModifiedHoverEvidence(
+    window,
+    await terminalCellPoint(window, 0, 4, reflowedSize),
+    reflowedSize,
+    visibleUrl.length + 1,
+  );
+  const { modifiedHoverChangedPixels, releasedHoverChangedPixels } =
+    hoverEvidence;
+  await exerciseHoverRecognition(options, reflowedSize);
+  const modifiers: Array<"meta" | "control"> =
+    process.platform === "darwin" ? ["meta"] : ["control"];
+  deliverOutput(
+    `\u001b[2J\u001b[H漢e\u0301 \u001b]8;;https://hidden.test/different\u0007${visibleUrl}\u001b]8;;\u0007`,
+  );
+  await new Promise((resolve) => setTimeout(resolve, 100));
+
   const inputBeforeLinks = inputs.join("");
   await clickTerminalCell(window, 0, 4, reflowedSize);
   await clickTerminalCell(window, 1, 2, reflowedSize);
@@ -141,24 +299,10 @@ export async function exerciseResttyLinks(
     inputBeforeLinks.length,
   );
 
-  const localPath =
-    process.platform === "win32"
-      ? `C:\\tmp\\${"local".repeat(reflowedSize.cols)}%23#fixture.data`
-      : `/tmp/${"local".repeat(reflowedSize.cols)}%23#fixture.data`;
-  deliverOutput(`\u001b[2J\u001b[H${localPath}`);
-  await new Promise((resolve) => setTimeout(resolve, 100));
-  const localPathInputStart = inputs.join("").length;
-  await clickTerminalCell(window, 0, 3, reflowedSize);
-  await waitFor(
-    () => localImageRequests.length === 1,
-    "soft-wrapped native-path activation",
+  const localPathMouseReports = await exerciseLocalPathActivation(
+    options,
+    reflowedSize,
   );
-  if (
-    localImageRequests[0]?.source !== "native-path" ||
-    localImageRequests[0].path !== localPath
-  )
-    throw new Error("Native-path activation changed the literal destination");
-  const localPathMouseReports = gestureInputSince(inputs, localPathInputStart);
 
   deliverOutput("\u001b[2J\u001b[Hhttps://one.test/a,\r\nhttps://two.test/b");
   await new Promise((resolve) => setTimeout(resolve, 100));
@@ -169,8 +313,6 @@ export async function exerciseResttyLinks(
   const ordinaryStart = inputs.join("").length;
   const first = await terminalCellPoint(window, 0, 3, reflowedSize);
   const second = await terminalCellPoint(window, 1, 3, reflowedSize);
-  const modifiers: Array<"meta" | "control"> =
-    process.platform === "darwin" ? ["meta"] : ["control"];
   for (const event of [
     {
       type: "mouseDown" as const,
@@ -352,6 +494,8 @@ export async function exerciseResttyLinks(
   );
 
   return {
+    modifiedHoverChangedPixels,
+    releasedHoverChangedPixels,
     validLinkMouseReports,
     localPathMouseReports,
     ordinaryGestureMouseReports,

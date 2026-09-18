@@ -1,8 +1,37 @@
+import type { TerminalSurfaceOptions } from "./terminal-surface";
+
 export interface ResttyVisibleLinkInteraction {
   getVisibleLinkAtClientPoint(
     clientX: number,
     clientY: number,
-  ): { readonly id: string; readonly url: string } | null;
+  ): {
+    readonly id: string;
+    readonly url: string;
+    readonly cells: readonly number[];
+  } | null;
+  setVisibleLinkHover(cells: readonly number[] | null): void;
+}
+
+export interface ResttyVisibleLinkController {
+  invalidate(): void;
+  dispose(): void;
+}
+
+export function requestVisibleLink(
+  destination: string,
+  options: TerminalSurfaceOptions,
+): void {
+  if (destination.startsWith("file:///"))
+    options.onLocalImageActivation?.({
+      source: "file-url",
+      url: destination,
+    });
+  else if (destination.startsWith("/") || /^[a-z]:[\\/]/iu.test(destination))
+    options.onLocalImageActivation?.({
+      source: "native-path",
+      path: destination,
+    });
+  else options.onExternalLink?.(destination);
 }
 
 interface VisibleLinkPointerGesture {
@@ -34,8 +63,12 @@ export function installResttyVisibleLinks(
   interaction: ResttyVisibleLinkInteraction,
   requestActivation: (url: string) => void,
   platform: string = navigator.platform,
-): () => void {
+  availability?: TerminalSurfaceOptions["linkHoverAvailability"],
+): ResttyVisibleLinkController {
   let pending: VisibleLinkPointerGesture | undefined;
+  let pointer:
+    { readonly clientX: number; readonly clientY: number } | undefined;
+  let modifierHeld = false;
   const ignoredPointerUps = new Set<number>();
   const replayed = new WeakSet<PointerEvent>();
   const hasModifier = (event: PointerEvent) =>
@@ -46,6 +79,24 @@ export function installResttyVisibleLinks(
   };
   const resolve = (event: PointerEvent) =>
     interaction.getVisibleLinkAtClientPoint(event.clientX, event.clientY);
+  const clearHover = () => interaction.setVisibleLinkHover(null);
+  const updateHover = () => {
+    if (
+      !pointer ||
+      !modifierHeld ||
+      canvas.closest("[hidden]") ||
+      document.hidden ||
+      availability?.isEnabled() === false
+    ) {
+      clearHover();
+      return;
+    }
+    const link = interaction.getVisibleLinkAtClientPoint(
+      pointer.clientX,
+      pointer.clientY,
+    );
+    interaction.setVisibleLinkHover(link?.cells ?? null);
+  };
   const replayDown = (gesture: VisibleLinkPointerGesture) => {
     const event = new PointerEvent("pointerdown", gesture.down);
     replayed.add(event);
@@ -64,6 +115,9 @@ export function installResttyVisibleLinks(
     consume(event);
   };
   const onPointerMove = (event: PointerEvent) => {
+    pointer = { clientX: event.clientX, clientY: event.clientY };
+    modifierHeld = hasModifier(event);
+    updateHover();
     if (!pending || pending.pointerId !== event.pointerId) return;
     const current = resolve(event);
     if (current?.id === pending.link.id) {
@@ -93,6 +147,7 @@ export function installResttyVisibleLinks(
       return;
     }
     consume(event);
+    clearHover();
     requestActivation(current.url);
   };
   const onPointerCancel = (event: PointerEvent) => {
@@ -105,21 +160,76 @@ export function installResttyVisibleLinks(
     if (pending) ignoredPointerUps.add(pending.pointerId);
     pending = undefined;
   };
+  const onKeyChange = (event: KeyboardEvent) => {
+    modifierHeld = platform.startsWith("Mac") ? event.metaKey : event.ctrlKey;
+    updateHover();
+  };
+  const clearPointer = () => {
+    pointer = undefined;
+    modifierHeld = false;
+    clearHover();
+  };
+  const onBlur = () => {
+    cancelPending();
+    clearPointer();
+  };
+  const focusRoot =
+    canvas.closest(".restty-terminal-surface") ??
+    canvas.parentElement ??
+    canvas;
+  const onFocusOut = (event: FocusEvent) => {
+    if (
+      !(event.relatedTarget instanceof Node) ||
+      !focusRoot.contains(event.relatedTarget)
+    )
+      clearPointer();
+  };
+  const removeAvailabilityListener = availability?.subscribe(clearPointer);
+  const visibilityRoot = canvas.closest(".terminal-surface");
+  const visibilityObserver = visibilityRoot
+    ? new MutationObserver(clearPointer)
+    : undefined;
+  visibilityObserver?.observe(visibilityRoot!, {
+    attributes: true,
+    attributeFilter: ["hidden"],
+  });
 
   canvas.addEventListener("pointerdown", onPointerDown, true);
   canvas.addEventListener("pointermove", onPointerMove, true);
   canvas.addEventListener("pointerup", onPointerUp, true);
   canvas.addEventListener("pointercancel", onPointerCancel, true);
   canvas.addEventListener("lostpointercapture", cancelPending, true);
-  window.addEventListener("blur", cancelPending);
-  return () => {
-    pending = undefined;
-    ignoredPointerUps.clear();
-    canvas.removeEventListener("pointerdown", onPointerDown, true);
-    canvas.removeEventListener("pointermove", onPointerMove, true);
-    canvas.removeEventListener("pointerup", onPointerUp, true);
-    canvas.removeEventListener("pointercancel", onPointerCancel, true);
-    canvas.removeEventListener("lostpointercapture", cancelPending, true);
-    window.removeEventListener("blur", cancelPending);
+  canvas.addEventListener("pointerleave", clearPointer);
+  focusRoot.addEventListener("focusout", onFocusOut as EventListener);
+  canvas.addEventListener("wheel", clearHover, { passive: true });
+  window.addEventListener("keydown", onKeyChange);
+  window.addEventListener("keyup", onKeyChange);
+  window.addEventListener("blur", onBlur);
+  window.addEventListener("resize", clearHover);
+  document.addEventListener("visibilitychange", clearPointer);
+  focusRoot.addEventListener("scroll", clearHover, true);
+  return {
+    invalidate: clearHover,
+    dispose() {
+      pending = undefined;
+      ignoredPointerUps.clear();
+      clearPointer();
+      canvas.removeEventListener("pointerdown", onPointerDown, true);
+      canvas.removeEventListener("pointermove", onPointerMove, true);
+      canvas.removeEventListener("pointerup", onPointerUp, true);
+      canvas.removeEventListener("pointercancel", onPointerCancel, true);
+      canvas.removeEventListener("lostpointercapture", cancelPending, true);
+      canvas.removeEventListener("pointerleave", clearPointer);
+      focusRoot.removeEventListener("focusout", onFocusOut as EventListener);
+      canvas.removeEventListener("wheel", clearHover);
+      window.removeEventListener("keydown", onKeyChange);
+      window.removeEventListener("keyup", onKeyChange);
+      window.removeEventListener("blur", onBlur);
+      window.removeEventListener("resize", clearHover);
+      document.removeEventListener("visibilitychange", clearPointer);
+      focusRoot.removeEventListener("scroll", clearHover, true);
+      visibilityObserver?.disconnect();
+      removeAvailabilityListener?.();
+    },
   };
 }
