@@ -17,6 +17,14 @@ interface Measurement {
   readonly rows: number;
   readonly cellWidth: number;
   readonly cellHeight: number;
+  readonly canvasCssWidth: number;
+  readonly canvasCssHeight: number;
+  readonly canvasBackingWidth: number;
+  readonly canvasBackingHeight: number;
+  readonly liveCellWidth: number;
+  readonly liveCellHeight: number;
+  readonly liveCols: number;
+  readonly liveRows: number;
   readonly imeFontSize: string;
   readonly starts: number;
   readonly closes: number;
@@ -139,6 +147,8 @@ async function measure(
   handlers?.onOutput("\u001b[16t");
   await new Promise((resolve) => setTimeout(resolve, 100));
   const ime = container.querySelector<HTMLElement>("textarea, input");
+  const canvas = container.querySelector("canvas");
+  const canvasBounds = canvas?.getBoundingClientRect();
   const result = {
     size: zoomToOne ? 1 : size,
     lineHeight,
@@ -148,19 +158,37 @@ async function measure(
     ...latest,
     cellWidth,
     cellHeight,
+    canvasCssWidth: canvasBounds?.width ?? 0,
+    canvasCssHeight: canvasBounds?.height ?? 0,
+    canvasBackingWidth: canvas?.width ?? 0,
+    canvasBackingHeight: canvas?.height ?? 0,
     imeFontSize: ime?.style.fontSize ?? "",
     starts,
     closes,
   };
+  // Exercise the live setter at both endpoints, not only creation-time size.
+  surface.zoom("in");
+  surface.zoom("out");
+  await waitForLayout();
+  handlers?.onOutput("\u001b[16t");
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  const live = {
+    liveCellWidth: cellWidth,
+    liveCellHeight: cellHeight,
+    liveCols: latest.cols,
+    liveRows: latest.rows,
+  };
   surface.dispose();
-  return result;
+  return { ...result, ...live };
 }
 
 async function run() {
   const measurements = [];
   for (const [size, lineHeight, padding, zoom, nativeTitleInset] of [
     [8, 1, 0, false, 0],
+    [10, 1, 0, false, 0],
     [16, 1, 0, false, 0],
+    [64, 1, 0, false, 0],
     [72, 1, 0, false, 0],
     [16, 2, 0, false, 0],
     [16, 1, 128, false, 0],
