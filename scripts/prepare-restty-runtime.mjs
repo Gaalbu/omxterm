@@ -69,8 +69,106 @@ const priorDeadKeyCompositionDigest =
   "6a7b5297bf4f7a4509c9f64ad22a29c521b0c5f48882a4451872a335e0847ccd";
 const priorModifiedHoverDigest =
   "f3434c66a9ef1ebe817f9debcb8ecf49f8477c4d481af2d6791c122967b2bee4";
-const correctedDigest =
+const priorHiddenRenderingDigest =
   "e0d54804ec53ada4692691394852eb1f18e82a223283fe26e3ee2117ccd609ad";
+const correctedDigest =
+  "dafd11ff8e1dba44c5d9f1429b895c00cde2cdbe3d6c971db9938c046b18c0be";
+
+const hiddenRenderingCorrections = [
+  {
+    original: `    canvas.width = nextWidth;
+    canvas.height = nextHeight;
+    deps.setCurrentDpr(dpr);`,
+    corrected: `    // Forced grid refits must not reset an unchanged drawing buffer while
+    // synchronized output deliberately retains its previous presentation.
+    if (canvas.width !== nextWidth)
+      canvas.width = nextWidth;
+    if (canvas.height !== nextHeight)
+      canvas.height = nextHeight;
+    deps.setCurrentDpr(dpr);`,
+  },
+  {
+    original: `  function updateGrid() {
+    if (!fontState.fonts.length)`,
+    corrected: `  function updateGrid() {
+    // Initial hidden mounts need a core grid; later hidden font changes must
+    // retain the last real grid until updateSize refits the visible canvas.
+    if (gridState.cols > 0 && getCanvas().getBoundingClientRect().width <= 0)
+      return;
+    if (!fontState.fonts.length)`,
+  },
+  {
+    original: `  function loop(state) {
+    if (!options.internalState.paused) {`,
+    corrected: `  function renderFrame(state, force = false) {
+    if (!options.isSurfaceVisible()) {
+      // Cached copies are disposable; the core retains valid hidden images.
+      // Drop pending decodes too, so deletion never depends on a visible draw.
+      options.clearKittyRenderCaches();
+      return;
+    }
+    if (!options.internalState.paused) {`,
+  },
+  {
+    original: `      if ((shared.needsRender || imageChanged) && renderBudget) {`,
+    corrected: `      if ((shared.needsRender || imageChanged || force) && (renderBudget || force)) {`,
+  },
+  {
+    original: `    options.internalState.rafId = requestAnimationFrame(() => loop(state));
+  }
+  return {
+    loop
+  };`,
+    corrected: `  }
+  function loop(state) {
+    renderFrame(state);
+    options.internalState.rafId = requestAnimationFrame(() => loop(state));
+  }
+  return {
+    loop,
+    refresh() {
+      const shared = options.readState();
+      if (shared.activeState && canRenderFrame(shared))
+        renderFrame(shared.activeState, true);
+    }
+  };`,
+  },
+  {
+    original: `  const { loop } = createRuntimeControllerRenderLoop({`,
+    corrected: `  const { loop, refresh } = createRuntimeControllerRenderLoop({
+    isSurfaceVisible: render.isSurfaceVisible,
+    clearKittyRenderCaches: render.clearKittyRenderCaches,`,
+  },
+  {
+    original: `    setScrollbackLines,
+    createPublicApi:`,
+    corrected: `    setScrollbackLines,
+    refresh,
+    createPublicApi:`,
+  },
+  {
+    original: `      initialPreferredRenderer: terminal.renderer ?? "auto",`,
+    corrected: `      isSurfaceVisible: terminal.isSurfaceVisible ?? (() => true),
+      clearKittyRenderCaches: kittyRenderRuntime.clearKittyRenderCaches,
+      initialPreferredRenderer: terminal.renderer ?? "auto",`,
+  },
+  {
+    original: `    render: {
+      setShaderStages,
+      getShaderStages
+    }`,
+    corrected: `    render: {
+      refresh: runtimeController.refresh,
+      setShaderStages,
+      getShaderStages
+    }`,
+  },
+  {
+    original: `    getBackend: () => internalState.backend,`,
+    corrected: `    refresh: renderCapabilities.refresh,
+    getBackend: () => internalState.backend,`,
+  },
+];
 const digest = (source) => createHash("sha256").update(source).digest("hex");
 
 const fontMemoryCorrections = [
@@ -1568,7 +1666,9 @@ export async function prepareResttyRuntime(options = {}) {
   let source = await readFile(selectedRuntimePath, "utf8");
   const sourceDigest = digest(source);
   if (sourceDigest !== correctedDigest) {
-    if (sourceDigest === priorModifiedHoverDigest) {
+    if (sourceDigest === priorHiddenRenderingDigest) {
+      // Only Surface visibility and synchronous reveal remain to be corrected.
+    } else if (sourceDigest === priorModifiedHoverDigest) {
       // Only modified-hover rendering remains to be corrected.
     } else if (sourceDigest === priorDeadKeyCompositionDigest) {
       source = applyCorrections(source, deadKeyCompositionCorrections);
@@ -1686,6 +1786,8 @@ export async function prepareResttyRuntime(options = {}) {
       source = applyCorrections(source, deadKeyCompositionCorrections);
     if (digest(source) === priorModifiedHoverDigest)
       source = applyCorrections(source, visibleHoverCorrections);
+    if (digest(source) === priorHiddenRenderingDigest)
+      source = applyCorrections(source, hiddenRenderingCorrections);
     if (digest(source) !== correctedDigest)
       throw new Error(
         `Restty correction did not produce reviewed bytes: ${digest(source)}`,
