@@ -121,6 +121,15 @@ promise reduced total RAM or GPU capacity. No Surface/core/session is replaced.
 See [native regression and measurement evidence](hidden-rendering-evidence.md)
 for the exact workload, baseline, CPU domains and limitations.
 
+### WebGL depth attachment
+
+The checksum-guarded runtime requests `depth:false` alongside the existing
+`antialias:false, alpha:false`. Restty's 2D path does not enable depth testing.
+The [depth-only native comparison](webgl-depth-evidence.md) confirms removal of
+the default depth attachment with preserved text, cursor, selection, images and
+hidden reveal behavior. It does not establish OS-level RAM savings. This changes
+no Surface ownership, context sharing, DPR, image limits or hidden-rendering rule.
+
 ### Font memory ownership
 
 Each renderer Terminal Window owns one active validated font-family generation.
@@ -255,7 +264,7 @@ The lockfile restores the npm tarballs identified by that manifest. `npm ci`
 then runs `scripts/prepare-restty-runtime.mjs`, which accepts only the reviewed
 Restty runtime, declarations and embedded-core SHA-256 values and produces
 corrected runtime SHA-256
-`dafd11ff8e1dba44c5d9f1429b895c00cde2cdbe3d6c971db9938c046b18c0be`,
+`950e2ae1d104fbaea82189c6d1353bb05d61dbcbfee90a36961ab1287978c78a`,
 embedded-core chunk SHA-256
 `3b3f4ef21e2fe5d5bfc7d5ad47b2557c1e12cca33619dbd5f15df9572e038f4d`,
 and event declarations SHA-256
