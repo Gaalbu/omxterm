@@ -131,6 +131,29 @@ commit `87aa8eb44ce355c6ae967eee17c2ddb9e1b6762a` in its ancestry. Its tree
 `docs/README.md`, `docs/release.md`, and `docs/releases/0.12.0.md` differ from
 the build source, all eligible non-packaged Markdown.
 
+## 0.12.1 prepared local files (not published)
+
+The canonical [0.12.1 preparation record](releases/0.12.1.md) binds all three
+ARM64 native builds to independently reviewed/refrozen source
+`34119842ddbb1dbdb496a80a9e316e8695d09c82`. Complete fresh native commands,
+actual packaged parsed-output proof, platform package/installation seams and
+verifier cleanup passed. All eight exact files are collected with native/collected
+size and SHA-256 equality and matching checksum basenames.
+
+The record includes draft notes, changed-boundary PASS/UNVERIFIED evidence against
+macOS/Linux 0.12.0 and Windows 0.11.0, #310's source-to-squash mapping and the
+later test-only configured-font capture correction. Earlier candidates were
+superseded and all three platforms rebuilt after refreeze. Original historical
+triggers remain unproven; neither correction is a product-font/color change.
+
+Independent final review passed Standards and Spec with no findings. The
+canonical record identifies the reviewed evidence range and eligible Markdown
+paths; issue #320 retains the eventual preparation source-to-squash mapping.
+Evidence updates touch only eligible non-packaged Markdown and do not rebuild
+or alter these files. Exact-artifact acceptance
+is **PENDING**; publication is **BLOCKED**. Issue #320 authorizes local preparation,
+not a tag or publication. Existing published links and assets remain unchanged.
+
 ## Version selection and consistency
 
 Select the release version under the [versioning policy](versioning.md) in an
@@ -158,7 +181,11 @@ non-activating native window before loading the fixture; macOS keeps it hidden.
 Hidden Windows/Linux windows can stall real image-frame progress even with
 background throttling disabled. All original checks, real animation frames,
 deadlines, production CSP and renderer isolation remain required; visibility is
-a test-harness requirement, not a Terminal Surface behavior change.
+a test-harness requirement, not a Terminal Surface behavior change. Appearance
+verification crosses real frames after configured/reference-font remount output
+before comparing exact pixel buffers; an elapsed delay alone is not readiness.
+A delayed-output-frame regression exercises that ordering without relaxing the
+bitmap comparison or claiming a universal compositor fence.
 
 Each native platform command also runs the Restty host fixture through an actual
 WebGL2 renderer and owned PTYs. It covers Default Shell and explicit-command
