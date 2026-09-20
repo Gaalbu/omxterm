@@ -176,6 +176,21 @@ They do not rebuild the packages or retarget the tag. The exact identity and
 native verification record remains unchanged; earlier published releases remain
 immutable.
 
+## 0.12.2 candidate artifacts and authority
+
+The [0.12.2 release notes and record](releases/0.12.2.md) bind all three native
+ARM64 builds to `18ab438a898d246a6eaa197fb4f9b826c3244a7e`. Fresh complete
+native commands passed on macOS, Linux and Windows, including actual packaged
+parsed output and exact Windows installer verification/cleanup. All eight final
+files have matching native/collected sizes and SHA-256 values.
+
+Issue #334 records **OWNER ACCEPTED** status for the eight exact final artifacts
+and separate explicit publication authorization. Independent final Standards and
+Spec review passed without findings. Publication uses these unchanged files,
+retains build ancestry in the tag, and requires tree equality with PR #335 squash
+integration. Post-publication downloads must match all eight recorded identities.
+Existing published releases remain unchanged.
+
 ## Version selection and consistency
 
 Select the release version under the [versioning policy](versioning.md) in an
