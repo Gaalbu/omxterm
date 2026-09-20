@@ -148,7 +148,7 @@ issue or PR is unfinished work.
 - Integrate completed issues one at a time. After each merge, synchronize and
   revalidate the remaining branches before accepting them. Remove merged
   branches and worktrees after confirming they contain no uncommitted work.
-- The orchestrator owns routine engineering decisions. It reads the issue,
+- The responsible agent owns routine engineering decisions. It reads the issue,
   spec, ADRs, and repository evidence, then chooses the smallest safe complete
   solution. It may repair minor omissions or non-material issue details when
   doing so does not expand product scope, introduce code smell, weaken security,
@@ -161,36 +161,29 @@ issue or PR is unfinished work.
   mapping, verification evidence, and documentation impact. A PR is not an
   execution diary.
 
-### Planning, comprehension audits, and delivery scale
+### Keep the workflow proportional
 
-Scale the workflow to the work instead of imposing a large mission on every fix:
+Prefer one responsible agent coordinating and/or implementing, plus one fresh
+independent reviewer before merge. This is a useful default, not a rigid limit
+on collaboration. Add agents or planning only when they help solve the problem.
 
-- **Large, multi-ticket work:** record findings and a concise plan first, normally
-  under `.scratch/`. Use `to-spec` when useful; change specs or ADRs only for
-  actual product contracts or durable decisions. Use `to-tickets` to map the
-  complete breakdown and its blocking and conflict edges.
-- **Medium work:** use `to-tickets` to determine whether the work fits one ticket
-  or needs splitting. Do not manufacture extra tickets.
-- **Small work:** the conversational root may coordinate issue creation, audit,
-  and `orchestrate` directly, retaining independent review and any required
-  fresh-context separation.
+For bugs, investigations, and other bounded work with the maintainer involved,
+work directly. When a serious problem needs attention, cut ceremony and context
+handoffs rather than making diagnosis wait for a process. No mandatory
+`orchestrate`, dispatcher/writer chain, `to-tickets`, comprehension audit, or
+`ready-for-agent` gate applies to this direct path; no waiver is needed.
+Reproduce, test, make the smallest supported correction, and review it.
 
-Run `prompt-comprehension-audits` before implementation. Comprehension agents
-interpret the tickets, a separate adjudicator evaluates their findings, and the
-conversational root makes the final decision. Do not implement during planning
-or auditing. Before delivery starts, every ticket in the selected plan must have
-an applicable PASS and `ready-for-agent`; readiness alone does not authorize or
-select work. Honor breakdown approval without asking again when the user has
-already approved the same scope.
+Use broader planning and orchestration when multiple workstreams genuinely need
+coordination. Comprehension audits remain applicable to unattended ticket
+execution or an explicit audit request; follow the audit skill when used.
+Readiness alone never authorizes implementation. Reuse applicable evidence
+instead of repeating unchanged work just to satisfy a checklist.
 
-For large missions, the conversational root uses `tmux-worker` with
-`dispatch-tickets`; for medium work, use `tmux-worker` with `orchestrate`.
-Read the applicable skills before dispatch. Keep implementation in a fresh
-coordinator context when required by the audit contract, even when the same
-conversational root retains responsibility. Parallelize all work demonstrated
-safe by repository evidence and supported orchestration capacity; otherwise
-state the conflict or uncertainty and integrate sequentially. Existing ownership,
-review, branch/PR, integration, and cleanup requirements still apply.
+Simplifying the process does not mean skipping relevant tests or independent
+review, discarding user work, or bypassing security and release authorization.
+Keep the existing branch/PR, integration, and cleanup discipline, without adding
+extra roles or gates for their own sake.
 
 #### Model selection
 
