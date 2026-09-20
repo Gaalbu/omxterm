@@ -131,16 +131,16 @@ commit `87aa8eb44ce355c6ae967eee17c2ddb9e1b6762a` in its ancestry. Its tree
 `docs/README.md`, `docs/release.md`, and `docs/releases/0.12.0.md` differ from
 the build source, all eligible non-packaged Markdown.
 
-## 0.12.1 prepared local files (not published)
+## Published 0.12.1 artifacts and authority
 
-The canonical [0.12.1 preparation record](releases/0.12.1.md) binds all three
+The canonical [0.12.1 release notes and record](releases/0.12.1.md) binds all three
 ARM64 native builds to independently reviewed/refrozen source
 `34119842ddbb1dbdb496a80a9e316e8695d09c82`. Complete fresh native commands,
 actual packaged parsed-output proof, platform package/installation seams and
 verifier cleanup passed. All eight exact files are collected with native/collected
 size and SHA-256 equality and matching checksum basenames.
 
-The record includes draft notes, changed-boundary PASS/UNVERIFIED evidence against
+The record includes release notes, changed-boundary PASS/UNVERIFIED evidence against
 macOS/Linux 0.12.0 and Windows 0.11.0, #310's source-to-squash mapping and the
 later test-only configured-font capture correction. Earlier candidates were
 superseded and all three platforms rebuilt after refreeze. Original historical
@@ -148,11 +148,33 @@ triggers remain unproven; neither correction is a product-font/color change.
 
 Independent final review passed Standards and Spec with no findings. The
 canonical record identifies the reviewed evidence range and eligible Markdown
-paths; issue #320 retains the eventual preparation source-to-squash mapping.
-Evidence updates touch only eligible non-packaged Markdown and do not rebuild
-or alter these files. Exact-artifact acceptance
-is **PENDING**; publication is **BLOCKED**. Issue #320 authorizes local preparation,
-not a tag or publication. Existing published links and assets remain unchanged.
+paths. Final preparation source `7c561ad5a10c26d0fe103233bc657b9627d84ec8`
+and integrated main `8fde337e43c3efbe1821e4c1f243edf02ade3954` have identical
+trees. Annotated tag `v0.12.1` points to that final preparation source,
+retaining the common build commit's ancestry. Only `README.md`, `docs/README.md`,
+`docs/release.md`, and `docs/releases/0.12.1.md` differ from build source.
+
+Exact-artifact acceptance is **OWNER ACCEPTED** for the eight recorded files.
+The owner separately **AUTHORIZED** publication through
+[issue #323](https://github.com/luizomf/omxterm/issues/323), following the completed
+preparation in #320. This authorization covers the annotated tag, GitHub
+Release, eight unchanged uploads, and post-publication download/checksum
+verification; it explicitly excludes rebuilds and repeated test suites.
+
+The [v0.12.1 GitHub Release](https://github.com/luizomf/omxterm/releases/tag/v0.12.1)
+was published on `2026-09-20T08:41:01Z` with exactly the eight accepted files.
+Post-publication authenticated downloads passed byte-size and SHA-256 comparison
+for every file, plus verification of all four checksum records against the
+accepted manifest. Repository visibility remains private; anonymous download
+access is not claimed.
+
+The #323 documentation candidate at
+`5d51084f3869bb6699a638fbed4f298667ab2084` passed independent Standards and
+Spec review with no findings before publication. That polish and subsequent
+publication bookkeeping change only the same four eligible Markdown files.
+They do not rebuild the packages or retarget the tag. The exact identity and
+native verification record remains unchanged; earlier published releases remain
+immutable.
 
 ## Version selection and consistency
 
