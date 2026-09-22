@@ -156,6 +156,54 @@ npm test
 npm run build
 ```
 
+The Restty host integration fixture has a separate cleanup supervisor. Test-worker
+loss, the fixture deadline, and native interruption remain failures; cleanup does
+not turn them into passes. The supervisor tracks descendants by process identity,
+including PTYs outside Electron's POSIX process group, and removes the disposable
+profile only after cleanup succeeds. Mechanical outcomes and synthetic fixture
+stdout/stderr are retained under `.scratch/native-fixtures/`; review local paths
+before sharing them. A cleanup failure retains the profile for inspection.
+
+On Windows, the supervisor uses local WMI process creation under the caller's
+identity to escape the test worker's inherited Job. A detached Node fork alone
+still dies with that Job. The documented
+[`CREATE_BREAKAWAY_FROM_JOB` flag](https://learn.microsoft.com/en-us/windows/win32/cimwin32prov/create-method-in-class-win32-process)
+also prevents inheriting the WMI provider's Job limits. Only the cleanup owner
+uses WMI: Electron stays in the test caller's desktop/session and environment,
+with file-backed synthetic diagnostics and a process-identity/exit handoff.
+WMI must be available; this does not change system policy or elevate the fixture.
+On POSIX, the supervisor uses a detached process
+and IPC-disconnect detection. This is bounded test-harness cleanup, not a kernel
+containment mechanism for arbitrary daemonizing programs or protection against
+killing the supervisor itself. Identity checks use Linux process-start ticks,
+Windows creation times and held process handles, and macOS `ps` start times;
+POSIX inspection and signaling are not atomic. Numeric creation identities also
+reject impossible ancestry: a process older than a reused parent PID is not a
+fixture descendant. Windows creation ticks are compared without floating-point
+rounding.
+
+The five-second disappearance deadline starts after termination requests, not at
+the start of cleanup. Each native inventory/termination command has a separate
+five-second timeout; POSIX cleanup makes three freeze/rescan passes and checks
+identity before each signal. Total cleanup therefore depends on the observed
+tree size and native command durations. An in-flight inventory can finish after
+the disappearance deadline; its own five-second command timeout still applies.
+Stream draining and Windows profile removal retries have separate bounds. There
+is no five-second total-cleanup promise.
+
+Interruption regressions deliberately terminate owned processes and are opt-in
+for an authorized disposable VM with a recovery snapshot:
+
+```sh
+OMXTERM_TEST_NATIVE_INTERRUPTION=1 npm test -- test/integration/native-fixture-interruption.test.ts
+```
+
+In PowerShell, set `$env:OMXTERM_TEST_NATIVE_INTERRUPTION = '1'` before the same
+`npm test` command. The tests verify parent SIGTERM/SIGKILL, native interruption,
+timeout, nonzero and successful exits, profile removal, retained outcomes, and
+an unrelated sentinel that must survive. Ordinary `npm test` discovers but skips
+these destructive-lifecycle scenarios.
+
 Before delivery on any Supported Platform, run `npm run check:portable`. On
 macOS, `npm run check` is the full native project command. On Linux ARM64, use
 `npm run check:linux`; it formats, lints, and typechecks, runs all tests
