@@ -187,22 +187,15 @@ extra roles or gates for their own sake.
 
 #### Model selection
 
-Use capability tiers rather than requiring a particular provider or model:
+Inherit the active conversation's model and reasoning for delegated work unless
+the maintainer explicitly requests another route. Reuse that choice throughout
+the task; do not interrupt delivery for per-role model mappings or repeated
+confirmation. Independent review still requires a fresh conversation, not a
+different model.
 
-| Role                               | Model tier | Reasoning level, where supported |
-| ---------------------------------- | ---------- | -------------------------------- |
-| Comprehension                      | Smaller    | Extra high                       |
-| Audit adjudication                 | Medium     | Medium                           |
-| Conversational root / orchestrator | Frontier   | Medium                           |
-| Writer                             | Medium     | Medium                           |
-| Reviewer                           | Frontier   | High                             |
-| Unspecified role                   | Frontier   | Medium                           |
-
-Ask the user which concrete models to use for these roles before delegation
-unless they have already supplied an applicable mapping. Do not infer model
-identifiers from tier names, silently substitute unavailable models, or claim a
-route was used without evidence. Follow the current harness rules for routing
-and overrides. If the named skills or orchestration capabilities are unavailable,
+Follow the current harness rules for routing and overrides. Do not silently
+substitute unavailable models or claim a route was used without evidence.
+If the named skills or orchestration capabilities are unavailable,
 surface that limitation and agree on an equivalent workflow preserving the gates;
 never silently skip them. These preferences grant no additional repository or
 release authority.
