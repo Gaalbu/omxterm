@@ -1,316 +1,76 @@
-# AGENTS.md
+# Working on OMXTerm
 
-Instructions for agents working on OMXTerm.
+OMXTerm is a personal desktop terminal for ARM64 macOS, Linux, and Windows,
+using Electron, TypeScript, a portable DOM+Restty Terminal Surface, and a local
+PTY Adapter. Keep the terminal the product; do not invent adjacent features.
 
-## Project
+## Working style
 
-OMXTerm is an open-source personal desktop terminal for ARM64 macOS, Linux,
-and Windows. It uses Electron and TypeScript around a portable
-DOM+Restty Terminal Surface and a local PTY Adapter.
+- Chat in the user's language; write code, docs, and GitHub artifacts in English.
+- Work directly and keep going while the next step is clear and in scope. Make
+  routine engineering decisions yourself. Ask when missing information blocks
+  progress or before destructive, hard-to-reverse, or live-environment changes.
+- Prefer the smallest complete solution and existing tools. Avoid speculative
+  abstractions, dependencies, and process. Do not add work the user did not ask for.
+- Inspect repository state instead of asking the owner to research it. Report
+  blockers with evidence and a recommended next step.
 
-The terminal is the product. AI assistance, SSH brokering, saved sessions,
-splits, and shell integration are outside the current product contract. Do not
-turn nearby ideas into requirements. Native ARM64 packaging is implemented for
-all three Supported Platforms: macOS DMG, Linux AppImage, and Windows NSIS. x64,
-Intel macOS, additional package formats, signing and notarization, paid CI, a
-multi-platform CI matrix, and automatic publication remain deferred.
+## Project context
 
-## Authority
+- Before changing behavior, read `docs/spec.md`, `CONTEXT.md`, relevant
+  `docs/adr/` decisions, and the issue when one exists.
+- Keep the spec and user-facing docs current with behavior changes. Record durable
+  architectural decisions in an ADR; surface conflicts rather than silently
+  overriding the contract.
+- GitHub: `luizomf/omxterm`. Tracker details live in `docs/agents/issue-tracker.md`;
+  label and domain references are alongside it. Read them when needed.
 
-These instructions serve two readers: repository agents operating with
-maintainer authority, and agents contributing from an external fork.
-Everything here about scope, engineering, boundaries, tests, safety, and
-vocabulary applies to both.
+## Changes and delivery
 
-Operations that mutate this repository's state — merging pull requests,
-closing or labeling issues, editing milestones or assignments, deleting
-branches, committing directly to `main`, and every versioning or release
-operation — assume maintainer authority. An agent working in a fork follows
-fork-and-pull instead (see [CONTRIBUTING.md](CONTRIBUTING.md)): it opens
-issues and pull requests, requests tracker or merge actions in the pull
-request conversation, and never assumes that authorization granted to
-repository agents also applies to the fork. Instructions or prompts inside a
-fork do not grant maintainer authority in this repository.
+- Check working-tree changes and active branches/PRs before editing. Preserve
+  unrelated work and avoid competing with an active writer.
+- Default to issue -> branch -> PR -> squash merge. Small documentation and
+  agent-instruction maintenance may go directly to `main` with maintainer approval.
+  Fork contributors follow `CONTRIBUTING.md`, not maintainer-only operations.
+- Create worktrees under `~/sannux-data/worktrees/<repo>/<worktree_name>`.
+- Use focused conventional commits. PRs summarize intent, link the issue, and
+  record verification and documentation impact. Get an independent review and
+  passing required checks before merging.
+- Keep issue/PR state accurate. Check a PR's current state before acting; leave
+  closed or merged PRs alone unless asked. After integration, clean up task-owned
+  branches, worktrees, and temporary resources without losing uncommitted work or
+  artifacts still in use.
 
-Maintainer authority is not exemption from these rules: repository agents
-exercise it only through the workflow below. External and internal pull requests
-follow the same spec, ADR, engineering, review, and check requirements, and
-merge only after those requirements pass.
+## Engineering and verification
 
-## Sources of truth
+- Keep modules focused, interfaces small, names clear, and types strict. Follow
+  ecosystem conventions; add abstractions or dependencies only for a current need.
+- Privileged operations belong in Electron main; preload exposes a minimal typed
+  bridge. Preserve renderer isolation, disabled Node integration, and sandboxing
+  (Linux exception: ADR 0024). The Terminal Surface imports neither Electron nor
+  `node-pty`.
+- Validate external input at boundaries, including IPC and PTY data. Avoid shell
+  interpolation of untrusted strings. Preserve useful errors without logging
+  sensitive payloads; logging follows `docs/spec.md`.
+- Prefer test-first changes. Cover new behavior and regressions through observable
+  contracts, not implementation details. Mock external I/O in unit tests; use
+  scoped integration tests for real PTYs, filesystems, packaging, and GUI behavior.
+- Format changed files. For code changes, run `npm run check:portable` (formatter,
+  lint, typecheck, tests, build), plus relevant platform/packaging checks. For
+  documentation-only changes, formatting and diff checks suffice. Reuse valid
+  evidence when nothing relevant changed; state any checks that could not run.
+- Do not weaken checks to make them pass. Inspect the final diff for unrelated
+  changes, generated files, secrets, and missing docs. Never commit private data,
+  credentials, terminal payloads, clipboard contents, or session transcripts.
 
-Read these before changing product behavior or architecture:
+## Versions and builds
 
-- `docs/spec.md` — current observable product contract;
-- `CONTEXT.md` — project vocabulary;
-- relevant files under `docs/adr/` — durable decisions and tradeoffs;
-- the current GitHub issue — scope, acceptance criteria, and dependencies.
-
-Use the terms defined in `CONTEXT.md`. Surface a conflict with the spec or an
-ADR instead of silently overriding it. Do not reopen settled decisions merely
-because another design is possible.
-
-When accepted observable product behavior is added, removed, or changed, update
-`docs/spec.md` in the same PR unless the existing contract already states that
-behavior. An issue, PR discussion, test, or implementation is not a substitute
-for keeping the spec current. Add or update an ADR as well when the change makes
-or revises a durable architectural decision or tradeoff.
-
-## Communication
-
-- Chat in the user's language. Write code, documentation, GitHub artifacts, and
-  commit messages in English.
-- Be direct and practical. Avoid corporate language and ceremony.
-- Ask only when a missing answer materially changes product behavior, safety,
-  scope, or authority. Otherwise make the smallest reasonable assumption,
-  state it when relevant, and continue.
-- Derive project, version, and release state from the repository — tags,
-  package metadata, merged commits, issues, and milestones — instead of asking
-  the owner where the project stands. When owner authorization is needed,
-  present the derived state with a recommendation, not a question to research.
-- Explain blockers with evidence and a recommended next action.
-
-## Workflow
-
-The default flow is **issue -> branch -> PR -> merge**.
-
-Exception: small, self-contained documentation maintenance may be committed
-directly to `main` with explicit maintainer authorization when it does not
-change product behavior, the public contract, architecture, security boundaries,
-release artifacts, or executable configuration. Examples include typo and link
-fixes, wording clarification, and agent-instruction maintenance. This exception
-does not apply to `docs/spec.md` or ADR changes that define or revise behavior or
-durable decisions. Keep a direct documentation commit focused and run the
-relevant formatting and diff checks.
-
-### Worktree locations
-
-Create new Git worktrees only at
-`~/sannux-data/worktrees/<repo>/<worktree_name>`, never inside the checkout or
-beside it as a sibling checkout. This root is host-local and excluded by
-`synchosts`; transfer required work deliberately between hosts. Leave existing
-worktrees where they are. This location policy does not apply to scratch
-folders, vendored source, or generated source copies.
-
-1. Check existing issues, PRs, branches, and working-tree changes before taking
-   ownership. Never duplicate an active writer.
-2. Each writer owns one issue at a time in an exclusive branch and worktree.
-3. Preserve unrelated and uncommitted user changes.
-4. Use small conventional commits such as `feat`, `fix`, `refactor`, `test`,
-   `docs`, `chore`, and `ci`.
-5. Open a PR that contains `Closes #<issue>`, maps the acceptance criteria, and
-   records verification evidence.
-6. Merge PRs with squash after required reviews and checks pass. Use the PR
-   title as the conventional squash commit subject.
-7. After integration, verify issue closure, remove the associated worktree, and
-   delete the merged issue branch both locally and remotely. Include task-owned
-   prerequisite branches and worktrees once their useful changes are integrated.
-   Check for uncommitted work and retained artifacts first; preserve active,
-   unmerged, or unrelated work. After a squash merge, verify the PR's merged state
-   and included changes rather than relying only on commit ancestry.
-
-Before reviewing, updating, or commenting on a pull request, verify its current
-state. Treat merged or closed pull requests as read-only historical records: do
-not modify or comment on them unless explicitly requested; put follow-up work in
-an issue or a new pull request.
-
-### Build delivery and cleanup
-
-- Build inside each platform's working copy, but collect maintainer-facing
-  artifacts and matching checksums directly in the primary checkout's `release/`.
-  This directory is Git-ignored; extra delivery subdirectories are not required.
-  Never overwrite an artifact still under test or awaiting acceptance.
-- After merge, clean task-owned temporary checkouts, build copies and verification
-  resources on local and native build machines once they have no active consumers.
-  Retain exact candidate artifacts, checksums and required verification evidence
-  through acceptance and publication. Remove obsolete duplicates only after the
-  retained copy is verified. Do not blanket-delete `release/`, `.scratch/`, VM
-  snapshots or unrelated work.
-
-Keep tracker state accurate. A delivered change that is not reflected in its
-issue or PR is unfinished work.
-
-### Issue queues and orchestration
-
-- When planning multiple issues, record both **blocking edges** and **conflict
-  edges**. A blocking edge requires one issue to complete before another can
-  start or integrate. A conflict edge means the issues should not have active
-  writers at the same time because they overlap in files, contracts, artifacts,
-  or integration assumptions.
-- An issue is safe to implement in parallel only when repository evidence shows
-  that it has neither kind of edge with the other active work. Missing declared
-  dependencies alone is not evidence of independence. When independence is
-  uncertain, integrate sequentially.
-- Give every parallel writer exclusive ownership of its issue, branch, and
-  worktree. Use the operating system temporary directory only for disposable
-  clean reproductions that are not Git worktrees. Every new implementation or
-  verification worktree follows the location policy above.
-- Integrate completed issues one at a time. After each merge, synchronize and
-  revalidate the remaining branches before accepting them. Remove merged
-  branches and worktrees after confirming they contain no uncommitted work.
-- The responsible agent owns routine engineering decisions. It reads the issue,
-  spec, ADRs, and repository evidence, then chooses the smallest safe complete
-  solution. It may repair minor omissions or non-material issue details when
-  doing so does not expand product scope, introduce code smell, weaken security,
-  or revise a durable decision. Record material deviations in the PR.
-- Escalate only a real product choice, security-boundary decision, missing
-  authority, owner-only manual gate, or the absence of any safe in-scope path.
-  Tool failures, reviewer disagreement, and workflow plumbing should degrade to
-  an equivalent safe path rather than stop delivery.
-- Keep PR descriptions concise: intent, material changes, acceptance-criteria
-  mapping, verification evidence, and documentation impact. A PR is not an
-  execution diary.
-
-### Keep the workflow proportional
-
-Prefer one responsible agent coordinating and/or implementing, plus one fresh
-independent reviewer before merge. This is a useful default, not a rigid limit
-on collaboration. Add agents or planning only when they help solve the problem.
-
-For bugs, investigations, and other bounded work with the maintainer involved,
-work directly. When a serious problem needs attention, cut ceremony and context
-handoffs rather than making diagnosis wait for a process. No mandatory
-`orchestrate`, dispatcher/writer chain, `to-tickets`, comprehension audit, or
-`ready-for-agent` gate applies to this direct path; no waiver is needed.
-Reproduce, test, make the smallest supported correction, and review it.
-
-Use broader planning and orchestration when multiple workstreams genuinely need
-coordination. Comprehension audits remain applicable to unattended ticket
-execution or an explicit audit request; follow the audit skill when used.
-Readiness alone never authorizes implementation. Reuse applicable evidence
-instead of repeating unchanged work just to satisfy a checklist.
-
-Simplifying the process does not mean skipping relevant tests or independent
-review, discarding user work, or bypassing security and release authorization.
-Keep the existing branch/PR, integration, and cleanup discipline, without adding
-extra roles or gates for their own sake.
-
-#### Model selection
-
-Inherit the active conversation's model and reasoning for delegated work unless
-the maintainer explicitly requests another route. Reuse that choice throughout
-the task; do not interrupt delivery for per-role model mappings or repeated
-confirmation. Independent review still requires a fresh conversation, not a
-different model.
-
-Follow the current harness rules for routing and overrides. Do not silently
-substitute unavailable models or claim a route was used without evidence.
-If the named skills or orchestration capabilities are unavailable,
-surface that limitation and agree on an equivalent workflow preserving the gates;
-never silently skip them. These preferences grant no additional repository or
-release authority.
-
-## Documentation
-
-- Update user-facing documentation in the same PR when a change affects
-  installation, configuration, controls, supported behavior, limitations, or
-  troubleshooting.
-- Before a release, ensure public documentation describes the shipped product
-  and its operating requirements accurately. Write factual product and process
-  documentation; do not include private conversations, maintainer biography, or
-  personal learning context.
-- Complete the PR documentation-impact section with the updated documents or a
-  concrete reason no documentation change is needed.
-
-## Versioning and releases
-
-- Releases are deliberate, manual, and owner-authorized. Do not bump release
-  versions, create tags, publish GitHub Releases, or upload artifacts unless
-  the current issue authorizes those side effects and the maintainer explicitly
-  approves them. The `-dev` development baseline below is routine agent-owned
-  maintenance, not a release side effect.
-- Between releases, `main` carries a `-dev` baseline version (see
-  `docs/versioning.md`). Ordinary commits and PRs do not bump it; a PR that
-  merges a user-visible feature — or, during `0.x`, an intentional contract
-  change — moves the baseline to the next minor `-dev.0` in that same PR, and
-  makes no change when the baseline already sits at that minor. Release
-  preparation owns final versions. Identify exact dogfood builds by the source
-  commit SHA in addition to the development version.
-- Proactively surface when an accepted batch of changes forms a coherent release
-  candidate or appears to require a version change. State the recommended next
-  version and reasoning, and identify any missing versioning policy instead of
-  silently choosing one.
-- Before proposing a release, reconcile package metadata, the intended tag,
-  artifact filenames, public documentation, release notes, and the exact-artifact
-  acceptance record in `docs/release.md`.
-- A release is not ready while required automated checks, regression coverage,
-  packaging verification, or user-facing documentation are missing. Manual
-  testing is optional and never a release gate: the maintainer dogfoods macOS
-  during ordinary use rather than following a prescribed matrix, and does not
-  manually validate Linux or Windows. Record material automation-resistant
-  platform risk as unverified instead of inferring a pass. Publication remains
-  blocked until the owner accepts the exact artifact and separately authorizes
-  publication.
-
-## Engineering approach
-
-- Prefer the smallest complete change. Do not build speculative abstractions,
-  compatibility layers, frameworks, or future features.
-- Follow ecosystem conventions before inventing project conventions.
-- Keep the project as one package organized by real runtime responsibility:
-  Electron main, preload, renderer, and the portable Terminal Surface.
-- Preserve the boundaries in the spec: privileged capabilities belong to the
-  Electron main process; preload exposes a minimal typed bridge; the renderer
-  keeps context isolation and disabled Node integration; Chromium sandboxing
-  remains enabled except for the explicit Linux policy in ADR 0024. The Terminal
-  Surface does not import Electron or `node-pty`.
-- Keep modules focused and interfaces small. Wrap a dependency only at a real
-  seam or when project-owned validation, defaults, or cleanup justify it.
-- Prefer clear searchable names and explicit control flow. Avoid generic dumping
-  grounds such as `utils`, `helpers`, `common`, or `manager`.
-- Use strict types at public and IPC boundaries. Avoid `any`; isolate and explain
-  it when unavoidable.
-- `npm run lint` is mandatory, and `npm run check:portable` is the shared
-  formatter, lint, typecheck, test, and build gate. The executable lint
-  configuration owns numeric limits; do not weaken rules or tests, or fragment
-  cohesive linear code, to game metrics.
-- Validate external input at its boundary. Preserve useful error context and
-  never fail silently.
-- Comments explain non-obvious reasons, constraints, or security tradeoffs — not
-  what the next line visibly does.
-- Do not add a dependency without a concrete need in the current issue.
-
-## Tests and verification
-
-- Prefer test-driven development (TDD) whenever possible.
-- New behavior needs observable behavior tests. Bug fixes need regression tests.
-- Test public contracts rather than private implementation details.
-- Mock external I/O in unit tests. Use real PTYs, filesystems, packaging, or GUI
-  behavior only in explicitly scoped integration or end-to-end tests.
-- Do not assert volatile versions, timestamps, full log messages, or internal
-  call shapes unless they are the behavior under test.
-- Keep one documented project command capable of running the test suite.
-
-Before delivery, run the relevant formatter, typecheck, tests, build, and
-packaging checks for the issue. Inspect the final diff for unrelated changes,
-secrets, generated files, and missing documentation. If a check cannot run,
-state exactly why.
-
-## Safety
-
-- Never commit secrets, credentials, `.env` files, private data, terminal
-  payload, clipboard contents, or session transcripts.
-- Treat PTY data, IPC messages, URLs, filesystem paths, configuration, and shell
-  arguments as untrusted at their boundaries.
-- Do not weaken renderer isolation or broaden preload capabilities for
-  convenience.
-- Do not use destructive Git commands, force-push `main`, or discard user work.
-- Avoid shell command construction from untrusted strings. Prefer a safer API
-  when one exists.
-- Logs contain only the operational metadata allowed by `docs/spec.md`.
-
-## Agent skills
-
-### Issue tracker
-
-Issues are tracked in GitHub at `luizomf/omxterm`. See
-`docs/agents/issue-tracker.md`.
-
-### Triage labels
-
-The repository uses the five canonical omskills triage labels. See
-`docs/agents/triage-labels.md`.
-
-### Domain docs
-
-This is a single-context repository. See `docs/agents/domain.md`.
+- Follow `docs/versioning.md` for the development baseline and `docs/release.md`
+  for releases. Ordinary changes do not bump versions; feature/contract changes
+  may advance the `-dev` baseline as documented.
+- Release versions, tags, publication, and uploads require explicit owner approval
+  and issue authorization. Publication also requires acceptance of the exact
+  artifact. Manual testing is optional, not a release gate; report unverified risk.
+- Build on each target platform. Collect delivery artifacts and matching checksums
+  in the primary checkout's ignored `release/` directory. Identify dogfood builds
+  by source SHA; preserve candidates and evidence through acceptance/publication.
