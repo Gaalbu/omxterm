@@ -61,12 +61,13 @@ import {
   configurationRejectionReason,
   loadUserConfiguration,
   userConfigurationFallbackNotice,
-  type UserConfigurationFallback,
+  startupUserFileNotices,
 } from "./user-configuration";
 import {
   createUserConfigurationReloader,
   terminalSurfaceFontBaseline,
 } from "./user-configuration-reloader";
+import { createWindowBackgroundEffectsOwner } from "./window-background-effects";
 import {
   applyActiveUserConfiguration,
   terminalRendererConfiguration,
@@ -150,6 +151,11 @@ app
         const terminalIpcRouter = fontIpcRouter(ipcMain, operationalEvents!);
         disposeTerminalSessions = () => terminalIpcRouter.dispose();
         let rebuildMenu = () => {};
+        const nativeTitleInset = terminalNativeTitleInset(process.platform);
+        const backgroundEffects = createWindowBackgroundEffectsOwner(
+          process.platform,
+          app.commandLine.getSwitchValue("ozone-platform"),
+        );
         const configurationReloader = createUserConfigurationReloader({
           initial: {
             configuration: userConfiguration,
@@ -170,16 +176,12 @@ app
               terminalApplication,
               {
                 rebuildMenu,
-                nativeTitleInset: terminalNativeTitleInset(process.platform),
+                nativeTitleInset,
                 platform: process.platform,
+                applyBackgroundEffects: backgroundEffects.apply,
               },
             ),
         });
-        const rendererConfiguration = () =>
-          terminalRendererConfiguration(
-            configurationReloader.current(),
-            terminalNativeTitleInset(process.platform),
-          );
         const resolveCurrentDefaultShell = createDefaultShellResolver(
           account.shell,
           () => configurationReloader.current().configuration.windowsShell,
@@ -238,8 +240,15 @@ app
             window.once("closed", () => titleController.dispose());
             const controller = terminalIpcRouter.registerController({
               windowId: lifecycle.windowId,
-              configuration: rendererConfiguration(),
+              configuration: terminalRendererConfiguration(
+                active,
+                nativeTitleInset,
+              ),
               initialFullScreen: window.isFullScreen(),
+              backgroundTransparency: backgroundEffects.register(
+                window,
+                active.configuration,
+              ),
               webContents: window.webContents,
               createSession(callbacks) {
                 return shutdown.createSession(nodePty.spawn, {
@@ -500,14 +509,4 @@ function prepareStartup() {
       getInstalledFontFamilyMetrics: installedFontFamilyMetrics,
     },
   };
-}
-
-function startupUserFileNotices(
-  fallback: UserConfigurationFallback | undefined,
-  warnings: readonly string[] | undefined,
-): readonly string[] {
-  return Object.freeze([
-    ...(fallback ? [userConfigurationFallbackNotice(fallback)] : []),
-    ...(warnings ?? []),
-  ]);
 }

@@ -2,6 +2,7 @@ import { app, BrowserWindow, ipcMain, Menu } from "electron";
 import { mkdirSync, writeSync } from "node:fs";
 import path from "node:path";
 import { terminalWindowOptions } from "../../src/main/terminal-window";
+import { createWindowBackgroundEffectsOwner } from "../../src/main/window-background-effects";
 import { registerWindowChrome } from "../../src/main/window-chrome";
 import { applicationMenuForWindow } from "../../src/main/native-application-menu";
 import {
@@ -42,6 +43,11 @@ const sessions: Array<ReturnType<typeof createLocalTerminalSession>> = [];
 const sessionExits: Promise<void>[] = [];
 const sizes: Array<Array<{ cols: number; rows: number }>> = [];
 const windows: BrowserWindow[] = [];
+const backgroundTransparencies = new WeakMap<BrowserWindow, () => number>();
+const backgroundEffects = createWindowBackgroundEffectsOwner(
+  process.platform,
+  "x11",
+);
 const menuOpenings: MenuOpening[] = [];
 let ended = 0;
 let confirmations = 0;
@@ -111,6 +117,11 @@ app
           },
         });
         windows.push(window);
+        const backgroundTransparency = backgroundEffects.register(
+          window,
+          configuration,
+        );
+        backgroundTransparencies.set(window, backgroundTransparency);
         guardTerminalWindowClose(window, application);
         const chrome = registerWindowChrome(window, ipcMain, {
           platform: process.platform,
@@ -137,6 +148,7 @@ app
         const controller = router.registerController({
           windowId: lifecycle.windowId,
           webContents: window.webContents,
+          backgroundTransparency,
           configuration: terminalRendererConfiguration(
             { configuration, userFileErrors: [] },
             process.platform === "darwin" ? 30 : 0,
@@ -246,6 +258,8 @@ app
           ...configuration,
           showTitleBar: false,
           showTabBar: false,
+          blur: true,
+          transparency: 0.5,
           terminalTheme: {
             ...configuration.terminalTheme,
             colors: {
@@ -264,10 +278,13 @@ app
             rebuildMenu() {},
             nativeTitleInset: process.platform === "darwin" ? 30 : 0,
             platform: process.platform,
+            applyBackgroundEffects: backgroundEffects.apply,
           },
         );
       },
       second: () => windows[1]!,
+      backgroundOpacity: (window) =>
+        1 - backgroundTransparencies.get(window)!(),
       exerciseMenu: () =>
         exerciseApplicationMenu(windows[0]!, application, menuOpenings),
     });
