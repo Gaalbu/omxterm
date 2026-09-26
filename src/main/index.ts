@@ -5,6 +5,7 @@ import {
   dialog,
   ipcMain,
   Menu,
+  screen,
   shell,
 } from "electron";
 import * as nodePty from "node-pty";
@@ -25,7 +26,7 @@ import {
   MalformedLaunchRequestError,
   startupLaunchRequest,
 } from "./launch-request";
-import { createLocalTerminalSession } from "./local-terminal-session";
+import { registerTerminalShutdown } from "./terminal-shutdown";
 import { applyLinuxDisplayBackendDefault } from "./linux-display-backend";
 import { applyChromiumSandboxPolicy } from "./chromium-sandbox-policy";
 import {
@@ -46,7 +47,11 @@ import {
   terminalNativeTitleInset,
   terminalWindowOptions,
 } from "./terminal-window";
-import { registerTerminalWindowHost } from "./terminal-window-host";
+import {
+  guardTerminalWindowClose,
+  registerTerminalWindowHost,
+} from "./terminal-window-host";
+import { registerWindowChrome } from "./window-chrome";
 import { createNativeTerminalWindowTitleController } from "./terminal-window-attention";
 import { installedFontFamilyMetrics } from "./installed-font-family";
 import { fontIpcRouter } from "./terminal-font-data";
@@ -99,17 +104,17 @@ const linuxWindowIconPath =
 
 let terminalApplication: TerminalApplication<BrowserWindow> | undefined;
 let operationalEvents: OperationalEventLog | undefined;
+let disposeTerminalSessions = () => {};
+const shutdown = registerTerminalShutdown(app, {
+  application: () => terminalApplication,
+  disposeSessions: () => disposeTerminalSessions(),
+});
 
 applyChromiumSandboxPolicy(app.commandLine);
 
 applyLinuxDisplayBackendDefault(app);
 
-app.on("before-quit", (event) => {
-  operationalEvents?.flush();
-  if (!terminalApplication || terminalApplication.isQuitting()) return;
-  event.preventDefault();
-  void terminalApplication.requestQuit();
-});
+app.on("before-quit", () => operationalEvents?.flush());
 
 app
   .whenReady()
@@ -141,13 +146,13 @@ app
         for (const warning of warnings ?? [])
           process.stderr.write(`${warning}\n`);
         operationalEvents!.write({ name: "application.started" });
-        const startupNotices = startupUserFileNotices(fallback, warnings);
         const terminalIpcRouter = fontIpcRouter(ipcMain, operationalEvents!);
+        disposeTerminalSessions = () => terminalIpcRouter.dispose();
         let rebuildMenu = () => {};
         const configurationReloader = createUserConfigurationReloader({
           initial: {
             configuration: userConfiguration,
-            userFileErrors: startupNotices,
+            userFileErrors: startupUserFileNotices(fallback, warnings),
           },
           load: () => loadUserConfiguration(configurationLoadOptions),
           ...terminalSurfaceFontBaseline(userConfiguration),
@@ -201,24 +206,17 @@ app
               (action) => keybindActionInvocations[action](),
               process.platform,
             );
-            // A lost renderer has no session worth guarding.
-            let rendererLost = false;
-            window.webContents.once("render-process-gone", () => {
-              rendererLost = true;
-            });
-            window.webContents.once("destroyed", () => {
-              rendererLost = true;
-            });
-            window.on("close", (event) => {
-              if (rendererLost || terminalApplication!.mayCloseWindow(window))
-                return;
-              event.preventDefault();
-              void terminalApplication!.requestWindowClose(window);
+            guardTerminalWindowClose(window, terminalApplication!);
+            const chrome = registerWindowChrome(window, ipcMain, {
+              platform: process.platform,
+              showTitleBar: active.configuration.showTitleBar,
+              cursor: () => screen.getCursorScreenPoint(),
             });
             const titleController = createNativeTerminalWindowTitleController(
               window,
               {
                 fallbackSessionTitle: shellName,
+                onWindowTitle: chrome.setTitle,
                 sendSessionTitle: (sessionId, title) => {
                   if (!window.webContents.isDestroyed())
                     window.webContents.send(terminalIpc.tabTitle, {
@@ -242,7 +240,7 @@ app
               initialFullScreen: window.isFullScreen(),
               webContents: window.webContents,
               createSession(callbacks) {
-                return createLocalTerminalSession(nodePty.spawn, {
+                return shutdown.createSession(nodePty.spawn, {
                   shell: resolveCurrentDefaultShell(),
                   launchRequest: consumeLaunch(),
                   platform: process.platform,
@@ -390,6 +388,8 @@ app
             window.webContents.send(terminalIpc.fontZoom, command),
           sendClipboardAction: (window, action) =>
             window.webContents.send(terminalIpc.clipboardAction, action),
+          sendTitleBarToggle: (window) =>
+            window.webContents.send(terminalIpc.titleBarToggle),
           sendTabBarToggle: (window) =>
             window.webContents.send(terminalIpc.tabBarToggle),
           sendSnippetsToggle: (window) =>
@@ -444,6 +444,7 @@ app
             terminalApplication!.clipboardSelectedWindow("select-all"),
           toggleSelectedSnippets: terminalApplication.toggleSelectedSnippets,
           toggleSelectedTabBar: terminalApplication.toggleSelectedTabBar,
+          toggleSelectedTitleBar: terminalApplication.toggleSelectedTitleBar,
           reloadUserConfiguration: () => void configurationReloader.reload(),
           openLocalImage: terminalApplication.openLocalImageInSelectedWindow,
         };
