@@ -1,0 +1,89 @@
+--- a/pty.cc
++++ b/pty.cc
+@@ -21,0 +22 @@
++#include "node-pty-exec-status.h"
+@@ -110,0 +112 @@
++  bool exec_failed = false;
+@@ -113 +115 @@
+-void SetupExitCallback(Napi::Env env, Napi::Function cb, pid_t pid) {
++void SetupExitCallback(Napi::Env env, Napi::Function cb, pid_t pid, int exec_status) {
+@@ -126 +128 @@
+-  *th = std::thread([tsfn = std::move(tsfn), pid] {
++  *th = std::thread([tsfn = std::move(tsfn), pid, exec_status] {
+@@ -129 +131,2 @@
+-               Napi::Number::New(env, exit_event->signal_code)});
++               Napi::Number::New(env, exit_event->signal_code),
++               Napi::Boolean::New(env, exit_event->exec_failed)});
+@@ -188,0 +192 @@
++    exit_event->exec_failed = pty_exec_failure(exec_status);
+@@ -246 +250 @@
+-                int* err);
++                int* err, int exec_status);
+@@ -353,0 +358,4 @@
++  PtyExecStatus exec_status;
++  if (!exec_status.open()) {
++    throw Napi::Error::New(napiEnv, "Could not create PTY exec-status channel.");
++  }
+@@ -358 +366 @@
+-  int argl = argc + 4;
++  int argl = argc + 5;
+@@ -362,2 +370,3 @@
+-  argv[1] = strdup(cwd_.c_str());
+-  argv[2] = strdup(file.c_str());
++  argv[1] = strdup(std::to_string(exec_status.writer).c_str());
++  argv[2] = strdup(cwd_.c_str());
++  argv[3] = strdup(file.c_str());
+@@ -367 +376 @@
+-    argv[i + 3] = strdup(arg.c_str());
++    argv[i + 4] = strdup(arg.c_str());
+@@ -371 +380 @@
+-  pty_posix_spawn(argv, env, term, &winp, &master, &pid, &err);
++  pty_posix_spawn(argv, env, term, &winp, &master, &pid, &err, exec_status.writer);
+@@ -420,2 +429 @@
+-          perror("chdir(2) failed.");
+-          _exit(1);
++          pty_exec_failed(exec_status.writer);
+@@ -427,2 +435 @@
+-          perror("setgid(2) failed.");
+-          _exit(1);
++          pty_exec_failed(exec_status.writer);
+@@ -431,2 +438 @@
+-          perror("setuid(2) failed.");
+-          _exit(1);
++          pty_exec_failed(exec_status.writer);
+@@ -441,2 +447 @@
+-        perror("execvp(3) failed.");
+-        _exit(1);
++        pty_exec_failed(exec_status.writer);
+@@ -458 +463,2 @@
+-  SetupExitCallback(napiEnv, cb, pid);
++  exec_status.closeWriter();
++  SetupExitCallback(napiEnv, cb, pid, exec_status.releaseReader());
+@@ -693 +699 @@
+-                int* err) {
++                int* err, int exec_status) {
+@@ -745,0 +752,2 @@
++  // Preserve the private status writer through the helper spawn only.
++  posix_spawn_file_actions_addinherit_np(&acts, exec_status);
+--- a/spawn-helper.cc
++++ b/spawn-helper.cc
+@@ -1,0 +2,2 @@
++#include <stdlib.h>
++#include "node-pty-exec-status.h"
+@@ -6,0 +9,3 @@
++  if (argc < 4) return 1;
++  const int exec_status = atoi(argv[1]);
++  if (fcntl(exec_status, F_SETFD, FD_CLOEXEC) == -1) pty_exec_failed(exec_status);
+@@ -13,3 +18,3 @@
+-  char *cwd = argv[1];
+-  char *file = argv[2];
+-  argv = &argv[2];
++  char *cwd = argv[2];
++  char *file = argv[3];
++  argv = &argv[3];
+@@ -18 +23 @@
+-    _exit(1);
++    pty_exec_failed(exec_status);
+@@ -22 +27 @@
+-  return 1;
++  pty_exec_failed(exec_status);
