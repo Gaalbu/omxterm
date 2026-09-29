@@ -4,6 +4,10 @@ import { lstat, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { collectFixtureRegistrations } from "./native-fixture-ownership";
 import {
+  completedFixture,
+  type FixtureCompletion,
+} from "./native-fixture-completion";
+import {
   nativeFixtureEnvironment,
   fixtureProcesses,
   collectFixtureDescendants,
@@ -19,6 +23,7 @@ interface Request {
   readonly evidencePath: string;
   readonly parent?: FixtureProcess;
   readonly externalChild?: boolean;
+  readonly completionFile?: string;
 }
 
 interface ExternalExit {
@@ -95,10 +100,15 @@ async function removeFixtureProfile(
   });
 }
 
+function completesOnExit(request: Request, exit: ExternalExit): boolean {
+  return exit.exitCode !== 0 || exit.signal !== null || !request.completionFile;
+}
+
 async function supervise(request: Request): Promise<void> {
   const rootIdentity = await lstat(request.root);
   const owned = new Map<number, FixtureProcess>();
   let reason = "exit";
+  let completion: FixtureCompletion | undefined;
   let stdout = "";
   let stderr = "";
   let exitCode: number | null = null;
@@ -158,7 +168,14 @@ async function supervise(request: Request): Promise<void> {
     child.once("exit", (code, receivedSignal) => {
       exitCode = code;
       signal = receivedSignal;
-      resolveEnd();
+      if (
+        completesOnExit(request, {
+          exitCode: code,
+          signal: receivedSignal,
+          reason: "exit",
+        })
+      )
+        resolveEnd();
     });
   }
   let leaderPid = child?.pid;
@@ -201,11 +218,23 @@ async function supervise(request: Request): Promise<void> {
         exitCode = exit.exitCode;
         signal = exit.signal;
         if (reason === "exit") reason = exit.reason;
-        resolveEnd();
+        if (completesOnExit(request, exit)) resolveEnd();
       }
     }
     collectFixtureDescendants(rows, owned);
     collectRegistered(rows);
+    if (exitCode === 0) {
+      completion = completedFixture(
+        request.root,
+        request.completionFile,
+        owned,
+        rows,
+      );
+      if (completion) {
+        exitCode = completion.exitCode;
+        resolveEnd();
+      }
+    }
   };
   let inspectionError: string | undefined;
   const inspect = () => {
@@ -252,6 +281,10 @@ async function supervise(request: Request): Promise<void> {
         exitCode = exit.exitCode;
         signal = exit.signal;
       }
+    }
+    if (completion) {
+      exitCode = completion.exitCode;
+      stdout += completion.stdout;
     }
     if (pendingRegistrations > 0)
       throw new Error(

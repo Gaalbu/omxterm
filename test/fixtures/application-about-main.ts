@@ -1,10 +1,53 @@
 import { app, dialog, Menu, nativeImage } from "electron";
-import { writeFileSync } from "node:fs";
+import childProcess from "node:child_process";
+import { syncBuiltinESMExports } from "node:module";
+import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
+import { spawnFixtureProcess } from "./native-fixture-ownership";
+import { fixtureProcesses } from "./native-fixture-processes";
 
-const [entry, resultPath, resourcesPath] = process.argv.slice(-3);
+// Observe the real production detached spawn without changing its arguments,
+// streams or exit ordering. Register before production can abandon its leader.
+childProcess.spawn = new Proxy(childProcess.spawn, {
+  apply(target, receiver, argumentsList) {
+    return spawnFixtureProcess(() => {
+      const child = Reflect.apply(
+        target,
+        receiver,
+        argumentsList,
+      ) as childProcess.ChildProcess;
+      if (!child.pid) throw new Error("About relaunch produced no process");
+      return child as childProcess.ChildProcess & { readonly pid: number };
+    });
+  },
+});
+syncBuiltinESMExports();
+
+const [entry, resultPath, resourcesPath] = process.argv
+  .filter(
+    (argument) =>
+      !argument.startsWith("--ozone-platform=") &&
+      !argument.startsWith("--fixture-"),
+  )
+  .slice(-3);
 if (!entry || !resultPath || !resourcesPath)
   throw new Error("About fixture arguments missing");
+const initialPath = `${resultPath}.initial`;
+if (!existsSync(initialPath))
+  writeFileSync(initialPath, String(process.pid), { flag: "wx" });
+const relaunched = Number(readFileSync(initialPath, "utf8")) !== process.pid;
+const producer = fixtureProcesses().find((row) => row.pid === process.pid);
+if (!producer) throw new Error("About result producer identity is missing");
+let observation: string | undefined;
+process.once("exit", (exitCode) => {
+  if (!observation) return;
+  const completionPath = `${resultPath}.completion`;
+  writeFileSync(
+    `${completionPath}.tmp`,
+    JSON.stringify({ producer, exitCode, stdout: observation }),
+  );
+  renameSync(`${completionPath}.tmp`, completionPath);
+});
 if (resourcesPath !== "development") {
   // Exercise packaged resource resolution at the Electron boundary. This does
   // not replace the separate exact-package About verification.
@@ -31,21 +74,29 @@ Menu.setApplicationMenu = (menu) => {
     setMenu(menu);
     return;
   }
+  if (process.argv.includes("--fixture-missing-result")) {
+    app.quit();
+    return;
+  }
   const about = items.find((item) => item.role === "about");
   const icon = options?.iconPath
     ? nativeImage.createFromPath(options.iconPath)
     : undefined;
-  writeFileSync(
-    resultPath,
-    JSON.stringify({
-      options: options ?? null,
-      configuredWhileReady,
-      version: app.getVersion(),
-      nativeAboutRole: about?.role,
-      iconSize: icon?.getSize(),
-      iconEmpty: icon?.isEmpty(),
-    }),
-  );
+  observation = JSON.stringify({
+    relaunched,
+    backend: app.commandLine.getSwitchValue("ozone-platform"),
+    options: options ?? null,
+    configuredWhileReady,
+    version: app.getVersion(),
+    nativeAboutRole: about?.role,
+    iconSize: icon?.getSize(),
+    iconEmpty: icon?.isEmpty(),
+  });
+  writeFileSync(`${resultPath}.tmp`, observation);
+  renameSync(`${resultPath}.tmp`, resultPath);
+  if (process.argv.includes("--fixture-published-failure")) app.exit(3);
+  if (process.argv.includes("--fixture-published-hang"))
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0);
   // Mark production startup as quitting before this menu callback returns.
   // An immediate exit request alone can still let it create the first window.
   app.quit();
