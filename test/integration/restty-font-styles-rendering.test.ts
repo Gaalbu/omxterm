@@ -48,7 +48,7 @@ async function observe(
       "utf8",
     );
     expect(createHash("sha256").update(runtime).digest("hex")).toBe(
-      "3fb1a882bc75ee45e1f53370976d215bca7e1f7ba172696ee1985caa5e93d27b",
+      "742a6d14c6906d6d4304199889eff69617f6a5ea25aaee788c2a7d6ee4e31dfa",
     );
     let probed = runtime;
     if (priorSynthesis) {
@@ -57,7 +57,7 @@ async function observe(
         probed = probed.replace(corrected, original);
       }
       expect(createHash("sha256").update(probed).digest("hex")).toBe(
-        "72924c0f4ef1762ffa9a44b6e89ccd0fad0c85649e97ebab5cd45d98208ed0b5",
+        "230305ef37c081a6dab171a7c06d3480e70d813091241990589b876913a92761",
       );
     }
     const replace = (needle: string, replacement: string) => {

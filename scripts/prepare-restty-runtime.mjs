@@ -8,6 +8,10 @@ import { syntheticBoldCorrections } from "./restty-synthetic-bold-corrections.mj
 import { pointerCorrections } from "./restty-pointer-corrections.mjs";
 import { backgroundCorrections } from "./restty-background-corrections.mjs";
 import {
+  softWrapSpaceCorrections,
+  visiblePathBoundaryCorrections,
+} from "./restty-soft-wrap-corrections.mjs";
+import {
   nativeDeadKeySpaceCorrections,
   spaceInputCorrections,
 } from "./restty-space-input-corrections.mjs";
@@ -103,8 +107,12 @@ const priorScrollbarDigest =
   "19ce5c33221a7c77bea9eb83c49d9afb3ccda2a70636598492654db18226d0f2";
 const priorCursorDigest =
   "940a722fb921e49fa308034002220b4105e5a64a0489e64c6ce2923bcad88f08";
-const correctedDigest =
+const priorSoftWrapSpaceDigest =
   "3fb1a882bc75ee45e1f53370976d215bca7e1f7ba172696ee1985caa5e93d27b";
+const priorVisiblePathBoundaryDigest =
+  "62456e988c176b7a6f2a1ee90498b6f2b6b767d063e63b4826830d4663b771af";
+const correctedDigest =
+  "742a6d14c6906d6d4304199889eff69617f6a5ea25aaee788c2a7d6ee4e31dfa";
 
 const cursorCorrections = [
   {
@@ -1913,6 +1921,10 @@ export async function prepareResttyRuntime(options = {}) {
         source = applyCorrections(source, scrollbarCorrections);
       case priorCursorDigest:
         source = applyCorrections(source, cursorCorrections);
+      case priorSoftWrapSpaceDigest:
+        source = applyCorrections(source, softWrapSpaceCorrections);
+      case priorVisiblePathBoundaryDigest:
+        source = applyCorrections(source, visiblePathBoundaryCorrections);
         break;
       default:
         throw new Error(

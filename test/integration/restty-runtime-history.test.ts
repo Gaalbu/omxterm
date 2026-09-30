@@ -11,7 +11,7 @@ import history from "../fixtures/restty-runtime-history.json";
 const dist = path.dirname(createRequire(import.meta.url).resolve("restty"));
 const corrected = readFileSync(path.join(dist, "chunk-c0rcpsc5.js"), "utf8");
 const correctedDigest =
-  "3fb1a882bc75ee45e1f53370976d215bca7e1f7ba172696ee1985caa5e93d27b";
+  "742a6d14c6906d6d4304199889eff69617f6a5ea25aaee788c2a7d6ee4e31dfa";
 const digest = (source: string) =>
   createHash("sha256").update(source).digest("hex");
 

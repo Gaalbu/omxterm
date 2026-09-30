@@ -63,6 +63,10 @@ interface HostResult {
   readonly releasedHoverChangedPixels: number;
   readonly validLinkMouseReports: string;
   readonly localPathMouseReports: string;
+  readonly localImageEvidence: ReadonlyArray<{
+    readonly control: string;
+    readonly activations: number;
+  }>;
   readonly ordinaryGestureMouseReports: string;
   readonly wheelMouseReports: string;
   readonly alternateScreenMouseReports: string;
@@ -250,6 +254,37 @@ describe.skipIf(
         "https://one.test/a",
         "https://two.test/b",
         "https://scroll.test/complete",
+      ]);
+      expect(
+        result.localImageEvidence.slice(0, 5).map(({ control }) => control),
+      ).toEqual([
+        "unquoted PNG",
+        "unquoted JPEG",
+        "soft-wrapped PNG",
+        "space at soft-wrap boundary",
+        "quoted Unicode prefix and location",
+      ]);
+      expect(
+        result.localImageEvidence
+          .slice(0, 5)
+          .every(({ activations }) => activations >= 2),
+      ).toBe(true);
+      expect(
+        result.localImageEvidence.slice(8).map(({ control }) => control),
+      ).toEqual(
+        process.env["OMXTERM_TEST_IMAGE_TMUX"] === "1"
+          ? [
+              "tmux initial",
+              "tmux redraw",
+              "tmux initial boundary",
+              "tmux redraw boundary",
+            ]
+          : [],
+      );
+      expect(result.localImageEvidence.slice(5, 8)).toEqual([
+        { control: "space clipped above viewport", activations: 0 },
+        { control: "space clipped below viewport", activations: 0 },
+        { control: "trailing-space exclusion", activations: 1 },
       ]);
       expect(result.ordinaryGestureMouseReports).toMatch(/\u001b\[</u);
       expect(result.wheelMouseReports).toMatch(/\u001b\[<65;/u);

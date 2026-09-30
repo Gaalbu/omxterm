@@ -103,7 +103,11 @@ pointer without activation or host I/O. Modified primary click activates
 literal lowercase visible HTTP(S) text through the existing host route,
 including during TUI mouse reporting without a duplicate PTY report. Restty
 joins rows only when
-Ghostty selection text proves a visible soft wrap; hard breaks remain separate,
+Ghostty selection text proves a visible soft wrap; literal spaces at a physical
+row end are retained only when that same proof includes them. Final-row literal
+spaces remain distinct from codepoint-zero blank padding, so the recognizer can
+exclude trailing-space whole-line paths. Uncertain viewport-edge continuity is
+refused, never used to activate a clipped prefix. Hard breaks remain separate,
 OSC 8 destinations are ignored, and a destination that may continue into a
 concealed row is refused. Parsed OSC 0/2 titles and BEL use the existing
 per-session title and silent-bell host controller, including raw title bounds,
@@ -416,7 +420,7 @@ boundary used by the host integration; it is not a public API or renderer
 registry.
 
 After preparation, the corrected runtime has SHA-256
-`3fb1a882bc75ee45e1f53370976d215bca7e1f7ba172696ee1985caa5e93d27b`,
+`742a6d14c6906d6d4304199889eff69617f6a5ea25aaee788c2a7d6ee4e31dfa`,
 embedded-core chunk SHA-256
 `baa7dd9600c034a77e73ed03864c3e15e02ccdc591d2044479652fef1d9c0900`,
 and event declarations SHA-256
