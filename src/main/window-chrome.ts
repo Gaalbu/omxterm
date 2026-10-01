@@ -1,5 +1,6 @@
 import type { BrowserWindow, Input, InputEvent } from "electron";
 import { terminalIpc } from "../shared/terminal-ipc";
+import { hasNativeAltGr } from "./keyboard-modifiers";
 import {
   isWindowChromeCommand,
   type WindowChromeState,
@@ -57,6 +58,7 @@ function isUnmodifiedAlt(input: Input): boolean {
     !input.meta &&
     !input.isComposing &&
     !input.isAutoRepeat &&
+    !hasNativeAltGr(input) &&
     !input.modifiers?.some((modifier) => /altgr|buttondown/i.test(modifier))
   );
 }
@@ -120,12 +122,21 @@ export function registerWindowChrome(
   const beforeInput = (event: { preventDefault(): void }, input: Input) => {
     const down = input.type === "keyDown" || input.type === "rawKeyDown";
     const alreadyPressed = pressedKeys.has(input.code);
+    // Any other key disqualifies the Alt gesture. Its consumption can suppress
+    // Alt's release as well, so do not retain those modifier entries forever.
+    // Keep ordinary held keys: they still disqualify a later standalone Alt.
+    if (down && input.key !== "Alt") {
+      pressedKeys.delete("AltLeft");
+      pressedKeys.delete("AltRight");
+    }
     // Modified action keys may be consumed by keybind delivery, which can also
     // suppress their release. Track Alt and ordinary keys, including Shift-only
     // input: Shift alone cannot bind an application action. Modifier flags and
     // intervening events disqualify combinations separately.
     if (
       down &&
+      input.key !== "AltGraph" &&
+      !hasNativeAltGr(input) &&
       (input.key === "Alt" || !(input.alt || input.control || input.meta))
     )
       pressedKeys.add(input.code);

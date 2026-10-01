@@ -4,6 +4,7 @@ import {
   type TerminalActionName,
   type TerminalKeybinds,
 } from "../shared/terminal-keybinds";
+import { hasNativeAltGr } from "./keyboard-modifiers";
 
 export interface KeybindKeyEvent {
   preventDefault(): void;
@@ -37,7 +38,11 @@ export function deliverKeybindsFromKeyEvents(
 ): void {
   webContents.on("before-input-event", (event, input) => {
     if (input.type !== "keyDown" && input.type !== "rawKeyDown") return;
-    const action = terminalActionForKeyboardInput(keybinds(), input, platform);
+    const action = terminalActionForKeyboardInput(
+      keybinds(),
+      { ...input, altGr: hasNativeAltGr(input) },
+      platform,
+    );
     if (action === undefined) return;
     // A delivered keybind must never also reach the Terminal Surface or PTY.
     event.preventDefault();
