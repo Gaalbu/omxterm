@@ -132,35 +132,137 @@ it("ignores key events that are not key presses", () => {
 it.each(["keyDown", "rawKeyDown"])(
   "delivers main-keyboard and keypad Plus once for a %s event",
   (type) => {
-    for (const shift of [false, true]) {
+    for (const input of [
+      { code: "Equal", shift: true },
+      { code: "NumpadAdd", shift: false },
+      { code: "NumpadAdd", shift: true },
+    ]) {
       const { invoke, sendKey } = keybindDeliveryHarness(
         terminalDefaultKeybinds("win32"),
         "win32",
       );
-      const event = sendKey({ type, key: "+", control: true, shift });
+      const event = sendKey({ type, key: "+", control: true, ...input });
       expect(invoke).toHaveBeenCalledExactlyOnceWith("zoomIn");
       expect(event.preventDefault).toHaveBeenCalledExactlyOnceWith();
     }
   },
 );
 
-it("preserves exact symbol and explicit Shift bindings over punctuation aliases", () => {
+it("delivers symbols and explicit Shift identities once without consuming ordinary typing", () => {
+  for (const binding of ["Control+!", "Control+Shift+1"]) {
+    const { invoke, sendKey } = keybindDeliveryHarness(
+      { ...terminalDefaultKeybinds("linux"), newTab: binding },
+      "linux",
+    );
+    expect(
+      sendKey({ key: "!", code: "Digit1", control: true, shift: true })
+        .preventDefault,
+    ).toHaveBeenCalledOnce();
+    expect(invoke).toHaveBeenCalledExactlyOnceWith("newTab");
+    for (const input of [
+      { key: "!", code: "Digit1", shift: true },
+      { key: "1", code: "Digit1", control: true },
+      { key: "!", code: "Digit1", control: true, alt: true, shift: true },
+    ])
+      expect(sendKey(input).preventDefault).not.toHaveBeenCalled();
+    expect(invoke).toHaveBeenCalledTimes(1);
+  }
+});
+
+it("keeps native keypad bindings distinct and gives them precedence over the Plus convenience", () => {
   const { invoke, sendKey } = keybindDeliveryHarness(
     {
-      ...terminalDefaultKeybinds("win32"),
-      reloadConfig: "Control+Shift+Plus",
-      zoomOut: "Control+Shift+,",
-      toggleSnippets: "Control+Shift+<",
+      ...terminalDefaultKeybinds("linux"),
+      newTab: "Control+num1",
+      closeTab: "Control+numadd",
     },
-    "win32",
+    "linux",
   );
-  sendKey({ key: "+", code: "Equal", control: true, shift: true });
-  expect(invoke).toHaveBeenLastCalledWith("reloadConfig");
+  sendKey({ key: "1", code: "Numpad1", control: true });
+  expect(invoke).toHaveBeenLastCalledWith("newTab");
   sendKey({ key: "+", code: "NumpadAdd", control: true });
+  expect(invoke).toHaveBeenLastCalledWith("closeTab");
+  sendKey({ key: "+", code: "Equal", control: true, shift: true });
   expect(invoke).toHaveBeenLastCalledWith("zoomIn");
-  sendKey({ key: "<", code: "Comma", control: true, shift: true });
-  expect(invoke).toHaveBeenLastCalledWith("toggleSnippets");
-  expect(invoke).toHaveBeenCalledTimes(3);
+  sendKey({ key: "-", code: "NumpadSubtract", control: true });
+  expect(invoke).toHaveBeenLastCalledWith("zoomOut");
+  expect(invoke).toHaveBeenCalledTimes(4);
+});
+
+it("preserves logical keypad Multiply while prioritizing its explicit native binding", () => {
+  for (const platform of ["darwin", "linux", "win32"]) {
+    for (const [binding, shift] of [
+      ["Control+*", false],
+      ["Control+Shift+*", true],
+    ] as const) {
+      const bindings = {
+        ...terminalDefaultKeybinds(platform),
+        newTab: binding,
+      };
+      const { invoke, sendKey, setKeybinds } = keybindDeliveryHarness(
+        bindings,
+        platform,
+      );
+      const input = { key: "*", code: "NumpadMultiply", control: true, shift };
+      expect(sendKey(input).preventDefault).toHaveBeenCalledOnce();
+      expect(invoke).toHaveBeenCalledExactlyOnceWith("newTab");
+      setKeybinds({
+        ...bindings,
+        closeTab: shift ? "Control+Shift+nummult" : "Control+nummult",
+      });
+      sendKey(input);
+      expect(invoke).toHaveBeenLastCalledWith("closeTab");
+      expect(
+        sendKey({ ...input, control: false }).preventDefault,
+      ).not.toHaveBeenCalled();
+    }
+  }
+});
+
+it("keeps logical Plus convenience out of literal Equal bindings", () => {
+  const defaults = terminalDefaultKeybinds("linux");
+  const { invoke, sendKey } = keybindDeliveryHarness(
+    { ...defaults, newTab: "Control+=" },
+    "linux",
+  );
+  sendKey({ key: "+", code: "BracketRight", control: true });
+  expect(invoke).toHaveBeenCalledExactlyOnceWith("zoomIn");
+  sendKey({ key: "=", code: "Equal", control: true });
+  expect(invoke).toHaveBeenLastCalledWith("newTab");
+  const explicit = keybindDeliveryHarness(
+    { ...defaults, newTab: "Control+Shift+=", zoomIn: "Alt+G" },
+    "linux",
+  );
+  expect(
+    explicit.sendKey({
+      key: "+",
+      code: "BracketRight",
+      control: true,
+      shift: true,
+    }).preventDefault,
+  ).not.toHaveBeenCalled();
+  explicit.sendKey({ key: "+", code: "Equal", control: true, shift: true });
+  expect(explicit.invoke).toHaveBeenCalledExactlyOnceWith("newTab");
+});
+
+it("distinguishes the Plus fallback policy from an explicit Shift requirement", () => {
+  for (const [binding, expected] of [
+    ["Control+Plus", true],
+    ["Control+Shift+Plus", false],
+    ["Control+Shift+=", false],
+  ] as const) {
+    const { invoke, sendKey } = keybindDeliveryHarness(
+      { ...terminalDefaultKeybinds("linux"), zoomIn: binding },
+      "linux",
+    );
+    const keypad = sendKey({ key: "+", code: "NumpadAdd", control: true });
+    expect(keypad.preventDefault).toHaveBeenCalledTimes(expected ? 1 : 0);
+    sendKey({ key: "+", code: "Equal", control: true, shift: true });
+    expect(invoke).toHaveBeenLastCalledWith("zoomIn");
+    expect(
+      sendKey({ key: "=", control: true }).preventDefault,
+    ).not.toHaveBeenCalled();
+  }
 });
 
 it("leaves unrelated modifiers, layouts and ordinary terminal input untouched", () => {

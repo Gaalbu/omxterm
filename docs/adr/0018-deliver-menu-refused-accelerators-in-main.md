@@ -26,9 +26,23 @@ main-keyboard Plus with Shift and shifted comma as `<` with code `Comma`.
 Native menu fallback did not deliver these synthetic inputs on Windows; on
 Linux it worked only while the renderer left the event unconsumed. The matcher
 therefore accepts the implicit Shift needed to type Plus and the observed
-shifted-comma pair. Exact key/modifier matches retain precedence over these
-fallbacks. The comma fallback requires both the logical character and physical
-code; it does not infer arbitrary keyboard layouts from physical positions.
+shifted-comma pair. A later intrinsic-Shift correction (#485) resolves both
+accelerators and these events to Electron's native key/modifier identity rather
+than accumulating punctuation aliases. Shifted character matching requires the
+logical character and native physical code to agree; it does not infer arbitrary
+keyboard layouts from physical positions. Electron's pinned character table is
+an accelerator identity table, not a claim that every layout uses those positions.
+
+`Control+Plus` and `Control+Shift+Plus` register the same native accelerator,
+so validation rejects them together (also `Control+Shift+=`). The older
+application-level precedence allowance was not a distinct native identity.
+Separately, logical Plus delivery, including keypad input, remains an
+application convenience; without explicit Shift it also accepts unshifted `+`.
+Logical keypad delivery such as keypad Minus for Zoom Out is preserved using
+the configured logical character and explicit Shift, retained separately from
+the normalized native tuple. Explicit keypad identities remain distinct and
+take precedence over these conveniences. This policy is derived from the
+installed menu map, not an additional registration system.
 Ordinary `Ctrl+=` is not added as an alias for Plus, and unrelated modifiers and
 terminal control keys remain untouched. These are corrections to the existing
 delivery contract, not a new shortcut vocabulary or renderer-side key policy.

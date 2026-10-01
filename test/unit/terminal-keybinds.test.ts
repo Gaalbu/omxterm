@@ -65,6 +65,24 @@ describe("terminal keybind accelerators", () => {
     );
   });
 
+  it("uses Electron's intrinsic Shift identities without merging keypad keys", () => {
+    // Independent literals from Electron 43.4.1 keyboard_util.cc.
+    const symbols = '!"#$%&()*+:<>?@^_{|}~';
+    const nativeKeys = "1'3457908=;,./26-[\\]`";
+    for (const [index, symbol] of [...symbols].entries()) {
+      const token = symbol === "+" ? "Plus" : symbol;
+      expect(canonicalAccelerator(`Control+${token}`)).toBe(
+        canonicalAccelerator(`Control+Shift+${nativeKeys[index]}`),
+      );
+    }
+    expect(canonicalAccelerator("Control+numadd")).not.toBe(
+      canonicalAccelerator("Control+Plus"),
+    );
+    expect(canonicalAccelerator("Control+num1")).not.toBe(
+      canonicalAccelerator("Control+1"),
+    );
+  });
+
   it("ships a valid, collision-free default for every action", () => {
     const canonicals = TERMINAL_ACTION_NAMES.map((action) => {
       expect(isValidAccelerator(DEFAULT_TERMINAL_KEYBINDS[action])).toBe(true);
@@ -109,7 +127,6 @@ describe("terminal keybind accelerators", () => {
         ...DEFAULT_TERMINAL_KEYBINDS,
         nextTab: "Ctrl+PageDown",
         previousTab: "Ctrl+Up",
-        newTab: "Cmd+Plus",
         closeTab: "Cmd+Return",
         toggleSnippets: "Cmd+Space",
       };
@@ -121,7 +138,7 @@ describe("terminal keybind accelerators", () => {
       expect(resolveWith(keyInput({ key: "ArrowUp", control: true }))).toBe(
         "previousTab",
       );
-      expect(resolveWith(keyInput({ key: "+", meta: true }))).toBe("newTab");
+      expect(resolveWith(keyInput({ key: "+", meta: true }))).toBe("zoomIn");
       expect(resolveWith(keyInput({ key: "Enter", meta: true }))).toBe(
         "closeTab",
       );
