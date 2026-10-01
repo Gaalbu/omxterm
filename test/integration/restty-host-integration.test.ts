@@ -6,6 +6,8 @@ import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
 import { describe, expect, it } from "vitest";
 import { resttyImageEmitterSource } from "../fixtures/restty-host-images";
+import type { LocalImageLinkEvidence } from "../fixtures/restty-local-image-reference";
+import { assertLocalImageRefitEvidence } from "../fixtures/restty-local-image-unicode";
 import {
   hasResttyImagePlacementEvidence,
   type ResttyImagePixelEvidence,
@@ -69,10 +71,7 @@ interface HostResult {
   readonly releasedHoverChangedPixels: number;
   readonly validLinkMouseReports: string;
   readonly localPathMouseReports: string;
-  readonly localImageEvidence: ReadonlyArray<{
-    readonly control: string;
-    readonly activations: number;
-  }>;
+  readonly localImageEvidence: ReadonlyArray<LocalImageLinkEvidence>;
   readonly ordinaryGestureMouseReports: string;
   readonly wheelMouseReports: string;
   readonly alternateScreenMouseReports: string;
@@ -161,7 +160,15 @@ describe.skipIf(
   ),
 )("Restty through the OMXTerm host and a real native PTY", () => {
   it("preserves session lifecycle, isolation, focus, resize, and disabled routes", async () => {
-    const root = await mkdtemp(path.join(tmpdir(), "omxterm-restty-host-"));
+    // macOS's per-user tmpdir prefix can exceed the entire native grid. Own a
+    // short random profile so the clipping control's complete path prefix fits
+    // inside the existing window, without depending on a native resize request.
+    const root = await mkdtemp(
+      path.join(
+        process.platform === "darwin" ? "/tmp" : tmpdir(),
+        "omxterm-restty-host-",
+      ),
+    );
     let supervised = false;
     try {
       await buildHostFixture(root);
@@ -272,8 +279,9 @@ describe.skipIf(
           .slice(0, 5)
           .every(({ activations }) => activations >= 2),
       ).toBe(true);
+      assertLocalImageRefitEvidence(result.localImageEvidence);
       expect(
-        result.localImageEvidence.slice(8).map(({ control }) => control),
+        result.localImageEvidence.slice(10).map(({ control }) => control),
       ).toEqual(
         process.env["OMXTERM_TEST_IMAGE_TMUX"] === "1"
           ? [

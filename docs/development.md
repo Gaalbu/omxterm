@@ -316,8 +316,24 @@ modified native Electron mouse events, including soft wraps and mouse-report
 precedence. The host also activates small synthetic whole-line unquoted PNG/JPEG
 paths through the real main reader/native decoder and production preview, checking
 full-span hover pixels, first/space/continuation clicks, a literal space at a soft-wrap
-boundary, resize/reflow, dismissal and focus. Its unrelated gesture-only references
-still return cancellation. No physical click/picker acceptance is claimed.
+boundary, resize/reflow, dismissal and focus. These controls temporarily constrain
+content inside the native window, observe the real Surface/PTY grid, and restore
+the original layout in `finally`; they do not require arbitrary native sizes to
+be honored by a tiler. Canvas extents target the interior of actual device-cell
+backing buckets, with exact observed backing/grid checks and unchanged strict
+CSS/hover budgets; nominal CSS boundaries can quantize below a backing pixel.
+Generated paths use bounded filesystem components and a fixture-only observation
+of Ghostty cells and selection text for the root's sentinel position. CPR is not
+used for width measurement: Restty's output filter can answer it from a UTF-16
+hint before Ghostty receives the text. The long reference must really wrap, and
+the filename space must occupy the observed grid's last column. Separate wide-only
+and combining-only root controls independently read the actual row-end space and
+next-row filename cells, then check hover, exact activation, native preview and
+both reflow directions without reprinting. The observer exists only in the
+broad-host fixture bundle, not a production Surface API. macOS uses a short owned random `/tmp` profile so the complete path
+prefix fits the viewport-clipping control inside the original window.
+Its unrelated gesture-only references still return cancellation. No physical
+click/picker acceptance is claimed.
 
 The host's focused link-cancellation scenario starts one real Surface/PTY and
 waits for its non-echoing child readiness, then restores a complete visible URL
