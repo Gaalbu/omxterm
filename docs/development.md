@@ -221,16 +221,68 @@ in the existing `.scratch/native-fixtures/` journal. It contains no renderer
 expression or arbitrary error payload and is neither completion nor ownership
 evidence. Missing metadata cannot satisfy the diagnostic assertions.
 
-Native negative controls really minimize the owned window before mount, hold
+Native negative controls make the owned window unavailable before mount, hold
 its actual renderer frame continuation, or withhold delivery of an actual native
 capture. They must exit promptly with the presentation-unavailable or named
 operation-timeout phase and clean supervision, never pass on missing pixels.
-This diagnoses a demonstrated minimized-canvas scheduling mechanism, not the
-unproven historical trigger of an earlier maintainer timeout or a shipping
-Restty/GPU defect. Run the ordinary matrix and these controls together:
+The unavailable-presentation control defaults to real native `early-minimize`;
+`OMXTERM_TEST_CURSOR_PRESENTATION_CONTROL=minimize` declares that same choice.
+On a compositor independently demonstrated not to honor minimize, explicitly
+select `hide` to exercise real native `early-hide` instead. Both start from an
+observed native-visible, non-minimized window and require the selected native
+state before mount: minimized for minimize; hidden **and not minimized** for hide.
+The retained fixed control marker, test name and mount failure distinguish the
+actual action. Neither a request nor an unobserved transition satisfies the test.
+
+This is an independent operator declaration, not compositor detection, a failed
+minimize fallback, or a skip. Unset means minimize; unsupported values (including
+empty) fail. The Window Chrome suppress-maximize declaration does not prove
+minimize support and never selects this control. Keep the default on desktops
+that honor minimize so that actual minimization coverage remains exercised.
+The minimized-canvas scheduling mechanism remains distinct from the unproven
+historical trigger of an earlier timeout or a shipping Restty/GPU defect; native
+hide exercises the same unavailable-presentation guard, not minimization itself.
+Run the ordinary matrix and all three controls together:
 
 ```sh
 npx vitest run test/integration/restty-cursor-rendering.test.ts
+```
+
+For the demonstrated non-minimizing Omarchy Hyprland/XWayland environment:
+
+```sh
+OMXTERM_TEST_CURSOR_PRESENTATION_CONTROL=hide npx vitest run test/integration/restty-cursor-rendering.test.ts
+# The two independent declarations are both needed for its full native suite:
+OMXTERM_TEST_WINDOW_POLICY=hyprland-suppress-maximize OMXTERM_TEST_CURSOR_PRESENTATION_CONTROL=hide npm run check:portable
+```
+
+The background-tab removal fixture waits for the main process's actual initial
+selection acknowledgement and a renderer task/microtask boundary before sending
+the first new-tab command. A shell's raw `READY` output alone is not Surface or
+host-command subscription readiness. Five-second named operation deadlines and
+abortable condition polling retain the outer 90-second supervisor and every
+ordinary C-exit, selection, Surface identity, Paste, native keyboard, Snippet and
+background-isolation assertion.
+
+Fixture-only mount wiring holds the actual first Surface return. The gated
+positive observes no early new-tab command and then runs all original assertions.
+Its unsafe-ordering control observes the actual early command while held,
+releases the Surface, and requires a `second-program` deadline with only one
+session; a separate actual renderer-boundary hold must fail at
+`initial-renderer-boundary`. Fixed control markers prevent unrelated failures
+from satisfying either control. The original empty-journal timeout's historical
+phase and cause remain unknown; these controls establish a fixture readiness gap,
+not a shipping host or GPU defect.
+
+Fixed `__OMXTERM_TAB_REMOVAL_PHASE__` begin/complete/failure records survive profile
+removal in `.scratch/native-fixtures/`. They contain only named phases, failure
+categories, bounded session counts, selection/background-exit booleans and native
+visible/minimized/focused state. They contain no terminal content, renderer
+expression, arbitrary errors or identifiers and are not completion or ownership
+evidence. Missing metadata cannot satisfy diagnostic assertions.
+
+```sh
+npx vitest run test/unit/tab-removal-readiness.test.ts test/integration/tab-removal.test.ts
 ```
 
 Window Chrome fixtures retain real native/content/Surface/PTY bounds and
@@ -260,9 +312,15 @@ limits remain unchanged; original cumulative ACKs and real high-water pause/resu
 are checked separately. A post-source same-length reorder and an Adapter delivery
 drop preserve valid source/END and original ACK progress but fail destination checks.
 The separate row-end refit control pauses the same checkpoint text above high
-water at an observed old-grid pending-wrap boundary. After its complete original
-ACK, it changes actual native content width and waits for the Surface/PTY refit
-before continuing output. Exact Copy must retain all records without inserting
+water at an observed old-grid pending-wrap boundary. It first measures an
+acknowledged native-source baseline after calibration; prefix readiness requires
+exactly the producer's additional ASCII bytes, original source/ACK equality and
+zero pending bytes. Native startup bytes remain in both totals, never replaced
+with a fixed platform allowance. Fixed phase names and numeric baseline/prefix/
+source/ACK/pending evidence survive in the supervisor journal on success or
+prefix failure; no terminal payload is recorded by these observations. After the
+complete prefix ACK, it changes actual native content width and waits for the
+Surface/PTY refit before continuing output. Exact Copy must retain all records without inserting
 an LF. The new right edge must differ from the old insertion boundary; measured
 calibration avoids relying on arbitrary native-window sizing. The temporary
 content constraint is restored, and the broad host's original stress path stays
