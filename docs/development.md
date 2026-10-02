@@ -205,6 +205,24 @@ separate expected word regions. Portable controls reject blank, cursor-only,
 unchanged and out-of-region frames; native captures tolerate platform-specific
 glyph rasterization rather than requiring identical bitmaps.
 
+The appearance fixture has six scenarios: actual/forced DPR 1/2, delayed
+configured-font output, mixed pointer input and a held Surface frame gate.
+The gate preserves [#310's capture-before-paint regression](https://github.com/luizomf/omxterm/issues/310)
+through the stronger [#515 readiness control](https://github.com/luizomf/omxterm/issues/515):
+exact copy and two independent fixture frames complete while selection pixels
+remain zero; permanently held Surface callbacks reject readiness within one
+second; releasing those actual callbacks produces the unchanged native palette
+and color precedence within the existing three-second capture-readiness budget,
+without reselection or focus forcing. This replaces the redundant artificial
+selection-delay timer, not the native rendering assertions.
+
+The fourth case separately retains [#320's configured-font output regression](https://github.com/luizomf/omxterm/issues/320):
+the 300 ms output interval, deferred-output evidence and exact regular/bold
+configured/reference bitmap equality. Its returned request identity owns the
+current timer/native RAF, so cancellation remains effective after either
+transition. Focused interval/cancellation controls use the same helper as the
+native fixture. The independent held-frame gate remains unchanged.
+
 The cursor fixture captures real native WebGL2 pixels at DPR 1 and 2 through
 font zoom, a controlled host-container width shrink, and configuration reload
 with width restoration. Its font/padding matrix, cell bounds, focus/blink and

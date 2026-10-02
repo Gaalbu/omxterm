@@ -1,5 +1,6 @@
 import configuredFontBytes from "../../assets/fonts/JetBrainsMonoNerdFontMono-Regular.ttf";
 import { verifyInBandResize } from "./restty-resize-regression";
+import { createAppearanceOutputDelay } from "./restty-appearance-output-delay";
 import { mountResttyTerminalSurface } from "../../src/terminal-surface/restty-terminal-surface";
 import { terminalFontInputs } from "../../src/terminal-surface/terminal-font-stack";
 import {
@@ -65,7 +66,6 @@ interface AppearanceResult {
 export interface SelectionObservation {
   readonly beforeFrame: boolean;
   readonly afterFrame: boolean;
-  readonly deferredFrame: boolean;
   readonly visibilityState: DocumentVisibilityState;
   readonly focused: boolean;
 }
@@ -81,7 +81,6 @@ declare global {
     readonly focused: boolean;
     readonly visibilityState: DocumentVisibilityState;
     readonly devicePixelRatio: number;
-    readonly deferredFrame: boolean;
     readonly gateHeld: boolean;
     readonly heldCallbacks: readonly number[];
     readonly queuedCallbacks: readonly number[];
@@ -101,24 +100,20 @@ globalThis.__omxtermSelectionFrame = selectionFrame;
 
 const deferFrames =
   new URLSearchParams(location.search).get("deferFrames") === "true";
-let deferUntil = 0;
-let deferredFrame = false;
-if (deferFrames) {
-  window.requestAnimationFrame = (callback) =>
-    nativeFrame((time) => {
-      const remaining = deferUntil - performance.now();
-      if (remaining > 0) {
-        deferredFrame = true;
-        // Exercise a late frame without blocking input/capture or changing native
-        // focus. This delay is a regression stimulus, never a readiness wait.
-        setTimeout(() => nativeFrame(callback), remaining);
-      } else callback(time);
-    });
+const outputDelay = deferFrames
+  ? createAppearanceOutputDelay({
+      request: nativeFrame,
+      cancel: window.cancelAnimationFrame.bind(window),
+      now: () => performance.now(),
+      setTimer: (callback, delay) => window.setTimeout(callback, delay),
+      clearTimer: (id) => window.clearTimeout(id),
+    })
+  : undefined;
+if (outputDelay) {
+  window.requestAnimationFrame = outputDelay.request;
+  window.cancelAnimationFrame = outputDelay.cancel;
 }
-globalThis.__omxtermBeginSelection = () => {
-  if (deferFrames) deferUntil = performance.now() + 300;
-  beginSelectionFrameGate();
-};
+globalThis.__omxtermBeginSelection = beginSelectionFrameGate;
 
 const customTheme: TerminalTheme = {
   version: 1,
@@ -361,13 +356,10 @@ async function run() {
     { length: 8 },
     (_, index) => `\u001b[${90 + index}m██`,
   ).join("");
-  deferredFrame = false;
-  if (
-    deferFrames &&
+  outputDelay?.beginOutput(
     document.body.dataset.configuredFont === "true" &&
-    document.body.dataset.referenceFonts === "false"
-  )
-    deferUntil = performance.now() + 300;
+      document.body.dataset.referenceFonts === "false",
+  );
   handlers?.onOutput(
     `${normalForeground}\r\n${brightForeground}\r\n\u001b[31m██\u001b[1m██\u001b[22;91m██\u001b[38;2;18;58;188m██ https://example.com\u001b[0m\u001b[4;1HMMMMMMMM\u001b[5;1H\u001b[1mMMMMMMMM\u001b[22m\u001b[6;1H${"\ue8f0".repeat(8)}\u001b[7;1H${"ƀ".repeat(8)}\u001b[8;1H${"͸".repeat(8)}\u001b[${latest.rows};1H\u001b[48;2;171;205;239m  \u001b[0m\u001b[16t`,
   );
@@ -398,7 +390,6 @@ async function run() {
       focused: document.hasFocus(),
       visibilityState: document.visibilityState,
       devicePixelRatio,
-      deferredFrame,
       ...selectionFrameDiagnostics(),
       observedAt: performance.now(),
     };
@@ -418,13 +409,12 @@ async function run() {
     return {
       beforeFrame,
       afterFrame,
-      deferredFrame,
       visibilityState: document.visibilityState,
       focused: document.hasFocus(),
     };
   };
   globalThis.__omxtermResttyAppearanceResult = {
-    deferredOutputFrame: deferredFrame,
+    deferredOutputFrame: outputDelay?.deferredFrame ?? false,
     measurements,
     live: {
       sameCanvas: canvas === liveCanvas,

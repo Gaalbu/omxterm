@@ -113,7 +113,7 @@ describe("Restty OMXTerm appearance under production Electron policy", () => {
           : mixedPointer
             ? "mouse press with pen motion and compatibility mouse events"
             : deferFrames
-              ? "delayed selection and configured-font frames at actual display DPR"
+              ? "delayed configured-font output at actual display DPR"
               : requestedScaleFactor
                 ? `forced DPR ${requestedScaleFactor}`
                 : "actual display DPR";
@@ -182,11 +182,10 @@ describe("Restty OMXTerm appearance under production Electron policy", () => {
         );
       }
       expect(runs[3]!.result.configuredFont.deferredFrame).toBe(true);
-      expect(runs[3]!.result.selection.deferredFrame).toBe(true);
       for (const color of expectedColors)
         expect(
           runs[3]!.result.colorCounts[color],
-          `delayed frame ${color}`,
+          `delayed configured-font output ${color}`,
         ).toBeGreaterThan(0);
       for (const size of [1, 8, 10, 16, 64, 72]) {
         const dpr1 = fontMeasurement(runs[1]!.result, size);
