@@ -90,6 +90,14 @@ just a compiler and Node.js. Follow the Ubuntu, Fedora or Arch/Omarchy commands
 there before `npm ci`: bundled app fonts do not replace the installed families
 used by native tests, and missing fonts can cause long startup timeouts.
 
+**On Windows, enable Developer Mode before cloning or testing.** Tests create real
+symlinks as an ordinary user; missing symlink privileges can cause many failures
+across unrelated suites. Git's `core.symlinks=true` is not a permission grant.
+The [Windows setup guide](docs/development.md#windows) covers enabling Developer
+Mode, a quick symlink check, temporary PowerShell execution policy and running
+GUI tests in the signed-in desktop session. Do not run the suite as administrator
+to hide a missing prerequisite.
+
 Then clone your fork (replace `YOUR-USERNAME`):
 
 ```sh

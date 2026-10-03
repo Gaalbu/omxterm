@@ -114,6 +114,15 @@ Electron and tests must still run as the ordinary desktop user. Keep the
 desktop unlocked during tests. A headless `xvfb-run` smoke test does not verify
 native desktop behavior.
 
+Additional desktop automation tools such as `xdotool` can trigger a compositor's
+remote-control consent dialog under Wayland, even when ordinary X11 queries
+succeed. Package installation, passwordless sudo and RDP desktop sharing do not
+by themselves authorize that input path. Approve the specific request if needed;
+persistence depends on the compositor and requesting client. Do not disable
+security globally or enable unrestricted input monitoring as a development
+prerequisite. External automation checks are not a substitute for this project's
+native graphical tests.
+
 OMXTerm disables Chromium sandboxing on Linux, so no administrator sandbox setup
 is needed. `npm run dev` supplies `--no-sandbox` before Electron starts and retains
 it through the X11 relaunch. App main runs too late to establish this policy:
@@ -130,11 +139,24 @@ nor system `libfuse2`. Normal mounting uses kernel FUSE support;
 
 ### Windows
 
+**Enable Windows Developer Mode before cloning or running tests.** The suite
+creates real symbolic links, including in temporary fixtures. Without permission
+to create them, many otherwise unrelated tests can fail with `EPERM` or a
+privilege error. A successful app launch or dependency install does not verify
+this prerequisite. Developer Mode is for contributors; users of the packaged
+terminal do not need it.
+
+In Windows **Settings**, search for **Developer Mode**, enable it and accept the
+administrator confirmation. Its location varies by Windows version. This is
+separate from PowerShell execution policy and does not require disabling UAC,
+antivirus or other security protections. Run development commands and tests from
+an ordinary, non-administrator terminal afterward.
+
 - Clone with `core.autocrlf=false` to preserve LF formatting and
-  `core.symlinks=true` to preserve repository symlinks. Windows Developer Mode
-  enables unprivileged symlink creation. Enable it before cloning or running the
-  suite as an ordinary user; restoring a clean VM can revert this setting.
-  An elevated test run does not verify the ordinary-user development setup.
+  `core.symlinks=true` to preserve repository symlinks. These Git options do not
+  grant symlink privileges. Enable Developer Mode before cloning; enabling it
+  later does not repair links already checked out as plain files. If that
+  happened, preserve your changes and make a fresh clone with these options.
 - Install the Visual C++ Redistributable for ARM64. Without it, Electron's
   postinstall can fail with `ERR_DLOPEN_FAILED`. Install native build tools if
   npm cannot find a matching dependency prebuild.
@@ -146,8 +168,41 @@ nor system `libfuse2`. Normal mounting uses kernel FUSE support;
   there. This affects that process and its children, not persistent user or
   machine policy. Keep organizational policy and security protections intact;
   a blocked inspection is an unavailable check, not a passed ownership guard.
-- If `npm ci` reports `EPERM`, check for processes holding files open and review
-  antivirus events before retrying, with protections still enabled.
+- If `npm ci` reports `EPERM`, inspect the failing operation: a `symlink` failure
+  calls for the check below; file deletion/access failures can instead involve
+  open handles or antivirus. Keep protections enabled rather than retrying blindly.
+
+#### Verify ordinary-user symlink access
+
+After installing a supported Node.js version, run this in a **non-elevated
+PowerShell terminal**, before `npm ci` or the full suite. It uses only Node.js
+built-ins, creates a temporary file symlink and removes its temporary directory:
+
+```powershell
+@'
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+const root = fs.mkdtempSync(path.join(os.tmpdir(), 'omxterm-symlink-check-'));
+try {
+  fs.writeFileSync(path.join(root, 'target.txt'), 'ok');
+  const link = path.join(root, 'link.txt');
+  fs.symlinkSync('target.txt', link, 'file');
+  if (fs.readFileSync(link, 'utf8') !== 'ok') throw new Error('Symlink read failed');
+  console.log('PASS: ordinary-user file symlink creation');
+} finally {
+  fs.rmSync(root, { recursive: true, force: true });
+}
+'@ | node
+```
+
+If this fails with a privilege error, check Developer Mode and any organization
+policy restricting symlinks before running hundreds of tests. Running the suite
+as administrator would hide the missing ordinary-user prerequisite, not fix it.
+If it passes but tests fail, inspect the first actual test error; not every
+`EPERM` has the same cause.
+
+#### Run from the graphical session
 
 Run graphical tests and package verification from the interactive desktop or a
 VM harness configured to execute as its logged-in user. Windows OpenSSH normally
@@ -163,6 +218,21 @@ Get-Process explorer | Select-Object SessionId
 
 Matching session IDs are a setup check; actual renderer/GPU tests must still pass.
 Software-renderer flags cannot substitute for a required native graphics path.
+Keep the desktop signed in and unlocked. Administrator rights do not turn an SSH
+session into an interactive desktop or grant ordinary applications control of
+UAC prompts and higher-privilege windows.
+
+From a PowerShell terminal on that desktop, with prerequisites satisfied:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy RemoteSigned
+# In the new temporary shell, from the repository directory:
+npm.cmd ci
+npm.cmd run check:portable
+```
+
+The temporary shell does not override organizational execution policy. No
+persistent execution-policy change or elevated test run is needed.
 
 Windows postinstall also corrects node-pty 1.1.0's array-argument serializer so
 literal enclosing quotes with spaces or tabs reach the child unchanged. It
