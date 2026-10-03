@@ -70,6 +70,20 @@ transparency. On GNOME, for example, application blur requires an extension such
 as [Blur my Shell](quick-start/linux-desktop.md#ubuntu-with-gnome-blur-my-shell);
 OMXTerm's blur setting alone is not enough.
 
+## Additional verified compatibility: MATE
+
+On the same Fedora 44 ARM64 installation, a maintainer verified `npm ci`,
+`npm run dev`, `npm run package:linux`, and normal installation/uninstallation
+through `linux_install.sh` in the MATE session. Title-bar controls, tabs, snippets
+and background transparency also worked in manual use.
+
+The maintainer reported one test failure: the DPR 1 fractional-geometry case in
+`test/integration/restty-hover-readiness.test.ts`. The DPR 1.5 and DPR 2 cases
+passed, as did the remaining tests in the run. The underlying error was not
+captured in the supplied test summary, so it is not established as the same
+failure as Cinnamon's. This is verified compatibility with a known test failure,
+not a full-suite pass or qualification of a minimal MATE-only installation.
+
 ## Only if graphics fail
 
 For a blank window or graphics initialization failure in a VM or with an
