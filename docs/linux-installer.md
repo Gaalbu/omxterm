@@ -23,6 +23,30 @@ icon, and menu entry in your user folder. It automatically chooses mounting or
 extraction and uses X11/XWayland. Spaces, literal percent signs and double quotes
 in your home folder's path are preserved; no renaming or manual escaping is needed.
 
+## Additional verified compatibility: Cinnamon (X11)
+
+A maintainer verified OMXTerm `0.20.1-dev.0` on **Fedora 44 ARM64 with
+Cinnamon 6.6.7 and Muffin (X11)**. The following worked:
+
+- Dependency installation with `npm ci`.
+- Linux packaging with `npm run package:linux`.
+- Installation with `linux_install.sh` and use of the installed terminal.
+- Development mode with `npm run dev`.
+
+Known limitations in that environment:
+
+- Background blur was unavailable. Blur is [best effort](configuration.md), not
+  a requirement for using the terminal.
+- The test suite finished with **2,194 passed, 41 skipped and two failed**. Both
+  failures were the DPR 1 and DPR 2 cases in
+  `test/integration/restty-hover-readiness.test.ts`, reporting
+  `Restty hover stimulus-invalidated`. Their cause has not been established;
+  this is neither a full-suite pass nor proof of broken user-visible hover.
+
+This is additional verified desktop compatibility within Linux ARM64, not a
+claim that every feature or every distribution running Cinnamon was tested.
+It does not cover Cinnamon's experimental Wayland session.
+
 ## Only if graphics fail
 
 For a blank window or graphics initialization failure in a VM or with an
