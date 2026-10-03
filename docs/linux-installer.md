@@ -48,6 +48,28 @@ This is additional verified desktop compatibility within Linux ARM64, not a
 claim that every feature or every distribution running Cinnamon was tested.
 The experimental Wayland session has the separate, limited working route below.
 
+## Additional verified compatibility: Xfce
+
+On the same Fedora 44 ARM64 installation, a maintainer also verified the Xfce
+session with OMXTerm `0.20.1-dev.0`:
+
+- `npm run dev`, `npm run package:linux`, and normal installation/uninstallation
+  through `linux_install.sh` worked, without `--compatibility`.
+- Configuration, fonts, shortcuts, snippets, showing/hiding the title and tab
+  bars, dragging through the drag handles, and the Alt menu worked.
+- Background transparency worked; background blur was unavailable.
+- `npm run check:portable` completed with **2,196 passed, 41 skipped and zero
+  failures**, followed by a successful build.
+
+This verifies the tested Xfce environment, not a minimal Xfce-only installation:
+GNOME and Cinnamon packages were also present. No desktop-performance comparison
+is claimed because the session locked during the run.
+
+Blur depends on the compositor and is separate from terminal functionality and
+transparency. On GNOME, for example, application blur requires an extension such
+as [Blur my Shell](quick-start/linux-desktop.md#ubuntu-with-gnome-blur-my-shell);
+OMXTerm's blur setting alone is not enough.
+
 ## Only if graphics fail
 
 For a blank window or graphics initialization failure in a VM or with an
