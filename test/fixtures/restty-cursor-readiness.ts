@@ -29,20 +29,6 @@ const operations = [
 export const CURSOR_PHASE_PREFIX = "__OMXTERM_CURSOR_PHASE__";
 export const CURSOR_STEP_TIMEOUT = 5000;
 
-export function selectCursorPresentationControl(
-  declaration: string | undefined,
-): "early-minimize" | "early-hide" {
-  if (
-    declaration !== undefined &&
-    declaration !== "minimize" &&
-    declaration !== "hide"
-  )
-    throw new Error(
-      "OMXTERM_TEST_CURSOR_PRESENTATION_CONTROL must be minimize or hide",
-    );
-  return declaration === "hide" ? "early-hide" : "early-minimize";
-}
-
 export interface CursorStep {
   readonly dpr: 1 | 2;
   readonly font: "bundled" | "configured";
@@ -75,6 +61,62 @@ export interface CursorDiagnostic {
       readonly height: number;
     };
   } | null;
+}
+
+export interface CursorBlinkSample {
+  focusBegin: number;
+  focusEnd?: number;
+  captureBegin?: number;
+  captureEnd?: number;
+  count?: number;
+  remainingMs?: number;
+}
+
+// Failure evidence only, never an alternative to the native both-phase assertion.
+// Native presentation/geometry already lives in the adjoining CursorDiagnostic.
+export function recordCursorBlinkFailure(
+  context: Omit<CursorStep, "kind" | "operation">,
+  deadline: number,
+  fullBar: number,
+  sampleCount: number,
+  samples: readonly CursorBlinkSample[],
+): void {
+  try {
+    if (
+      ![1, 2].includes(context.dpr) ||
+      ![0, 8].includes(context.padding) ||
+      !["bundled", "configured"].includes(context.font) ||
+      !lifecycles.includes(context.lifecycle)
+    )
+      return;
+    const number = (value: number | undefined) =>
+      typeof value === "number" && Number.isFinite(value) ? value : null;
+    const retained = samples.slice(-32).map((sample) => ({
+      focusBegin: number(sample.focusBegin),
+      focusEnd: number(sample.focusEnd),
+      captureBegin: number(sample.captureBegin),
+      captureEnd: number(sample.captureEnd),
+      count: number(sample.count),
+      remainingMs: number(sample.remainingMs),
+    }));
+    process.stdout.write(
+      `__OMXTERM_CURSOR_BLINK_FAILURE__${JSON.stringify({
+        version: 1,
+        context: {
+          dpr: context.dpr,
+          font: context.font,
+          padding: context.padding,
+          lifecycle: context.lifecycle,
+        },
+        deadline: number(deadline),
+        fullBar: number(fullBar),
+        sampleCount: number(sampleCount),
+        samples: retained,
+      })}\n`,
+    );
+  } catch {
+    // Preserve the original failure even when its diagnostic sink is unavailable.
+  }
 }
 
 class CursorReadinessError extends Error {

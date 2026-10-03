@@ -6,10 +6,37 @@ import {
   type ResttyGestureEvidence,
 } from "./restty-gesture-evidence";
 import { readLocalImageCoreCells } from "./restty-local-image-core-probe";
+import {
+  hoverCellPoint,
+  HoverEvidenceError,
+  sameHoverGeometry,
+  validateHoverGeometry,
+  type HoverGeometry,
+} from "./restty-hover-evidence";
 
+interface CellSnapshot {
+  readonly canvasId: number;
+  readonly geometry: HoverGeometry;
+}
 interface TerminalSize {
   readonly cols: number;
   readonly rows: number;
+  readonly snapshot?: CellSnapshot;
+  readonly allowCanvasTranslation?: true;
+}
+
+async function readCellSnapshot(window: BrowserWindow): Promise<CellSnapshot> {
+  // Geometry must not inspect the core: an allocating selection query can
+  // detach the renderer's borrowed WASM views before its legitimate lookup.
+  return window.webContents.executeJavaScript(
+    `(() => {
+      const canvas = [...document.querySelectorAll('.restty-terminal-surface canvas')].find(c => c.getBoundingClientRect().width > 0);
+      if (!canvas?.__resttyHoverFixture) throw new Error('Cell geometry observer is missing');
+      const {canvasId, geometry} = canvas.__resttyHoverFixture();
+      return {canvasId, geometry};
+    })()`,
+    true,
+  ) as Promise<CellSnapshot>;
 }
 
 export interface ResttyLinkGestureOptions {
@@ -26,8 +53,6 @@ export interface ResttyLinkGestureOptions {
 }
 
 export interface ResttyLinkGestureEvidence {
-  readonly modifiedHoverChangedPixels: number;
-  readonly releasedHoverChangedPixels: number;
   readonly validLinkMouseReports: string;
   readonly localPathMouseReports: string;
   readonly ordinaryGestures: {
@@ -50,146 +75,38 @@ export async function terminalCellPoint(
   col: number,
   size: TerminalSize,
 ) {
-  return (await window.webContents.executeJavaScript(
-    `(() => {
-      const canvas = [...document.querySelectorAll('.restty-terminal-surface canvas')].find((candidate) => {
-        const rect = candidate.getBoundingClientRect();
-        return rect.width > 0 && rect.height > 0;
-      });
-      if (!canvas) throw new Error('Visible Restty canvas is missing');
-      const bounds = canvas.getBoundingClientRect();
-      return { x: Math.floor(bounds.left + ((${col} + 0.5) * bounds.width / ${size.cols})), y: Math.floor(bounds.top + ((${row} + 0.5) * bounds.height / ${size.rows})) };
-    })()`,
-    true,
-  )) as { x: number; y: number };
+  const snapshot = await readCellSnapshot(window);
+  return cellPoint(snapshot, row, col, size);
 }
 
-async function captureTerminalCanvas(
-  window: BrowserWindow,
-): Promise<{ bitmap: Buffer; width: number; height: number }> {
-  const bounds = (await window.webContents.executeJavaScript(
-    `(() => {
-      const canvas = [...document.querySelectorAll('.restty-terminal-surface canvas')].find((candidate) => candidate.getBoundingClientRect().width > 0);
-      if (!canvas) throw new Error('Visible Restty canvas is missing');
-      const rect = canvas.getBoundingClientRect();
-      return { x: Math.floor(rect.left), y: Math.floor(rect.top), width: Math.floor(rect.width), height: Math.floor(rect.height) };
-    })()`,
-    true,
-  )) as { x: number; y: number; width: number; height: number };
-  const image = await window.webContents.capturePage(bounds);
-  return { bitmap: Buffer.from(image.toBitmap()), ...image.getSize() };
-}
-
-function changedPixels(first: Buffer, second: Buffer): number {
-  if (first.length !== second.length)
-    throw new Error("Restty hover captures changed dimensions");
-  let changed = 0;
-  for (let offset = 0; offset < first.length; offset += 4) {
-    if (
-      first[offset] !== second[offset] ||
-      first[offset + 1] !== second[offset + 1] ||
-      first[offset + 2] !== second[offset + 2] ||
-      first[offset + 3] !== second[offset + 3]
-    )
-      changed += 1;
-  }
-  return changed;
-}
-
-export async function captureModifiedHoverEvidence(
-  window: BrowserWindow,
-  point: { readonly x: number; readonly y: number },
+function cellPoint(
+  snapshot: CellSnapshot,
+  row: number,
+  col: number,
   size: TerminalSize,
-  destinationColumns: number,
-  prefixColumns = 4,
-): Promise<{
-  readonly modifiedHoverChangedPixels: number;
-  readonly releasedHoverChangedPixels: number;
-}> {
-  const dispatchPointer = (modified: boolean) =>
-    window.webContents.executeJavaScript(
-      `(() => {
-        const canvas = [...document.querySelectorAll('.restty-terminal-surface canvas')].find((candidate) => candidate.getBoundingClientRect().width > 0);
-        canvas.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, pointerId: 91, pointerType: 'mouse', clientX: ${point.x}, clientY: ${point.y}, metaKey: ${modified && process.platform === "darwin"}, ctrlKey: ${modified && process.platform !== "darwin"} }));
-      })()`,
-      true,
-    );
-  await dispatchPointer(false);
-  await new Promise((resolve) => setTimeout(resolve, 100));
-  const baseline = await captureTerminalCanvas(window);
-  await dispatchPointer(true);
-  await new Promise((resolve) => setTimeout(resolve, 100));
-  const active = await captureTerminalCanvas(window);
-  await window.webContents.executeJavaScript(
-    `window.dispatchEvent(new KeyboardEvent('keyup', { key: '${process.platform === "darwin" ? "Meta" : "Control"}' }))`,
-    true,
-  );
-  await new Promise((resolve) => setTimeout(resolve, 100));
-  const released = await captureTerminalCanvas(window);
-  // Every destination cell, including the wide continuation and soft-wrapped
-  // rows, must gain pixels; prefix and unrelated cells must not change.
-  const checkedCells =
-    Math.ceil((prefixColumns + destinationColumns) / size.cols) * size.cols;
-  for (let index = 0; index < checkedCells; index += 1) {
-    const row = Math.floor(index / size.cols);
-    const col = index % size.cols;
-    let count = 0;
-    for (
-      let y = Math.ceil((row * baseline.height) / size.rows);
-      y < Math.floor(((row + 1) * baseline.height) / size.rows);
-      y += 1
-    ) {
-      for (
-        let x = Math.ceil((col * baseline.width) / size.cols);
-        x < Math.floor(((col + 1) * baseline.width) / size.cols);
-        x += 1
-      ) {
-        const offset = (y * baseline.width + x) * 4;
-        if (
-          !baseline.bitmap
-            .subarray(offset, offset + 4)
-            .equals(active.bitmap.subarray(offset, offset + 4))
-        )
-          count += 1;
-      }
-    }
-    if (
-      (index >= prefixColumns && index < prefixColumns + destinationColumns) !==
-      count > 0
-    )
-      throw new Error(`Hover cell geometry mismatch at ${row}:${col}`);
-  }
-  return {
-    modifiedHoverChangedPixels: changedPixels(baseline.bitmap, active.bitmap),
-    releasedHoverChangedPixels: changedPixels(baseline.bitmap, released.bitmap),
-  };
-}
-
-async function exerciseHoverRecognition(
-  options: ResttyLinkGestureOptions,
-  size: TerminalSize,
-): Promise<void> {
-  const nativePath =
-    process.platform === "win32" ? "C:\\tmp\\漢.png" : "/tmp/漢.png";
-  for (const [text, columns] of [
-    ["file:///tmp/image.png", 21],
-    [nativePath, nativePath.length + 1],
-    ["relative.png", 12],
-    ["'~/a space.png':1", 17],
-    ["'../a space.png'", 16],
-    ["HTTPS://example.test", 0],
-    ["mailto:person@example.test", 0],
-    ["\u001b]8;;https://hidden.test\u0007label\u001b]8;;\u0007", 0],
-  ] as const) {
-    options.deliverOutput(`\u001b[2J\u001b[H漢e\u0301 ${text}`);
-    await new Promise((resolve) => setTimeout(resolve, 100));
-    await captureModifiedHoverEvidence(
-      options.window,
-      await terminalCellPoint(options.window, 0, 4, size),
-      size,
-      columns,
-    );
-  }
+) {
+  const { geometry } = snapshot;
+  if (
+    geometry.cols !== size.cols ||
+    geometry.rows !== size.rows ||
+    (size.snapshot &&
+      (snapshot.canvasId !== size.snapshot.canvasId ||
+        !sameHoverGeometry(
+          size.allowCanvasTranslation
+            ? {
+                ...geometry,
+                canvas: {
+                  ...geometry.canvas,
+                  x: size.snapshot.geometry.canvas.x,
+                  y: size.snapshot.geometry.canvas.y,
+                },
+              }
+            : geometry,
+          size.snapshot.geometry,
+        )))
+  )
+    throw new HoverEvidenceError("geometry-changed");
+  return hoverCellPoint(geometry, row, col);
 }
 
 export async function clickTerminalCell(
@@ -198,7 +115,16 @@ export async function clickTerminalCell(
   col: number,
   size: TerminalSize,
 ) {
-  const point = await terminalCellPoint(window, row, col, size);
+  sendTerminalCellClick(
+    window,
+    await terminalCellPoint(window, row, col, size),
+  );
+}
+
+function sendTerminalCellClick(
+  window: BrowserWindow,
+  point: { readonly x: number; readonly y: number },
+) {
   const modifiers: Array<"meta" | "control"> =
     process.platform === "darwin" ? ["meta"] : ["control"];
   window.webContents.sendInputEvent({
@@ -226,10 +152,18 @@ export async function scrollTerminal(
   size: TerminalSize,
   deltaY: number,
 ): Promise<void> {
-  const point = await terminalCellPoint(window, row, col, size);
+  const snapshot = await readCellSnapshot(window);
+  const point = cellPoint(snapshot, row, col, size);
+  // Revalidate in the dispatch operation itself: another renderer crossing can
+  // expose a replacement canvas or different geometry after point calculation.
   await window.webContents.executeJavaScript(
     `(() => {
       const canvas = [...document.querySelectorAll('.restty-terminal-surface canvas')].find((candidate) => candidate.getBoundingClientRect().width > 0);
+      const observed = canvas?.__resttyHoverFixture?.();
+      if (
+        observed?.canvasId !== ${snapshot.canvasId} ||
+        JSON.stringify(observed.geometry) !== ${JSON.stringify(JSON.stringify(snapshot.geometry))}
+      ) throw new Error('Restty hover geometry-changed');
       canvas.dispatchEvent(new WheelEvent('wheel', { bubbles: true, cancelable: true, clientX: ${point.x}, clientY: ${point.y}, deltaMode: 1, deltaY: ${deltaY} }));
     })()`,
     true,
@@ -299,41 +233,77 @@ export async function exerciseResttyLinks(
     options;
   const size = resizes.at(-1);
   if (!size) throw new Error("Restty link fixture has no grid size");
+  const initial = await readCellSnapshot(window);
   const visibleUrl = `https://example.test/漢${"a".repeat(size.cols)}`;
+  // Both wide characters occupy two cells; the combining mark adds no column.
+  const destinationColumns = Array.from(visibleUrl).length + 1;
   deliverOutput(
     `\u001b[2J\u001b[H\u001b[?25l\u001b[?1000h\u001b[?1006h漢e\u0301 ${visibleUrl}`,
   );
   deliverOutput("\u001b[?1049halternate\u001b[?1049l");
-  const resizeCountBeforeReflow = resizes.length;
-  window.setSize(760, 600);
-  await waitFor(
-    () => resizes.length > resizeCountBeforeReflow,
-    "Restty link reflow",
-  );
-  await new Promise((resolve) => setTimeout(resolve, 100));
-  const reflowedSize = resizes.at(-1);
-  if (!reflowedSize) throw new Error("Restty reflow returned no grid size");
-  const hoverEvidence = await captureModifiedHoverEvidence(
-    window,
-    await terminalCellPoint(window, 0, 4, reflowedSize),
-    reflowedSize,
-    visibleUrl.length + 1,
-  );
-  const { modifiedHoverChangedPixels, releasedHoverChangedPixels } =
-    hoverEvidence;
-  await exerciseHoverRecognition(options, reflowedSize);
+  // The former native resize was followed by clearing and reprinting this URL,
+  // so it did not verify retained-output reflow. The local-image layout scenario
+  // covers actual shrink/widen of retained output without that reprint.
   deliverOutput(
     `\u001b[2J\u001b[H漢e\u0301 \u001b]8;;https://hidden.test/different\u0007${visibleUrl}\u001b]8;;\u0007`,
   );
+  // Retain the original output-presentation opportunity, not a stability test.
+  // No geometry is frozen before it; the actual click still validates afresh.
   await new Promise((resolve) => setTimeout(resolve, 100));
+  const current = (snapshot: CellSnapshot) => {
+    if (
+      !Number.isSafeInteger(initial.canvasId) ||
+      initial.canvasId <= 0 ||
+      snapshot.canvasId !== initial.canvasId
+    )
+      throw new HoverEvidenceError("geometry-changed");
+    const grid = resizes.at(-1);
+    return (
+      grid?.cols === snapshot.geometry.cols &&
+      grid.rows === snapshot.geometry.rows
+    );
+  };
+  await waitFor(
+    async () => current(await readCellSnapshot(window)),
+    "Restty link current grid",
+  );
 
   const inputBeforeLinks = inputs.join("");
-  await clickTerminalCell(window, 0, 4, reflowedSize);
-  await clickTerminalCell(window, 1, 2, reflowedSize);
+  let prepared: CellSnapshot | undefined;
+  for (const [row, col] of [
+    [0, 4],
+    [1, 2],
+  ] as const) {
+    // The readiness observation is not the gesture's geometry. Read again at
+    // the actual input boundary, freeze the first click, and reject subsequent
+    // changes. No output, sleep or IPC await separates validation and sending.
+    const snapshot = await readCellSnapshot(window);
+    if (!current(snapshot))
+      throw new HoverEvidenceError("stimulus-invalidated");
+    if (prepared && !sameHoverGeometry(prepared.geometry, snapshot.geometry))
+      throw new HoverEvidenceError("geometry-changed");
+    validateHoverGeometry(snapshot.geometry);
+    const { cols, rows } = snapshot.geometry;
+    if (
+      4 + destinationColumns <= cols + 2 ||
+      4 + destinationColumns > cols * rows
+    )
+      throw new HoverEvidenceError("preparation");
+    prepared ??= snapshot;
+    sendTerminalCellClick(window, hoverCellPoint(snapshot.geometry, row, col));
+  }
+  if (!prepared) throw new HoverEvidenceError("preparation");
+  const reflowedSize: TerminalSize = {
+    cols: prepared.geometry.cols,
+    rows: prepared.geometry.rows,
+    snapshot: { canvasId: prepared.canvasId, geometry: prepared.geometry },
+  };
   await waitFor(
     () => externalLinks.length === 2,
     "repeated visible link activation",
   );
+  if (externalLinks[0] !== visibleUrl || externalLinks[1] !== visibleUrl)
+    throw new Error("Restty link activation changed the literal destination");
   const validLinkMouseReports = gestureInputSince(
     inputs,
     inputBeforeLinks.length,
@@ -351,10 +321,14 @@ export async function exerciseResttyLinks(
   await waitFor(() => externalLinks.length === 4, "hard-break link separation");
 
   const named = await exerciseResttyOrdinaryGestures(options, reflowedSize);
-  await exerciseScrollbackLinkControls(options, reflowedSize);
+  // Scrollback still uses the frozen grid for filler/wrap/clipping, but its
+  // inputs target the current origin of that same owned canvas. Reporting and
+  // the preceding URL/path controls retain their full historical geometry.
+  await exerciseScrollbackLinkControls(options, {
+    ...reflowedSize,
+    allowCanvasTranslation: true,
+  });
   return {
-    modifiedHoverChangedPixels,
-    releasedHoverChangedPixels,
     validLinkMouseReports,
     localPathMouseReports,
     ...named,

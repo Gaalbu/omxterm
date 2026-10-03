@@ -1,5 +1,6 @@
 import { app, BrowserWindow, ipcMain, Menu, screen } from "electron";
 import { mkdirSync, writeSync } from "node:fs";
+import assert from "node:assert/strict";
 import path from "node:path";
 import { terminalWindowOptions } from "../../src/main/terminal-window";
 import { createWindowBackgroundEffectsOwner } from "../../src/main/window-background-effects";
@@ -28,6 +29,43 @@ import {
 } from "./restty-host-platform";
 import { terminalIpc } from "../../src/shared/terminal-ipc";
 import { exerciseWindowChrome } from "./window-chrome-exercise";
+import { assertNativeChromeConstruction } from "./window-chrome-construction";
+import { chromeNativeExpectation } from "./window-policy";
+import type {
+  IpcListener,
+  IpcMainPort,
+} from "../../src/main/terminal-ipc-types";
+
+const routeControl = process.argv
+  .find((arg) => arg.startsWith("--fixture-chrome-control="))
+  ?.split("=")[1];
+assert.ok(
+  routeControl === undefined || routeControl === "drop-route",
+  "Unknown Chrome rejection control",
+);
+const chromeListeners = new Map<IpcListener, IpcListener>();
+const controlledChromeIpc: Pick<IpcMainPort, "on" | "removeListener"> = {
+  on(channel, listener) {
+    const wrapped: IpcListener = (event, payload) => {
+      if (
+        routeControl &&
+        channel === terminalIpc.windowChromeCommand &&
+        payload === "maximize" &&
+        event.sender === windows[0]?.webContents
+      ) {
+        process.stdout.write(`__OMXTERM_CHROME_CONTROL__${routeControl}\n`);
+        return;
+      }
+      listener(event, payload);
+    };
+    chromeListeners.set(listener, wrapped);
+    ipcMain.on(channel, wrapped);
+  },
+  removeListener(channel, listener) {
+    ipcMain.removeListener(channel, chromeListeners.get(listener) ?? listener);
+    chromeListeners.delete(listener);
+  },
+};
 import { exerciseWindowsHandleDrag } from "./window-chrome-native-drag";
 import {
   exerciseApplicationMenu,
@@ -60,14 +98,13 @@ let nativeCursor = false;
 let application: TerminalApplication<BrowserWindow>;
 let failing = false;
 function fail(error: unknown) {
-  if (failing) process.exit(1);
+  if (failing) return;
   failing = true;
   process.stderr.write(
     `${error instanceof Error ? error.stack : String(error)}\n`,
   );
-  // Own exceptions before Electron can show a modal uncaughtException dialog.
-  // The external supervisor remains the final process/profile cleanup owner.
-  setTimeout(() => process.exit(1), 1_000).unref();
+  // Close only requests termination. Reuse the same actual PTY acknowledgments
+  // as successful completion; the external supervisor owns a stuck native exit.
   for (const session of sessions) {
     try {
       session.close();
@@ -75,7 +112,11 @@ function fail(error: unknown) {
       /* Keep the original failure and exit. */
     }
   }
-  app.exit(1);
+  void Promise.all(sessionExits)
+    .then(() => app.exit(1))
+    .catch(() => {
+      process.stderr.write("Chrome fixture completion failed\n");
+    });
 }
 process.on("uncaughtException", fail);
 process.on("unhandledRejection", fail);
@@ -102,15 +143,21 @@ app
       });
       return;
     }
+    const nativeExpectation = chromeNativeExpectation(process.argv);
+    process.stdout.write(
+      `__OMXTERM_CHROME_NATIVE_EXPECTATION__${nativeExpectation}\n`,
+    );
     const router = registerTerminalIpcRouter(ipcMain);
     application = startTerminalApplication<BrowserWindow>({
       createWindow(lifecycle) {
+        const nativeOptions = terminalWindowOptions(
+          path.join(root, "preload.cjs"),
+          configuration,
+          process.platform,
+        );
+        assertNativeChromeConstruction(nativeOptions, process.platform);
         const window = new BrowserWindow({
-          ...terminalWindowOptions(
-            path.join(root, "preload.cjs"),
-            configuration,
-            process.platform,
-          ),
+          ...nativeOptions,
           webPreferences: {
             ...terminalWindowOptions(
               path.join(root, "preload.cjs"),
@@ -127,7 +174,7 @@ app
         );
         backgroundTransparencies.set(window, backgroundTransparency);
         guardTerminalWindowClose(window, application);
-        const chrome = registerWindowChrome(window, ipcMain, {
+        const chrome = registerWindowChrome(window, controlledChromeIpc, {
           platform: process.platform,
           showTitleBar: configuration.showTitleBar,
           cursor: () => (nativeCursor ? screen.getCursorScreenPoint() : cursor),
@@ -158,6 +205,7 @@ app
             process.platform === "darwin" ? 30 : 0,
           ),
           createSession(callbacks) {
+            if (failing) throw new Error("Chrome fixture is completing");
             const index = sessions.length;
             sizes[index] = [];
             let queryingCell = false;
@@ -171,19 +219,26 @@ app
                 resolveExit = resolve;
               }),
             );
-            const terminal = createLocalTerminalSession(spawnFixturePty, {
-              shell: nativeFixturePlatform.defaultShell,
-              launchRequest: explicitFixtureLaunchRequest(),
-              platform: process.platform,
-              homeDirectory: root,
-              environment: { ...process.env, HOME: root },
-              applicationVersionProvider: app,
-              ...callbacks,
-              onExit(exit, launchKind) {
-                resolveExit();
-                callbacks.onExit(exit, launchKind);
-              },
-            });
+            let terminal: ReturnType<typeof createLocalTerminalSession>;
+            try {
+              terminal = createLocalTerminalSession(spawnFixturePty, {
+                shell: nativeFixturePlatform.defaultShell,
+                launchRequest: explicitFixtureLaunchRequest(),
+                platform: process.platform,
+                homeDirectory: root,
+                environment: { ...process.env, HOME: root },
+                applicationVersionProvider: app,
+                ...callbacks,
+                onExit(exit, launchKind) {
+                  resolveExit();
+                  callbacks.onExit(exit, launchKind);
+                },
+              });
+            } catch (error) {
+              // No session was returned; do not leave an unowned pending slot.
+              resolveExit();
+              throw error;
+            }
             sessions.push(terminal);
             return {
               ...terminal,
@@ -264,6 +319,7 @@ app
     });
     await application.newWindow();
     const result = await exerciseWindowChrome({
+      nativeExpectation,
       window: windows[0]!,
       cells,
       queryCell: (index) => cellQueries[index]!(),
@@ -323,6 +379,7 @@ app
     router.dispose();
     // Closing requests native termination; wait for every PTY to actually exit.
     await Promise.all(sessionExits);
+    if (failing) return;
     writeSync(1, `__OMXTERM_WINDOW_CHROME_RESULT__${JSON.stringify(result)}\n`);
     app.quit();
   })

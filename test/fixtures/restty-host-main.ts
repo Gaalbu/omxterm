@@ -4,6 +4,7 @@ import { mkdirSync, writeSync } from "node:fs";
 import path from "node:path";
 import { terminalRendererConfiguration } from "../../src/main/active-user-configuration";
 import { createResttyHostSessions } from "./restty-host-sessions";
+import { createFixtureMetricReplyRouter } from "./restty-host-metric-replies";
 import {
   registerTerminalIpcRouter,
   type IpcMainPort,
@@ -36,7 +37,7 @@ import { createHostOracleSourceControl } from "./restty-host-oracle-controls";
 
 const prefix = "__OMXTERM_RESTTY_HOST_RESULT__";
 const root = __dirname;
-const focusedCancellation = process.argv.includes("--link-cancellation");
+const focusedCancellation = resttyCancellation.isFocused(process.argv);
 const oracle = resttyOracles.focusedHostOracle(process.argv);
 const sourceControl = createHostOracleSourceControl(process.argv);
 const checkpointCount = process.argv.includes("--oracle-single-checkpoint")
@@ -117,7 +118,6 @@ function createHost(window: BrowserWindow) {
       const index = sessionIndex++;
       outputs[index] = [];
       inputs[index] = [];
-      deliverOutputs[index] = callbacks.onOutput;
       resizes[index] = [];
       const fixtureLaunchRequest =
         focusedCancellation || oracle === "gesture-routing"
@@ -153,19 +153,12 @@ function createHost(window: BrowserWindow) {
           callbacks.onExit(exit, launchKind);
         },
       });
-      const resize = terminal.resize.bind(terminal);
-      const write = terminal.write.bind(terminal);
-      const routedTerminal = {
-        ...terminal,
-        write(data: string) {
-          inputs[index]!.push(data);
-          write(data);
-        },
-        resize(size: { cols: number; rows: number }) {
-          resizes[index]!.push(size);
-          resize(size);
-        },
-      };
+      const { deliverOutput, terminal: routedTerminal } =
+        createFixtureMetricReplyRouter(terminal, callbacks.onOutput, {
+          inputs: inputs[index]!,
+          resizes: resizes[index]!,
+        });
+      deliverOutputs[index] = deliverOutput;
       terminals[index] = routedTerminal;
       return routedTerminal;
     },
@@ -241,27 +234,29 @@ async function completeFocusedScenario(
   window: BrowserWindow,
   reload: () => Promise<unknown>,
 ) {
+  const shared = {
+    window,
+    externalLinks,
+    localImageRequests,
+    waitFor,
+    complete: fixtureSessions.complete,
+  };
   if (focusedCancellation) {
     await resttyCancellation.completeResttyLinkCancellationScenario({
-      window,
+      ...shared,
       deliverOutput: deliverOutputs[0]!,
       inputs: inputs[0]!,
       resizes: resizes[0]!,
-      externalLinks,
-      waitFor,
       initialOutput: () => outputs[0]!.join(""),
       closeSession: () => terminals[0]!.close(),
       ptyExits: () => ptyExits,
       sessionStarts: () => sessionIndex,
-      complete: fixtureSessions.complete,
     });
   } else if (oracle) {
     await resttyOracles.runFocusedResttyHostOracle({
+      ...shared,
       oracle,
       root,
-      window,
-      externalLinks,
-      localImageRequests,
       outputStress,
       terminals,
       launchKinds,
@@ -273,11 +268,9 @@ async function completeFocusedScenario(
       sessionStarts: () => sessionIndex,
       sessionExited: (index) => exitedSessionIndices.has(index),
       reload,
-      waitFor,
-      complete: fixtureSessions.complete,
     });
-  } else return false;
-  return true;
+  }
+  return focusedCancellation || Boolean(oracle);
 }
 
 app

@@ -25,22 +25,23 @@ tradeoff and runtime fallback.
 ### Linux
 
 Install Python 3, `make`, a C++ compiler, `patch`, `binutils` for native package
-inspection, `fontconfig` utilities and fixture fonts for exact family validation,
-and XWayland when using a Wayland desktop. For example:
+inspection, `ps` for native fixture process ownership, `fontconfig` utilities
+and fixture fonts for exact family validation, and XWayland when using a Wayland
+desktop. For example:
 
 ```sh
 # Ubuntu
-sudo apt install build-essential python3 patch binutils fontconfig file xwayland fonts-dejavu-core fonts-liberation
+sudo apt install build-essential python3 patch binutils procps fontconfig file xwayland fonts-dejavu-core fonts-liberation
 ```
 
 ```sh
 # Fedora
-sudo dnf install gcc-c++ make python3 patch binutils fontconfig file xorg-x11-server-Xwayland dejavu-sans-fonts dejavu-sans-mono-fonts liberation-mono-fonts
+sudo dnf install gcc-c++ make python3 patch binutils procps-ng fontconfig file xorg-x11-server-Xwayland dejavu-sans-fonts dejavu-sans-mono-fonts liberation-mono-fonts
 ```
 
 ```sh
 # Arch / Omarchy
-sudo pacman -S --needed base-devel python patch binutils fontconfig file xorg-xwayland ttf-dejavu ttf-liberation
+sudo pacman -S --needed base-devel python patch binutils procps-ng fontconfig file xorg-xwayland ttf-dejavu ttf-liberation
 ```
 
 These commands install build/test prerequisites, not Node.js/npm. Use a supported
@@ -131,7 +132,9 @@ nor system `libfuse2`. Normal mounting uses kernel FUSE support;
 
 - Clone with `core.autocrlf=false` to preserve LF formatting and
   `core.symlinks=true` to preserve repository symlinks. Windows Developer Mode
-  enables unprivileged symlink creation.
+  enables unprivileged symlink creation. Enable it before cloning or running the
+  suite as an ordinary user; restoring a clean VM can revert this setting.
+  An elevated test run does not verify the ordinary-user development setup.
 - Install the Visual C++ Redistributable for ARM64. Without it, Electron's
   postinstall can fail with `ERR_DLOPEN_FAILED`. Install native build tools if
   npm cannot find a matching dependency prebuild.
@@ -183,6 +186,13 @@ not qualify outer CLI parsing or an exact installer.
 Retained investigation materials in `.scratch/`, including archived tests and
 renamed dependency directories, stay outside ordinary discovery.
 
+The default reporters retain console output and write per-test results to
+`.scratch/vitest-results.json`, including when tests run through
+`npm run check:portable`. Each invocation replaces that report; copy it before
+another run when retaining investigation evidence. An interrupted run may not
+finish writing it: retain the actual command exit and native journals too.
+Review reports for local paths and failure details before sharing.
+
 To inventory the selected files without importing tests or launching native
 fixtures:
 
@@ -214,7 +224,12 @@ remain zero; permanently held Surface callbacks reject readiness within one
 second; releasing those actual callbacks produces the unchanged native palette
 and color precedence within the existing three-second capture-readiness budget,
 without reselection or focus forcing. This replaces the redundant artificial
-selection-delay timer, not the native rendering assertions.
+selection-delay timer, not the native rendering assertions. The first completed
+native capture counts toward held-frame exposure; the one-second negative control
+does not require an additional capture to complete inside that shorter deadline.
+Any observed selection pixels while held still fail, and live exact-copy/gate
+state must survive the deadline before release. A missing initial capture,
+renderer failure or absent painted release is not accepted as exposure.
 
 The fourth case separately retains [#320's configured-font output regression](https://github.com/luizomf/omxterm/issues/320):
 the 300 ms output interval, deferred-output evidence and exact regular/bold
@@ -239,40 +254,67 @@ in the existing `.scratch/native-fixtures/` journal. It contains no renderer
 expression or arbitrary error payload and is neither completion nor ownership
 evidence. Missing metadata cannot satisfy the diagnostic assertions.
 
+If the native blink loop fails, `__OMXTERM_CURSOR_BLINK_FAILURE__` retains its
+attempt count and last 32 numeric samples: focus/capture begin/end timestamps,
+actual native ink count, full-bar reference and original deadline/remaining
+exposure. Missing observations are `null`, never a zero-pixel phase. Successful
+loops emit no extra record. Sampling adds no renderer IPC, RAF, core query or
+capture and does not change the two-second exposure or exact pixel assertions.
+These intervals do not identify a renderer draw phase or compositor frame.
+
+Initialization cancellation emits fixed `__OMXTERM_INITIALIZATION_STAGE__`
+begin/complete markers around its existing main-process awaits, plus entry and
+completion-entry checkpoints. The supervisor retains these on a timeout even
+without a result packet. A begun stage without completion localizes the pending
+operation; it does not prove why it stalled or that the renderer finished. Only
+fixed boundary/stage/status names and timestamps are recorded, never terminal,
+clipboard, configuration or font payloads. No wait or deadline is added. Both
+diagnostics have small observation overhead and are not evidence of a repair.
+
 Native negative controls make the owned window unavailable before mount, hold
 its actual renderer frame continuation, or withhold delivery of an actual native
 capture. They must exit promptly with the presentation-unavailable or named
 operation-timeout phase and clean supervision, never pass on missing pixels.
-The unavailable-presentation control defaults to real native `early-minimize`;
-`OMXTERM_TEST_CURSOR_PRESENTATION_CONTROL=minimize` declares that same choice.
-On a compositor independently demonstrated not to honor minimize, explicitly
-select `hide` to exercise real native `early-hide` instead. Both start from an
-observed native-visible, non-minimized window and require the selected native
-state before mount: minimized for minimize; hidden **and not minimized** for hide.
-The retained fixed control marker, test name and mount failure distinguish the
-actual action. Neither a request nor an unobserved transition satisfies the test.
+Before the unavailable-presentation case, a separate supervised raw Electron
+reference observes native minimize with a full 25-second response allowance.
+Successful minimize and restoration retain the real `early-minimize` control.
+Only a healthy reference that completes that interval without minimization and
+then actually hides selects the separately named real `early-hide` control.
+The behavior fixture still requires initial native-visible, non-minimized state,
+the selected actual transition, exactly one named control marker and the mount
+`presentation-unavailable` failure. Hide requires hidden **and not minimized**;
+it is not minimization coverage. Missing, duplicate, invalid, failed or timed-out
+reference evidence never selects an alternate path. Maximize observations do not
+select the cursor control, and no failed behavior test is retried as hide.
 
-This is an independent operator declaration, not compositor detection, a failed
-minimize fallback, or a skip. Unset means minimize; unsupported values (including
-empty) fail. The Window Chrome suppress-maximize declaration does not prove
-minimize support and never selects this control. Keep the default on desktops
-that honor minimize so that actual minimization coverage remains exercised.
+Discovery has its own 90-second child-execution budget, derived from sequential
+native response and bounded load/presentation/renderer-health operations. This is
+not an end-to-end preparation/cleanup deadline: an enclosing test timeout does not
+prove that native ownership has ended. The behavior
+fixture's five-second guard, under-20-second negative-control measurement,
+90-second supervisor and both complete DPR pixel matrices remain unchanged.
 The minimized-canvas scheduling mechanism remains distinct from the unproven
-historical trigger of an earlier timeout or a shipping Restty/GPU defect; native
-hide exercises the same unavailable-presentation guard, not minimization itself.
-Run the ordinary matrix and all three controls together:
+historical trigger of an earlier timeout or a shipping Restty/GPU defect.
+Run the ordinary matrix and all three controls together without declarations:
 
 ```sh
 npx vitest run test/integration/restty-cursor-rendering.test.ts
 ```
 
-For the demonstrated non-minimizing Omarchy Hyprland/XWayland environment:
+The same command works on the diagnosed Omarchy Hyprland/XWayland desktop.
+`OMXTERM_TEST_CURSOR_PRESENTATION_CONTROL` and `OMXTERM_TEST_WINDOW_POLICY` are
+retired: their presence, including an empty value, produces an actionable error.
+Remove old exports (in PowerShell, remove the corresponding `Env:` entries):
 
 ```sh
-OMXTERM_TEST_CURSOR_PRESENTATION_CONTROL=hide npx vitest run test/integration/restty-cursor-rendering.test.ts
-# The two independent declarations are both needed for its full native suite:
-OMXTERM_TEST_WINDOW_POLICY=hyprland-suppress-maximize OMXTERM_TEST_CURSOR_PRESENTATION_CONTROL=hide npm run check:portable
+unset OMXTERM_TEST_CURSOR_PRESENTATION_CONTROL OMXTERM_TEST_WINDOW_POLICY
+npm run check:portable
 ```
+
+There is no global discovery launcher, installation, persistent capability cache,
+compositor-rule parsing or desktop reconfiguration. Discovery occurs only inside
+the affected native test callbacks; listing tests and unit-only selection launch
+no raw windows.
 
 The background-tab removal fixture waits for the main process's actual initial
 selection acknowledgement and a renderer task/microtask boundary before sending
@@ -414,33 +456,58 @@ and the native Alt-alone popup. It changes no keyboard layout or persistent OS
 configuration. This is not hardware-key input, arbitrary-layout qualification,
 or a measurement of PTY bytes. Ordinary checks skip this disruptive opt-in.
 
-### Deliberate compositor policy
+### Run-local native window observation
 
-Window Chrome tests require native maximize/restore success by default. A Linux
-Hyprland desktop deliberately suppressing maximize can declare its independently
-verified policy **before** the run:
+Window Chrome continuity independently observes ordinary framed and separately
+specified app-shaped raw Electron windows before exercising product behavior.
+Linux's app-shaped reference is frameless/transparent; Windows's is frameless
+and **nontransparent**. The reference never imports production construction,
+Chrome, renderer or PTY code. It retains the consumer's Electron executable,
+backend and requested DPR. Each reference must be initially live, loaded,
+responsive, visible, non-minimized and non-maximized. Starting state is checked
+again after asynchronous health at the actual native invocation; final
+action-specific state is rechecked after health before committing an observation.
+Successful maximize requires observed restoration before proceeding. Both
+references must agree.
+
+Agreement on successful maximize/restore retains actual custom Maximize/Restore
+transitions. Agreement on healthy `not-observed-within-budget` results selects
+`native-maximize-not-observed`, not an inferred compositor policy. Each raw
+maximize and product unchanged-state observation uses the same existing
+25-second native-response allowance. Discovery's separate 165-second child-execution
+budget covers sequential reference actions and bounded setup/health work, not
+preparation or supervisor settlement; product request delivery and behavior
+supervision remain separate. A crash, timeout,
+failed restoration, differential disagreement, invalid/absent/duplicate report,
+nonzero exit or uncertain cleanup fails rather than selecting unavailability.
+
+The unavailable path still clicks the real custom control twice. A single scoped
+recorder spans coordinate lookup, click delivery, label and focus awaits, requiring
+exactly one intended native action per click and no foreign or additional window
+control actions. Both paths require action/branch-specific final state and label,
+rechecked after the last observation sleep and renderer/focus awaits, alongside
+healthy native presentation. Native/container/Surface/PTY fit, hidden-tab geometry,
+identity, fullscreen and cleanup assertions remain unchanged. Independent
+product-construction checks reject resizable/maximizable disabling and size traps;
+headless actual-entry tests prove the guard runs before native construction.
+Headless actual Chrome wiring rejects wrong-owner and duplicate routes; a real
+native dropped-route control retains renderer/preload/IPC rejection coverage.
+Negative-only duplicate/nonzero report controls use supervised synthetic protocol
+reports, not extra native-response waits or capability evidence. Real discovery,
+reference-health controls and successful transitions still require native windows.
+Tiling is not required to preserve a historical window height.
+
+This bounded comparison establishes observed native behavior, not permanent
+capability, intentional desktop policy or the cause of a common Electron/backend
+regression. It cannot exclude every additional defect masked by an incapable
+environment. Actual maximize/restore and minimize qualification on capable
+desktops remains necessary; native hide is not credited as minimize success.
+The retired manual declarations are rejected rather than inherited as evidence.
+Run the affected tests normally:
 
 ```sh
-OMXTERM_TEST_WINDOW_POLICY=hyprland-suppress-maximize npm test
+npx vitest run test/integration/window-chrome.test.ts test/integration/restty-cursor-rendering.test.ts
 ```
-
-The same declaration applies to `npm run check:portable`.
-
-First inspect the active Hyprland configuration and its loaded rules to confirm
-that they suppress application maximize requests (Omarchy's default window rules
-use `suppress_event = "maximize"`). An installed configuration file alone is not
-proof that it is loaded. Preserve `HYPRLAND_INSTANCE_SIGNATURE` from that desktop.
-Do not set this declaration merely because a maximize assertion failed, or change
-global rules to obtain a pass. Unknown declarations or missing Hyprland sessions
-fail validation. Other desktops keep the default successful-maximize assertion.
-
-The declared path still clicks the real custom control, observes its native
-request and unchanged native state, checks its label and terminal focus, and
-verifies Surface/PTY continuity and cleanup. Tiling may resize the first window
-when the second opens: its selected Surface and PTY must fit actual native and
-container bounds, while hidden-tab geometry remains untouched. Both policies
-check actual bounds rather than requiring a historical height to survive tiling;
-`standard` declares maximize behavior, not an absence of tiling.
 
 About startup tests retain the desktop's Wayland environment and exercise the
 production X11 relaunch. About-specific bounded stage/error-category metadata is
@@ -506,9 +573,43 @@ Run it with the original full scrollback/hidden/image scenario:
 npx vitest run test/integration/restty-native-scroll-feedback.test.ts test/integration/restty-scrollback-rendering.test.ts
 ```
 
+The scrollback fixture owns and boundedly observes native presentation/focus and
+DOM terminal input readiness before its native drag and character input. It
+acknowledges trusted pointer delivery, actual selection dragging and accepted
+character input; the held-left move retains the original edge coordinates.
+The drag phase first awaits the renderer observer's matching input event under
+the existing ordinary 5-second input-operation bound (including input already
+observed before registration), not a subsequent main-process polling timer.
+Only after that acknowledgment is consumed does the nominal 500 ms held exposure
+start. The original finally releases the button, including on failure; normal
+release acknowledgment precedes the actual scrollTop read and strict decrease
+assertion. Missing/malformed input and consumption after the input operation ends
+still fail. The overall native/Vitest limits remain unchanged.
+
+This explicitly revises the former policy that raced acknowledgment against a
+500 ms exposure timer: physical hold can now grow by acknowledgment latency.
+It is not an identical timing acceptance set, a calibrated performance benchmark,
+or a 500 ms product-response SLA. No wait-until-scroll, repeated stimulus or
+synthetic viewport change substitutes for the actual decrease assertion. A
+headless regression executes the generated caller and real observer with
+controlled input transport/timer scheduling, including delayed admission,
+invalid input, ended phases and bridge rejection. It preserves the emitted main
+source in `.scratch/scrollback-native-caller.generated.cjs`; its modeled results
+are not native rendering/renderer-death evidence or a diagnosis of earlier
+failures.
+A never-ready real Surface regression uses the
+existing native supervisor timeout and checks cleanup before the next GUI launch.
+Fixture preparation and native execution are joined in a test-finished hook so
+Vitest's wrapper deadline cannot release the desktop early. Fixed bounded
+`__OMXTERM_SCROLLBACK_INPUT__` metadata distinguishes unavailable stimulus from
+an acknowledged drag that fails the unchanged strict scrollTop-decrease assertion.
+It contains only input-state booleans, numeric pointer/geometry/viewport data and
+native state, never terminal text. This corrects fixture input ownership; it does
+not establish the cause of the historical intermittent autoscroll failure.
+
 This qualifies the native Surface/browser feedback path, not physical wheel input.
-The correction changes prepared Restty JavaScript package inputs; it does not
-require rebuilding the unchanged core WASM or a known qualified native PTY.
+The scroll-feedback correction changes prepared Restty JavaScript package inputs;
+it does not require rebuilding the unchanged core WASM or a known qualified native PTY.
 
 Window Chrome fixtures also enter and leave real native fullscreen repeatedly
 with the title hidden. On Windows the fixture temporarily moves the desktop
@@ -529,6 +630,35 @@ additionally checks native sheet begin/end events; Windows checks the native
 dialog disables its owner. This is not physical OK-button input or a
 pixel/appearance assertion.
 
+The focused hover fixture owns a non-echoing child and waits for exact core
+content, drained renderer/IPC work and current device-cell metrics before pointer
+input. Pointer/keyup dispatch and the immediate observer snapshot share one
+synchronous renderer task; later replacements cannot become that stimulus.
+It observes the actual hover revision and WebGL draw, then crosses two
+native frame continuations before one strict native capture; neither drawing nor
+those frames prove presentation. After-capture identity/geometry is checked
+before bitmap mapping; stable-geometry invalidation retains useful pixel counts.
+CSS/backing/DPR mapping preserves fractional
+bounds and unused edges. Every destination cell needs interior changed pixels;
+only pixels intersecting its exact projected rectangle belong to its raster
+footprint. Prefix, complement and unused-edge changes fail; modifier release
+must restore baseline pixels. The wide/combining URL survives content shrink and
+restore without reprinting. Eligible/refused reference controls retain zero
+opening requests under application mouse reporting. The delayed-frame control
+owns an identified actual native callback tied to the exact stimulus generation,
+without an expiry timer or historical hold counter. GREEN explicitly releases it
+after the post-stimulus checkpoint; RED retains it through completed early native
+capture and releases it in bounded error-preserving cleanup. Queued output and
+native unmodified-pointer invalidation fail distinctly, without repeating the
+stimulus or recapturing for success. Fixed
+`__OMXTERM_HOVER_PHASE__` preparation/geometry/draw/event/count evidence survives
+profile removal in the supervisor journal without terminal text or destinations.
+Run these controls with:
+
+```sh
+npx vitest run test/unit/restty-hover-evidence.test.ts test/unit/restty-hover-readiness.test.ts test/integration/restty-hover-readiness.test.ts
+```
+
 Local-image native fixtures exercise the real recognizer, activation routing,
 main loader, filesystem reads and native PNG/JPEG decoder. Directory-picker
 selection is controlled at Electron's dialog port, with exact owner, home-start
@@ -544,8 +674,8 @@ boundary, resize/reflow, dismissal and focus. These controls temporarily constra
 content inside the native window, observe the real Surface/PTY grid, and restore
 the original layout in `finally`; they do not require arbitrary native sizes to
 be honored by a tiler. Canvas extents target the interior of actual device-cell
-backing buckets, with exact observed backing/grid checks and unchanged strict
-CSS/hover budgets; nominal CSS boundaries can quantize below a backing pixel.
+backing buckets, with exact observed backing/grid checks and strict cell/pixel
+assertions; nominal CSS boundaries can quantize below a backing pixel.
 Generated paths use bounded filesystem components and a fixture-only observation
 of Ghostty cells and selection text for the root's sentinel position. CPR is not
 used for width measurement: Restty's output filter can answer it from a UTF-16
@@ -553,8 +683,11 @@ hint before Ghostty receives the text. The long reference must really wrap, and
 the filename space must occupy the observed grid's last column. Separate wide-only
 and combining-only root controls independently read the actual row-end space and
 next-row filename cells, then check hover, exact activation, native preview and
-both reflow directions without reprinting. The read-only observer exists only in the
-broad-host and focused destination-oracle fixture bundles, not a production Surface API. macOS uses a short owned random `/tmp` profile so the complete path
+both reflow directions without reprinting. Hover reuses their pre-emission
+`CSI 16 t` reply only while it matches current observed device-cell metrics exactly,
+so another query cannot echo into a retained path. The read-only observer exists
+only in host fixture bundles (including focused scenarios), not a production
+Surface API. macOS uses a short owned random `/tmp` profile so the complete path
 prefix fits the viewport-clipping control inside the original window.
 Its unrelated gesture-only references still return cancellation. No physical
 click/picker acceptance is claimed.
@@ -644,21 +777,67 @@ The [native fixture runner](../test/fixtures/run-native-fixture.ts) uses a separ
 supervisor to clean up Electron, native PTYs and helper processes, including
 after a test worker exits unexpectedly.
 
+Pass the current Vitest `testContext` and file-only `prepare` callback to
+`runNativeFixture` so preparation, launch, cancellation and settlement share one
+owned operation. The runner joins it in a test-finished hook without an independent
+cleanup timeout; the original test deadline still fails. It checks the context
+immediately before each new preparation/build phase after awaited prerequisites
+and before handoff, preventing an expired callback or control loop from starting
+later work. Started preparation writers must settle before
+failure escapes. The runner removes an unchanged unhanded failed profile with the
+existing error-preserving helper; it refuses replaced or already supervised roots.
+That responsibility continues after supervisor preparation returns and through
+Windows request-file publication until handoff. A context already aborted at API
+entry leaves its unprepared caller-owned root untouched. Adopted callers check
+before allocating a profile and again inside their cleanup region before API
+delegation; a context ended during allocation therefore releases the caller-owned
+root. After delegating to the API, callers must not delete profiles on rejection:
+ownership may be uncertain.
+
+Cursor and Chrome pass the same context through independent observation and the
+subsequent behavior run; discovery controls reuse it for every iteration. Hover,
+broad host, focused cancellation and destination-oracle callers likewise delegate
+their file-only builders to this boundary. Parameterized tests use Vitest's
+`it.for` context callback rather than `it.each`, which supplies only case values.
+Existing native execution and enclosing test budgets remain unchanged.
+
+The ordinary in-process callers also forward actual context and joined file-only
+preparation: `application-about`, `failure-acknowledgement`,
+`initialization-cancellation`, `intrinsic-shift`, `literal-argv`,
+`pending-tab-ownership`, `production-shutdown`, `restty-background-rendering`,
+`restty-native-scroll-feedback`, `startup-tab-titles`, `surface-font-ownership`,
+`tab-removal`, `macos-window-blur`, `linux-foreground`, `terminal-resize-race` and
+`terminal-session-retirement` (under `test/integration/`). Local helpers retain
+that same context. Callers with a separate base directory keep its cleanup
+separate from the supervised profile and preserve it after uncertain handoff.
+
+This is not universal caller adoption. The opt-in `altgr-native` and
+`local-image-capacity-native` callers, and the direct recovery calls in
+`native-fixture-early-exit`, `native-fixture-interruption` and
+`native-fixture-outcome-windows`, still lack this outer lifetime join when enabled.
+Standalone interruption/bootstrap workers intentionally do not receive a Vitest
+context; their outer worker-control tests likewise remain outside this adoption.
+Do not change their worker-loss protocol or mistake recipe writer settlement,
+serial test configuration, or a private diagnostic guard for an outer finish join.
+
 Before native launch, the Restty host builder settles all started parallel build
 and file operations before reporting a preparation failure. It preserves the
-first failure, including when another builder later fails, so the caller can
-remove the unsupervised profile without late build writes recreating it. This
-covers broad host, focused cancellation and destination-oracle/mutant
-preparation; it does not extend supervisor ownership to the build phase.
+first failure, including when another builder later fails. The shared runner joins
+this file-only preparation and reclaims only known unhanded roots without late
+writes recreating them. This covers broad host, focused cancellation and
+destination-oracle/mutant preparation; the native supervisor starts only after
+the builder settles.
 
 The sibling builders use `prepareFixture` for pre-launch ownership: parallel
 build/file operations register before starting, all started operations settle
-before failure escapes, and only the owned failed root is removed. Serial setup
-failures are covered too. The first error is preserved; a removal failure reports
-both errors rather than hiding cleanup uncertainty. Preparation failure cleanup
-belongs only to the builder; caller launch error handling begins after preparation
-succeeds. Successful preparation leaves the profile with its caller, and
-supervisor-owned profiles are never removed by this helper. Cursor/background and
+before failure escapes. Serial setup failures are covered too. Standalone recipes
+retain the default `recipe` cleanup owner: a removal failure reports both errors
+rather than hiding cleanup uncertainty. Delegated cursor, Chrome, scrollback,
+ordinary-caller recipe builders and independent native discovery explicitly use
+the `runner` cleanup owner. Their helper joins writers and rethrows the original failure without
+removing the root; the runner alone checks identity and ownership before cleanup,
+preserving replacements and uncertain ownership. Successful preparation leaves
+the profile with the delegating runner (or a legacy caller). Cursor/background and
 macOS blur callers resolve the executable before handing off ownership. Their
 pre-launch failure cleanup uses the same error-preserving removal operation:
 removal failure retains both errors and the original setup error as the cause,
@@ -672,7 +851,7 @@ external builders mocked and real owned filesystem writes; they do not establish
 native rendering, compiler, installed-font or PTY success:
 
 ```sh
-npx vitest run test/unit/fixture-preparation.test.ts test/unit/fixture-preparation-recipes.test.ts test/unit/fixture-preparation-callers.test.ts
+npx vitest run test/unit/fixture-preparation.test.ts test/unit/fixture-preparation-recipes.test.ts test/unit/fixture-preparation-callers.test.ts test/unit/native-preparation-ownership.test.ts test/unit/run-native-fixture-windows.test.ts
 ```
 
 When adding supervised fixtures:
@@ -717,7 +896,27 @@ stays in the caller's interactive desktop, session and environment. After
 observing supervisor disappearance, the Windows caller reads its outcome once
 more with the same validation, preserving actual exit and cleanup metadata.
 Missing or invalid evidence still fails; file presence alone is not success.
-POSIX uses a detached supervisor and IPC-disconnect detection.
+The former execution-timeout-plus-15-second caller deadline is not a cleanup
+allowance and no longer releases a live owner. Test cancellation publishes a
+nonce-bound request to the existing Windows supervisor; native bootstrap errors
+also request cancellation and await actual supervisor disappearance. POSIX uses
+its detached supervisor and IPC-disconnect cleanup, then joins actual process exit
+and stderr draining separately from the composite ChildProcess close event.
+
+Uncertain handoff, missing/invalid outcome or nonempty cleanup errors retain
+`ownership-blocked.json` in the receipt directory, preventing later launches in
+that scope across test workers. Ordinary callers share `.scratch/native-fixtures/`;
+isolated negative probes may use their own receipt directories. This is not a
+global desktop lock. Investigate the retained owner and evidence before clearing a
+stop receipt or reclaiming its profile; do not blindly retry or delete uncertainty.
+If a stop receipt cannot be published, the owning operation remains unsettled
+rather than authorizing another native launch. Known clean settlement does not
+hide an earlier transport failure.
+
+The ordinary POSIX lifetime regression requests cooperative cleanup of one owned
+Node child, checks actual child/supervisor exit, and rejects a late start from the
+ended context. It opens no Electron window or PTY and is skipped on Windows;
+headless Windows handoff tests are not native Windows qualification.
 
 This is cooperative fixture cleanup, not process containment. POSIX inspection
 and signaling are separate operations, and macOS creation times have second-level
