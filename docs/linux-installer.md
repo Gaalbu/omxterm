@@ -26,7 +26,8 @@ in your home folder's path are preserved; no renaming or manual escaping is need
 ## Additional verified compatibility: Cinnamon (X11)
 
 A maintainer verified OMXTerm `0.20.1-dev.0` on **Fedora 44 ARM64 with
-Cinnamon 6.6.7 and Muffin (X11)**. The following worked:
+Cinnamon 6.6.7 and Muffin (X11)**, using the standard **Cinnamon** login-session
+entry, not **Cinnamon on Wayland (Experimental)**. The following worked:
 
 - Dependency installation with `npm ci`.
 - Linux packaging with `npm run package:linux`.
@@ -45,7 +46,7 @@ Known limitations in that environment:
 
 This is additional verified desktop compatibility within Linux ARM64, not a
 claim that every feature or every distribution running Cinnamon was tested.
-It does not cover Cinnamon's experimental Wayland session.
+The experimental Wayland session has the separate, limited working route below.
 
 ## Only if graphics fail
 
@@ -60,11 +61,14 @@ Then open OMXTerm from the application menu again. **Compatibility mode may be
 slower or less stable**, so start with normal installation. Run `install` without
 the option to return to normal mode. These changes apply on the next launch.
 
-In a maintainer's Fedora VM check, normal installation worked in GNOME and the
-standard Cinnamon session. Cinnamon on Wayland (Experimental) failed graphics
-initialization; reinstalling with `--compatibility` and launching from the
-application menu restored rendering. This is an observed workaround, not a
-requirement for every Cinnamon session.
+In the tested Fedora environment, **Cinnamon on Wayland (Experimental)** failed
+graphics initialization with the normal launch. Installing with
+`--compatibility` and opening OMXTerm from the application menu produced a usable
+terminal. **Development mode (`npm run dev`) did not work in that session**;
+compatibility installation does not apply its launch options to development mode.
+This is a working installed-terminal route, not full development or test-suite
+compatibility for the experimental session. The standard Cinnamon (X11) session
+does not require this workaround in the verified setup.
 
 <details>
 <summary>What does compatibility mode change?</summary>
