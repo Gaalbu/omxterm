@@ -21,18 +21,18 @@ _Fedora KDE Plasma, with background transparency and blur._
 
 **Windows**
 
-![OMXTerm on Windows with PowerShell and a hidden title bar](docs/images/windows.webp)
+![OMXTerm on Windows with PowerShell, two tabs, and a blurred background](docs/images/windows.webp)
 
 **Ubuntu GNOME**
 
-![OMXTerm on Ubuntu GNOME with fastfetch and htop in two tmux panes](docs/images/ubuntu-gnome.webp)
+![OMXTerm on Ubuntu GNOME with overlapping terminal windows showing fastfetch and a shell](docs/images/ubuntu-gnome.webp)
 
 **Omarchy / Hyprland**
 
-![OMXTerm on Omarchy with a hidden title bar and fastfetch system information](docs/images/omarchy-hyprland.webp)
+![OMXTerm on Omarchy with tiled windows showing LazyVim, btop, and a shell](docs/images/omarchy-hyprland.webp)
 
-These setups use custom shell and desktop preferences. Personal details are
-masked; the split panes come from tmux.
+These setups use custom shell and desktop preferences. Window tiling comes from
+the desktop window manager; terminal split panes come from tmux.
 
 </details>
 
