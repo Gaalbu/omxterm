@@ -6,8 +6,8 @@ and the retained JetBrainsMono Nerd Font Mono regular coverage face. A configure
 system family's validated regular face and available bold, italic and bold-italic
 faces precede them; representative operating-system emoji, CJK, and symbol faces
 follow them. With a configured system family, bundled bold faces are omitted so
-Restty prefers that family's real styles or synthesizes a missing style from its
-regular face instead of selecting another family's bundled bold. OMXTerm never
+Restty prefers that family's real styles or synthesizes missing traits from its
+available faces instead of selecting another family's bundled bold. OMXTerm never
 downloads fonts at runtime.
 
 ## FiraCode Nerd Font Mono
@@ -55,7 +55,7 @@ downloads fonts at runtime.
 
 ## Nerd Fonts patched glyph provenance
 
-Both Nerd Fonts faces include the patched icon sets listed by the pinned Nerd
+Both Nerd Fonts families include the patched icon sets listed by the pinned Nerd
 Fonts releases. Their MIT, OFL 1.1, CC BY 4.0 and Apache 2.0 notices and upstream
 copyrights are preserved together in `NerdFonts-glyphs.txt`; SHA-256:
 `c67e7c17fa4fa1f894b8f4a1bb1ca4bbbce19cbea1eb80d5b0c400cf0e2ec332`.
@@ -73,7 +73,7 @@ The combined notice was reconciled against these exact primary tag sources:
   retaining the `Copyright (c) 2015 konpa` statement.
 
 The `v3.5.1` GitHub release reports the same FiraCode archive digest recorded
-above. Directly downloaded `v3.4.0` `JetBrainsMono.zip` and both extracted font
-faces match the recorded archive and bundled-face digests. These pinned source
+above. Directly downloaded `v3.4.0` `JetBrainsMono.zip` and its bundled regular
+face match the recorded archive and bundled-face digests. These pinned source
 and byte identities, not an unpinned latest-release URL, are the release
 reverification anchors.

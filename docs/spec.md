@@ -644,7 +644,8 @@ retained. Normal `..` resolution is allowed, not a filesystem sandbox. Home and
 absolute references need no base picker. Resolved paths must pass the same local
 absolute validation and source-length bound. No source opens an operating-system
 URL handler: after activation only, main reads the target through a non-shell
-regular-file boundary. The content must be a structurally valid, natively
+regular-file boundary. On macOS and Linux, that read rejects a symlink in the
+final path component. The content must be a structurally valid, natively
 decodable static PNG or JPEG of at most 64 MiB encoded, 8192 pixels per side,
 and 32 million pixels (inclusive). APNG and every other animated or unsupported
 format are rejected regardless of extension. The same Terminal Window permits at
@@ -662,15 +663,15 @@ process-memory budget: native validation, IPC, browser decode and GPU resources
 can add transient copies. Dismissal releases application ownership, not a
 promise of immediate RSS or native/GPU reclamation. The preview fits the
 complete image proportionally within the overlay's content area, including after
-window resizing, without clipping or stretching it. Failed reads and decode
-failures show only a fixed non-path error. Unsupported content has a separate
-fixed non-path format message; actual WebP remains unsupported regardless of its
-extension or successful path recognition. OMXTerm never reads on output or
-hover, infers a relative base, performs shell expansion, consults shell/agent
-cwd, fetches or transfers a remote image, accepts UNC/file authorities, treats
-OSC 8 metadata as a local source, logs image paths or payload, writes/downloads
-image data, or persists the preview. A clicked path always addresses the machine
-running OMXTerm regardless of where its text originated.
+window resizing, without clipping or stretching it. Failed reads, PNG/JPEG
+validation failures (including APNG rejection) and decode failures show a fixed
+non-path load error. Unrecognized formats such as WebP have a separate fixed
+non-path format message, regardless of extension or successful path recognition.
+OMXTerm never reads on output or hover, infers a relative base, performs shell
+expansion, consults shell/agent cwd, fetches or transfers a remote image, accepts
+UNC/file authorities, treats OSC 8 metadata as a local source, logs image paths
+or payload, writes/downloads image data, or persists the preview. A clicked path
+always addresses the machine running OMXTerm regardless of where its text originated.
 
 Application mouse modes own buttons, motion, and wheel reporting in normal and
 alternate screens; Shift retains the selection override, and explicit copy and
@@ -698,13 +699,14 @@ mouse input. OSC 8 destinations and all other schemes are ignored.
   source or formatted result; a serialized native UTF-8 source above 1,048,576
   bytes is rejected before decoding.
 - On macOS and Linux, each path is an independently single-quoted POSIX shell
-  token, with an apostrophe represented by closing the quote, a quoted
+  token, with an apostrophe represented by closing the quote, a backslash-escaped
   apostrophe, and reopening it. On Windows, each path is an independently
   single-quoted Windows PowerShell 5.1 token; U+0027 and U+2018 through U+201B
-  are doubled. Tokens are separated by one ASCII space. This encoding assumes
-  insertion starts at a fresh ordinary argument-token boundary in the initial
-  Default Shell. Without Shell Integration, OMXTerm cannot promise correct
-  syntax inside a partial quote, nested shell, SSH session, REPL, or TUI.
+  are doubled. Tokens are separated by one ASCII space. This encoding is fixed
+  by platform, not by `windowsShell`, and assumes insertion at a fresh ordinary
+  argument-token boundary in the corresponding shell. Without Shell Integration,
+  OMXTerm cannot promise correct syntax in another shell, a partial quote, SSH
+  session, REPL, or TUI.
 - Multiline or control-character paste asks for confirmation only when the
   receiving process has not enabled bracketed paste.
 - Paste is never truncated, interpreted, summarized, or logged. Semantic paste,
@@ -1006,7 +1008,7 @@ releases its font bookkeeping. Theme, configured font-size baseline, padding and
 Window Font Zoom remain live and preserve the existing Surface and PTY. Invalid,
 missing, unreadable, unsupported or corrupt configured font input rejects the
 whole reload. Runtime scrollback reduction, including zero, uses the selected
-Surface's in-memory core behavior described above; programming- ligature changes
+Surface's in-memory core behavior described above; programming-ligature changes
 use the existing Restty runtime setter without reloading fonts, and Option Key
 Mode changes only subsequent keyboard events. OMXTerm never migrates, repairs,
 rewrites, or silently ignores User Configuration. The same surface also carries

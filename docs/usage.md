@@ -213,6 +213,9 @@ location outside the quotes. The native picker and `file:///` URLs always name
 literal files without tool-suffix interpretation. `%` and `#` in native paths
 remain literal filename characters.
 
+On macOS and Linux, a path ending in a symbolic link is rejected. Select or
+print the target image's path instead.
+
 </details>
 
 ## Inline terminal images

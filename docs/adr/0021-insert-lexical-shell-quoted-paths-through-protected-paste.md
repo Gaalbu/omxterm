@@ -26,16 +26,17 @@ of oversized sources before decoding) are normative in
 [`docs/spec.md`](../spec.md); they exist so a hostile or accidental clipboard
 payload is bounded at the boundary rather than streamed into the PTY.
 
-Each path becomes an independently single-quoted token for the platform's
-Default Shell: POSIX quoting with the close-quote/escaped-apostrophe/reopen
-idiom on macOS and Linux, and Windows PowerShell 5.1 quoting that doubles
+Each path becomes an independently single-quoted token using fixed platform
+quoting: POSIX with the close-quote/escaped-apostrophe/reopen idiom on macOS and
+Linux, and Windows PowerShell 5.1 quoting that doubles
 `U+0027` and the `U+2018`–`U+201B` quote characters PowerShell also treats as
 quotes. Single quotes were chosen over backslash escaping or double quotes
 because they neutralize the largest metacharacter surface without enabling
 variable or subexpression expansion. The encoding assumes insertion at a
-fresh ordinary argument-token boundary in the initial Default Shell. Without
-Shell Integration ([ADR 0013](0013-do-not-inject-shell-integration.md)),
-OMXTerm cannot see shell state, so it does not promise correct syntax inside
+fresh ordinary argument-token boundary in the corresponding shell;
+`windowsShell` does not change the encoding. Without Shell Integration
+([ADR 0013](0013-do-not-inject-shell-integration.md)), OMXTerm cannot see shell
+state, so it does not promise correct syntax inside
 a partial quote, nested shell, SSH session, REPL or TUI. Lexical insertion avoids
 shell integration and context guessing.
 
