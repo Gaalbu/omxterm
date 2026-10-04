@@ -2,31 +2,41 @@
 
 ## Context
 
-The published 0.17.0 helper installs a verified local AppImage transactionally,
-but users still need to understand launch flags when a desktop exports Wayland,
-a virtual GPU cannot initialize Chromium's WebGL2 context, or XWayland leaves a
-HiDPI interface too small. The Try Omarchy investigation in #425 reproduced these
-as separate conditions. The owner requested a short helper filename and minimal
-user choices, not automatic global desktop repair (#426).
+Display backend, WebGL2 availability and interface scaling are separate Linux
+launch conditions. The helper supplies small inspectable install-time choices
+without changing global desktop policy or adding runtime discovery.
 
 ## Decision
 
-The next release names the helper `linux_install.sh` and its checksum
-`linux_install.sh.sha256`. The embedded `--version`, release URL and checksum
-retain its exact release identity. Published assets and release records remain
-immutable. This amends ADR 0019's helper presentation, not supported platforms,
-package formats, artifact trust or native release-verification requirements.
+The helper is published as `linux_install.sh` with
+`linux_install.sh.sha256`. Its embedded `--version`, release URL and checksum
+retain exact release identity under
+[ADR 0019](0019-support-native-arm64-releases-on-macos-linux-and-windows.md).
 
 Keep `install [--compatibility] <verified-local-AppImage>`, `uninstall`,
 `--version`, and `--help` as a non-interactive interface. The fixed ownership set
 remains the AppImage, icon and desktop entry; no launcher service, manifest,
 configuration migration, dependency installer or network discovery is added.
-All three files retain transactional replacement and rollback.
+All three replacements are staged and protected by recovery traps until the
+replacement phase completes. A staging/replacement failure attempts rollback;
+if restoration fails, unrestored originals remain at reported backup locations.
+
+**Current post-commit limitation:** after replacing all three files the helper
+disables recovery traps, then deletes staging/backups under `set -e`. A cleanup
+error can return nonzero with the new installation already committed, originals
+partly removed and no structured cleanup/recovery status. A nonzero result does
+not always mean the old installation survived. This is distinct from replacement
+failure and rollback; it does not imply required post-commit hardening. Inspect
+the installed entries and remaining staging/backups before retrying.
+
+Uninstall removes only the three owned entries, including symlinks themselves,
+not their referents. It preserves unrelated files and parent directories. A
+removal failure can leave partial removal; uninstall is not transactional.
 
 The installed desktop entry explicitly selects `--ozone-platform=x11`, the
-supported Linux path under ADR 0020. An ambient Wayland preference no longer
-changes that entry's backend. The application's own override rules and direct
-AppImage launch behavior are unchanged; the installer supplies an explicit
+supported Linux path under ADR 0020. An ambient Wayland preference does not
+change that entry's backend. Direct AppImage launches use the application's
+override rules; the installer supplies an explicit
 argument rather than introducing another runtime default.
 
 Only `--compatibility` adds per-process Mesa software rendering and Chromium's
@@ -46,7 +56,7 @@ it by reinstalling after display changes. No launch-time probing is introduced.
 ## Consequences
 
 The ordinary path needs no compositor or graphics vocabulary. One clearly
-opt-in compatibility choice covers the tested VM workaround, while desktop-entry
+opt-in compatibility choice provides software graphics, while desktop-entry
 launches retain their fixed, inspectable behavior. No new mandatory dependency
 is introduced; optional desktop queries use existing command-line tools.
 

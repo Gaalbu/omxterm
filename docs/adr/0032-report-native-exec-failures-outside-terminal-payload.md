@@ -2,12 +2,10 @@
 
 ## Context
 
-Pinned node-pty 1.1.0 can create a PTY successfully but fail to execute its
-requested program. Its macOS helper and Linux fork child report that as exit
-code 1 with no signal. That is indistinguishable from a successfully executed
-program returning 1. Synchronous spawn-exception tests did not cover this native
-boundary. Filesystem preflight cannot prove execution, and interpreting exit
-codes or Terminal Payload would violate the existing contract.
+PTY creation and successful program execution are distinct. Numeric exit status
+cannot distinguish failed exec from a program returning nonzero; filesystem
+preflight cannot prove execution. Native startup reporting therefore uses a
+private status channel rather than exit-code or Terminal Payload heuristics.
 
 ## Decision
 
@@ -23,20 +21,24 @@ native exit thread consumes this status after reaping the child and includes a
 boolean in its existing exit callback. It neither blocks Electron's main thread
 waiting for startup nor interprets output, errno strings, or numeric exit status.
 The executable, argv, environment, working directory, native exec operation and
-PTY ownership remain unchanged. No new shell or executable wrapper is inserted.
+PTY ownership use the same direct spawn path, without a shell or executable
+wrapper.
 
 Main translates only that boolean into a fixed optional `startupFailed: true`
 exit field. Strict preload validation preserves it; renderer tab ownership waits
-for the native failure acknowledgement just as for unexpected signals. Main
-classifies the Operational Event as `spawn-failure` with null code and uses the
+for the native failure acknowledgement just as for unexpected signals. The
+conditional exit-send notification gap is described in
+[ADR 0016](0016-adopt-tabs-with-one-live-session-per-tab.md#session-ownership-and-lifecycle);
+it has no established native production trigger. Main classifies the Operational
+Event as `spawn-failure` with null code and uses the
 existing fixed spawn dialog. Successfully executed programs returning nonzero
-retain ordinary exit semantics. Requested close and rendering-failure precedence
-remain unchanged. Native exit, not the status byte or kill request, still releases
+retain ordinary exit semantics; requested close and rendering failure keep
+their outcome precedence. Native exit, not the status byte or kill request, releases
 the application shutdown record (ADR 0028).
 
 ## Consequences and verification
 
-Unix installation now requires the native compiler and `patch`; macOS already
+Unix dependency preparation requires the native compiler and `patch`; macOS
 needs Apple tooling for its blur addon. Unknown upstream native or JavaScript
 source bytes stop preparation rather than applying an approximate patch. This
 is a maintained adaptation of the pinned dependency, not an upstream guarantee.

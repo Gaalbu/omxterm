@@ -54,8 +54,9 @@ getconf GNU_LIBC_VERSION
 
 You need **`aarch64`** and **glibc 2.42 or newer**. Older distributions, including
 Ubuntu 24.04, cannot run this AppImage. Use a compatible distribution rather than
-replacing its system glibc. The [release record](releases/0.20.1.md) lists the
-tested environment.
+replacing its system glibc. See the
+[published release notes](https://github.com/luizomf/omxterm/releases/tag/v0.20.1)
+for package requirements and verification details.
 
 OMXTerm also needs `fontconfig` for fonts and X11 or **XWayland** for its window.
 XWayland lets it run on a Wayland desktop. The optional desktop helper uses
@@ -117,7 +118,10 @@ sha256sum --check OMXTerm-0.20.1-arm64.AppImage.sha256 &&
 Open **OMXTerm** from your application menu. The helper copies it into your user
 folder and chooses mounting or extraction automatically. Keep the helper for
 updates and uninstalling. See the [desktop helper guide](linux-installer.md)
-for graphics compatibility and Hyprland display scaling.
+for graphics compatibility, Hyprland display scaling, and
+[failure/recovery limits](linux-installer.md#update-help-and-uninstall). A failure
+in final cleanup can leave the new installation in place; inspect the reported
+error before retrying.
 
 ## Windows
 

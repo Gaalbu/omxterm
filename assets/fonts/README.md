@@ -2,11 +2,13 @@
 
 OMXTerm passes these tracked TTF bytes directly to Restty. The ordered bundled
 faces are FiraCode Nerd Font Mono regular/bold, DejaVu Sans Mono regular/bold,
-and the retained JetBrainsMono Nerd Font Mono regular coverage face. An exact
-configured system face precedes them; representative operating-system emoji,
-CJK, and symbol faces follow them. With a configured system family, bundled bold
-faces are omitted so the configured regular face retains priority for both
-regular and synthetically bold text. OMXTerm never downloads fonts at runtime.
+and the retained JetBrainsMono Nerd Font Mono regular coverage face. A configured
+system family's validated regular face and available bold, italic and bold-italic
+faces precede them; representative operating-system emoji, CJK, and symbol faces
+follow them. With a configured system family, bundled bold faces are omitted so
+Restty prefers that family's real styles or synthesizes a missing style from its
+regular face instead of selecting another family's bundled bold. OMXTerm never
+downloads fonts at runtime.
 
 ## FiraCode Nerd Font Mono
 
@@ -62,7 +64,8 @@ The combined notice was reconciled against these exact primary tag sources:
 - `https://raw.githubusercontent.com/ryanoasis/nerd-fonts/v3.5.1/LICENSE`
 - `https://raw.githubusercontent.com/ryanoasis/nerd-fonts/v3.5.1/license-audit.md`
 - `https://raw.githubusercontent.com/ryanoasis/nerd-fonts/v3.5.1/src/glyphs/README.md`
-- the seven top-level license files under that tag's `src/glyphs/`, plus
+- the seven license files in glyph-set subdirectories under that tag's
+  `src/glyphs/`, plus
   `src/glyphs/weather-icons/OFL.txt` (including its upstream placeholders),
   reconciled with `v3.4.0`;
 - Devicon's MIT notice at

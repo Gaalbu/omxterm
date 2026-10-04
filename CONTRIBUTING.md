@@ -133,7 +133,10 @@ when changing the Terminal Surface or its pinned dependencies.
 OMXTerm focuses on local terminal sessions. For behavior changes, read the
 relevant [product contract](docs/spec.md), [terminology](CONTEXT.md) and
 [architecture decisions](docs/adr/). They explain current behavior and the
-tradeoffs behind it.
+tradeoffs behind it. Keep these documents accurate for current code; revise
+obsolete decisions rather than retaining chronology in active files. Git keeps
+previous text. Separate supported code bugs into focused issues instead of
+turning documentation drift into unrequested implementation work.
 
 - Keep the change focused, with clear modules, strict types and dependencies
   that serve a concrete need.
@@ -165,14 +168,19 @@ For code, run:
 npm run check:portable
 ```
 
-This runs formatting, lint, type checking, tests and the unpackaged build. You
-can run `npm run lint`, `npm run typecheck`, `npm test` or `npm run build`
-separately while developing. Graphical tests need a working desktop and WebGL2;
-“portable” does not mean headless. Run one native suite at a time per desktop.
+This runs formatting, lint, type checking, the default Vitest suite and the
+unpackaged build. You can run `npm run lint`, `npm run typecheck`, `npm test` or
+`npm run build` separately while developing. `npm run test:integration` runs only
+`test/integration/local-shell.test.ts`, not the full integration directory.
+Graphical tests need a working desktop and WebGL2; “portable” does not mean
+headless. Run one native suite at a time per desktop. Platform skips and explicit
+opt-in tests are not passes on those boundaries; see the
+[qualification scope](docs/development.md#qualification-scope).
 
-Product packaging changes also need matching native evidence. Use the full
-check when evidence is missing; reuse recorded PASS steps with unchanged relevant
-inputs under the [release procedure](docs/release.md#changed-inputs-and-build-to-tag-comparison).
+Product packaging changes also need matching native evidence. Reuse recorded
+PASS steps from Git or previous issues/PRs when relevant inputs are unchanged;
+run missing or invalidated steps under the
+[release procedure](docs/release.md#changed-inputs-and-build-to-tag-comparison).
 Test-only/fixture-only changes need affected tests and honest results, not package
 rebuilds everywhere. Proven orchestration-only changes need orchestration tests;
 retained metadata or changed build recipes are not automatically exempt.
@@ -196,8 +204,10 @@ path does not protect an existing installation. For non-installing diagnostics,
 run `npm run package:win`, then
 `npm run package:verify -- --windows-unpacked-only`.
 
-List checks you could not run and why. Report each platform's actual results;
-a pass on one platform does not establish another. Everyday testing is welcome
+List unavailable checks and reasons. Report actual platform results and coverage
+limits; one platform's pass does not qualify another. Preserve failures and
+explain their relevance rather than erasing them with a later pass. Record results
+in the PR, not a new repository execution report. Everyday testing is welcome
 but optional for releases.
 
 ## Commits and pull requests

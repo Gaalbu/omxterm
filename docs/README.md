@@ -28,9 +28,14 @@ links and copy destinations. Back up first: copying a set replaces preferences.
 | Give feedback or contribute                   | [Contributing](../CONTRIBUTING.md)                                                                                                                                                                                          |
 | Report a vulnerability privately              | [Security policy](../SECURITY.md)                                                                                                                                                                                           |
 
-The guides follow the current source. [Release notes](releases/) record what
-shipped in each version; the [README](../README.md#platforms-and-downloads) links
-to the latest download.
+The guides describe current source behavior, including practical limitations in
+[troubleshooting](usage.md#troubleshooting), [configuration reload](configuration.md#reloading-user-configuration),
+and [Linux installer recovery](linux-installer.md#update-help-and-uninstall).
+Specifications, contracts, and ADRs are maintained alongside the product, not
+immutable promises of future implementation. This tree contains current guidance;
+commits, issues and PRs retain earlier decisions and observations.
+[GitHub releases](https://github.com/luizomf/omxterm/releases) describe published
+versions; the [README](../README.md#platforms-and-downloads) links to the latest download.
 
 For GNOME, KDE Plasma, Hyprland, and VM graphics setup, see
 [Linux desktop tips](quick-start/linux-desktop.md).
@@ -42,19 +47,8 @@ For GNOME, KDE Plasma, Hyprland, and VM graphics setup, see
 - [Product contract](spec.md), [project vocabulary](../CONTEXT.md), and
   [architecture decisions](adr/README.md).
 - [Restty development](restty-development.md) — terminal rendering and dependencies.
+- Focused diagnostics: [emoji shaping](emoji-shaping-diagnostics.md),
+  [hidden rendering](hidden-rendering-diagnostics.md) and
+  [WebGL depth attachments](webgl-depth-diagnostics.md).
 - [Versioning](versioning.md) and [release procedures](release.md).
 - [MIT License](../LICENSE) and [Third-Party Notices](../THIRD_PARTY_NOTICES.md).
-
-<details>
-<summary>Past technical investigations</summary>
-
-Measurements here describe the recorded builds and environments:
-
-- [Restty migration](restty-cutover-evidence.md)
-- [Emoji shaping and memory](emoji-shaping-experiment.md)
-- [Hidden-tab rendering](hidden-rendering-evidence.md)
-- [WebGL depth attachment](webgl-depth-evidence.md)
-- [macOS privacy permissions](macos-privacy-identity.md), including an unadopted
-  signing proposal
-
-</details>

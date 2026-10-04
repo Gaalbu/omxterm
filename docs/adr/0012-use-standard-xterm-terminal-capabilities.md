@@ -6,9 +6,16 @@ the installed application version. These values describe the new PTY and
 replace misleading inherited values. The rest of the user's environment is
 inherited and remains outside log content.
 
-The standard xterm capability vocabulary describes protocol compatibility; it
-does not refer to OMXTerm's former renderer. OMXTerm therefore uses the widely
-available `xterm-256color` contract and does not define `xterm-omxterm`, install
+Restty's parsed output seam answers device attributes, cursor-position reports
+(CPR) and cell-size reports once. Current CPR coordinates can disagree with
+Ghostty after wide/combining text and pending-wrap resize because OutputFilter
+uses a UTF-16 cursor hint before core ingestion. This compatibility bug is
+tracked in [#568](https://github.com/luizomf/omxterm/issues/568); exactly-once
+replies and advertised capabilities do not establish complete xterm correctness.
+See [ADR 0025](0025-use-restty-as-the-terminal-surface.md#keyboard-input-and-terminal-controls).
+
+The standard xterm capability vocabulary describes protocol compatibility.
+OMXTerm uses the widely available `xterm-256color` contract and does not define `xterm-omxterm`, install
 custom terminfo, or propagate terminfo automatically over SSH. A branded entry
 would make ordinary shell, tmux, SSH, and full-screen application behavior
 depend on installation state outside OMXTerm. That operational cost needs a
