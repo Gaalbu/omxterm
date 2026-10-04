@@ -4,20 +4,20 @@ OMXTerm is an open-source desktop terminal you can make your own. Open a few tab
 choose your colors and shortcuts, and get to work. Available for **Apple Silicon
 macOS, Linux ARM64, and Windows ARM64**.
 
-![OMXTerm on Fedora KDE Plasma with two tabs, a transparent background, and fastfetch system information](docs/images/fedora-kde.webp)
+![OMXTerm on macOS with colorful fastfetch output and a blurred desktop behind the terminal](docs/images/macos.webp)
 
-_Fedora KDE Plasma, with background transparency and blur._
+_macOS, with background transparency and blur._
 
 <details>
-<summary>See macOS, Windows, and more Linux desktops</summary>
+<summary>More screenshots: macOS, Windows, and Linux</summary>
 
-**macOS**
+**macOS — tabs and snippets**
 
-![OMXTerm on macOS showing colorful fastfetch output inside tmux](docs/images/macos.webp)
+![OMXTerm on macOS with two tabs, fastfetch output, and the snippets sidebar](docs/images/macos-background.webp)
 
-**macOS — background effects**
+**Fedora KDE Plasma**
 
-![OMXTerm on macOS with three tabs and a blurred desktop behind the terminal](docs/images/macos-background.webp)
+![OMXTerm on Fedora KDE Plasma with two tabs, a transparent background, and fastfetch system information](docs/images/fedora-kde.webp)
 
 **Windows**
 
@@ -31,8 +31,8 @@ _Fedora KDE Plasma, with background transparency and blur._
 
 ![OMXTerm on Omarchy with tiled windows showing LazyVim, btop, and a shell](docs/images/omarchy-hyprland.webp)
 
-These setups use custom shell and desktop preferences. Window tiling comes from
-the desktop window manager; terminal split panes come from tmux.
+These setups use custom shell and desktop preferences. The tiled windows in the
+Omarchy screenshot are arranged by Hyprland.
 
 </details>
 
