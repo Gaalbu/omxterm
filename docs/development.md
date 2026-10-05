@@ -181,6 +181,30 @@ journals, and review local paths and failure details before sharing.
 suite and an unpackaged build. It does not package, install or publish.
 Platform guards and opt-ins determine which tests execute; a skip is not a pass.
 
+Keep the tested desktop unlocked and idle while graphical fixtures run. Real
+pointer movement, modifier keys and window activation can replace a fixture's
+controlled hover, selection or focus state. A `stimulus-invalidated` failure
+means that the measured state changed; inspect retained events before attributing
+it to terminal rendering. Do not retry until green or discard the original
+failure. A later pass alone does not identify its cause.
+
+For a graphical test run:
+
+- Leave the VM logged in and unlocked, and do not minimize or suspend it.
+- Do not click, drag-select on the desktop, type, or move the pointer across
+  fixture windows. Desktop clicks can steal focus from native menu/key tests.
+- Run only one graphical suite per desktop. When diagnosing shared-host
+  contention, run one VM's suite at a time against the same source candidate.
+- If a run fails, preserve `.scratch/vitest-results.json` and
+  `.scratch/native-fixtures/` before another run overwrites evidence. An
+  `ownership-blocked.json` file requires the ownership inspection described
+  below; do not clear the directory indiscriminately.
+
+Input interference is not proof of an application defect. Conversely, application
+failure on ordinary focus loss is a defect, not something to excuse as test
+interference. The default `check:portable` includes graphical tests; it is not a
+headless-only check.
+
 Controlled renderer input, injected I/O and held continuations establish the
 asserted boundaries, not physical input or every production interleaving.
 Native captures establish fixture pixels on the tested GPU, not cross-platform
@@ -218,6 +242,14 @@ Window/cursor fixtures compare bounded run-local raw Electron behavior before
 choosing actual native transitions or an unavailable branch. Hide is not minimize
 coverage, and a healthy unchanged maximize result is not a maximize/restore pass.
 Do not run them concurrently with another native suite.
+
+Window Chrome runs one native continuity scenario and an early-failure cleanup
+check. Dropped, wrong-owner and duplicate routing are rejected by focused tests
+using the real exercise and main-process routing functions with native ports
+simulated. The suite does not repeat the full native scenario with a deliberately
+broken route; native rejection of that mutation and populated fixture-error
+teardown are not claimed by those headless checks. Production close/quit and
+fixture settlement have separate coverage.
 
 On Windows, the window fixture moves the desktop pointer for native drag checks;
 keep the desktop idle. Failure acknowledgement uses controlled cancellation of
@@ -330,8 +362,36 @@ worker-loss outcomes even when cleanup succeeds.
 Results and synthetic stdout/stderr are retained under `.scratch/native-fixtures/`.
 Safe phase metadata localizes pending operations but is not completion or process
 ownership proof. An `ownership-blocked.json` receipt stops further launches in
-that scope. Inspect retained owners and evidence before clearing it; do not
-blindly retry, delete uncertain profiles or terminate unrelated processes.
+that evidence scope. Before preparation, the runner can automatically archive
+only a recognized Windows **pre-bootstrap** stop receipt: the retained
+external-child request must match its intact temporary profile and evidence
+scope, process inspection must establish that the authorizing parent's exact
+PID/creation identity is gone, and no supervisor-ready, bootstrap, native
+process/exit/output/cancellation, outcome or process-registration evidence may
+exist. Pending registration files also prevent recovery. The runner rechecks
+retained files before moving the receipt to a unique
+`ownership-blocked-recovered-*/ownership-blocked.json` in the same evidence
+scope. Only successful archival clears its cached stop; cancellation still
+prevents new preparation or launch.
+
+This releases a launch stop, not the previous supervisor's lifetime or original
+failure. Recovery neither deletes the profile nor changes its evidence, executes
+retained code, or kills processes. A WMI creation request can complete after its
+caller timed out: a delayed external-child supervisor cannot start the native
+fixture after the authorizing parent exits, but **may still clean up the old
+profile** and publish its outcome. Receipt recovery does not guarantee profile
+retention against that previously authorized cleanup or establish that WMI's
+original failure is fixed.
+
+Other cases remain blocked with a classified explanation and receipt location:
+including a live parent incarnation, missing/replaced/linked profile entries,
+invalid or mismatched JSON, inspection or archive errors, any bootstrap evidence,
+completed outcomes, and POSIX supervision. Inspect the referenced owners and
+retained evidence before manually clearing an unresolved stop; do not blindly
+retry, delete uncertain profiles or terminate unrelated processes. Recovery is
+serialized within the runner's evidence scope, not a cross-suite desktop lock.
+The existing one-suite-per-desktop rule and cooperative ownership contract still
+apply; these checks do not authenticate evidence against same-user forgery.
 
 Windows supervision uses WMI breakaway from the test worker's Job. WMI and its
 inspection helpers must be available under the caller's policy; Electron stays
@@ -349,11 +409,13 @@ Serial Vitest configuration is not an outer finish join.
 Focused preparation/ownership checks:
 
 ```sh
-npx vitest run test/unit/fixture-preparation.test.ts test/unit/fixture-preparation-recipes.test.ts test/unit/fixture-preparation-callers.test.ts test/unit/native-preparation-ownership.test.ts test/unit/run-native-fixture-windows.test.ts
+npx vitest run test/unit/fixture-preparation.test.ts test/unit/fixture-preparation-recipes.test.ts test/unit/fixture-preparation-callers.test.ts test/unit/native-preparation-ownership.test.ts test/unit/run-native-fixture-windows.test.ts test/unit/native-fixture-recovery.test.ts
 ```
 
 These mock builders and use owned filesystem operations; they do not establish
-native compiler, font, renderer or PTY success.
+native compiler, font, renderer or PTY success. Recovery tests include the actual
+bundled supervisor with mocked process I/O and delayed startup; they establish
+its external-child protocol, not real Windows WMI/Job behavior.
 
 ### Interruption regressions
 

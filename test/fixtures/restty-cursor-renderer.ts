@@ -5,17 +5,41 @@ import type { TerminalFontData } from "../../src/shared/terminal-font-data";
 import type { TerminalSurface } from "../../src/terminal-surface/terminal-surface";
 import type { TerminalSessionHandlers } from "../../src/terminal-surface/terminal-session-adapter";
 import { DEFAULT_TERMINAL_THEME } from "../../src/shared/terminal-theme";
+import type { CursorInputObservation } from "./restty-cursor-readiness";
 
 declare global {
-  var cursorFonts: { load(): Promise<TerminalFontData> };
+  var cursorFonts: {
+    load(): Promise<TerminalFontData>;
+    interference(observation: CursorInputObservation): void;
+  };
   var cursorFixture: ReturnType<typeof createFixture>;
+  var cursorProbe: { painted(): void; blinkNow(): number; refresh(): void };
 }
 const root = document.querySelector<HTMLElement>("#terminal-tabs")!;
+const nativeFrame = window.requestAnimationFrame.bind(window);
+let paints = 0;
+let blinkTime: number | undefined =
+  new URLSearchParams(location.search).get("cursorControl") ===
+  "held-blink-clock"
+    ? 600
+    : undefined;
+globalThis.cursorProbe = {
+  painted() {
+    paints++;
+  },
+  blinkNow() {
+    return blinkTime ?? performance.now();
+  },
+  refresh() {
+    throw new Error("Cursor render refresh unavailable");
+  },
+};
+// Capture operations still cross compositor frame boundaries. A synchronous
+// WebGL tick proves refit submission, not native screenshot presentation.
 const frames = async () => {
   for (let i = 0; i < 3; i++)
     await new Promise<void>((resolve) =>
       requestAnimationFrame(() => {
-        // Hold the actual frame continuation at the normal renderer await seam.
         if (
           new URLSearchParams(location.search).get("cursorControl") ===
           "held-execute"
@@ -25,6 +49,69 @@ const frames = async () => {
       }),
     );
 };
+// A trusted moving pointer or other real input can change focus/selection while
+// pixels are under test. Retain only the fixed event kind, never input contents.
+let lastPointer:
+  | (Pick<PointerEvent, "clientX" | "clientY" | "screenX" | "screenY"> & {
+      originX: number;
+      originY: number;
+      offsetX: number;
+      offsetY: number;
+    })
+  | undefined;
+for (const kind of ["pointermove", "pointerdown", "keydown", "wheel"] as const)
+  document.addEventListener(
+    kind,
+    (event) => {
+      if (!event.isTrusted) return;
+      let nonzeroDelta = false,
+        clientChanged = false,
+        screenChanged = false,
+        viewportOriginChanged = false;
+      if (event instanceof PointerEvent && kind === "pointermove") {
+        // These extra coordinates diagnose origin changes only. They never
+        // alter classification and never cross the renderer boundary.
+        const pointer = {
+          clientX: event.clientX,
+          clientY: event.clientY,
+          screenX: event.screenX,
+          screenY: event.screenY,
+          originX: window.screenX,
+          originY: window.screenY,
+          offsetX: window.visualViewport?.offsetLeft ?? 0,
+          offsetY: window.visualViewport?.offsetTop ?? 0,
+        };
+        nonzeroDelta = event.movementX !== 0 || event.movementY !== 0;
+        clientChanged = Boolean(
+          lastPointer &&
+          (lastPointer.clientX !== pointer.clientX ||
+            lastPointer.clientY !== pointer.clientY),
+        );
+        screenChanged = Boolean(
+          lastPointer &&
+          (lastPointer.screenX !== pointer.screenX ||
+            lastPointer.screenY !== pointer.screenY),
+        );
+        viewportOriginChanged = Boolean(
+          lastPointer &&
+          (lastPointer.originX !== pointer.originX ||
+            lastPointer.originY !== pointer.originY ||
+            lastPointer.offsetX !== pointer.offsetX ||
+            lastPointer.offsetY !== pointer.offsetY),
+        );
+        lastPointer = pointer;
+      }
+      globalThis.cursorFonts.interference({
+        kind,
+        nonzeroDelta,
+        clientChanged,
+        screenChanged,
+        viewportOriginChanged,
+      });
+    },
+    { capture: true },
+  );
+
 function createFixture() {
   let surface: TerminalSurface | undefined;
   let handlers: TerminalSessionHandlers | undefined;
@@ -52,6 +139,11 @@ function createFixture() {
   return {
     async mount(useConfigured: boolean, padding: number) {
       surface?.dispose();
+      blinkTime =
+        new URLSearchParams(location.search).get("cursorControl") ===
+        "held-blink-clock"
+          ? 600
+          : undefined;
       configured = useConfigured;
       container = document.createElement("main");
       container.className = "terminal-surface";
@@ -111,12 +203,20 @@ function createFixture() {
       if (lifecycle === "zoom")
         for (let i = 0; i < 16; i++) surface!.zoom("in");
       if (lifecycle === "refit") {
+        if (
+          new URLSearchParams(location.search).get("cursorControl") ===
+          "held-refit-frames"
+        ) {
+          window.requestAnimationFrame = () => 0;
+          console.info("__OMXTERM_CURSOR_CONTROL__held-refit-frames");
+        }
         // Resize content inside the actual native layout. A tiling compositor
         // need not honor BrowserWindow size requests; pixels still use WebGL2.
         container.style.width = `${Math.floor(container.getBoundingClientRect().width * 0.75)}px`;
         container.style.flex = "0 0 auto";
-        await frames();
+        const before = paints;
         surface!.focus();
+        if (paints <= before) throw new Error("Cursor refit did not render");
       }
       if (lifecycle === "reload") {
         container.style.removeProperty("width");
@@ -130,7 +230,8 @@ function createFixture() {
         });
         surface!.zoom("reset");
       }
-      await frames();
+      if (lifecycle !== "refit") await frames();
+      else window.requestAnimationFrame = nativeFrame;
       handlers!.onOutput("\u001b[16t");
       return {
         cellWidth,
@@ -166,6 +267,16 @@ function createFixture() {
         `\u001b[1;${col + 1}H\u001b[${style} q\u001b[?25${visible ? "h" : "l"}`,
       );
       surface!.focus();
+      await frames();
+    },
+    async blinkAt(time: number) {
+      if (![0, 600, 1200].includes(time))
+        throw new Error("Invalid cursor clock sample");
+      blinkTime = time;
+      const before = paints;
+      globalThis.cursorProbe.refresh();
+      if (paints <= before)
+        throw new Error("Cursor blink sample did not render");
       await frames();
     },
     async blur() {

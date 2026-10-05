@@ -9,9 +9,36 @@ afterEach(() => {
 });
 import {
   runCursorStep,
+  parseCursorInputObservation,
   type CursorStep,
   type CursorWindow,
 } from "../fixtures/restty-cursor-readiness";
+
+it("accepts only bounded cursor input observations without contents or coordinates", () => {
+  const observation = {
+    kind: "pointermove",
+    nonzeroDelta: false,
+    clientChanged: true,
+    screenChanged: false,
+    viewportOriginChanged: true,
+  };
+  expect(parseCursorInputObservation(observation)).toEqual(observation);
+  for (const kind of ["pointermove", "pointerdown", "keydown", "wheel"]) {
+    const parsed = parseCursorInputObservation({ ...observation, kind });
+    expect(parsed).toEqual({ ...observation, kind });
+    expect(Buffer.byteLength(JSON.stringify(parsed))).toBeLessThan(200);
+  }
+  for (const invalid of [
+    null,
+    [],
+    {},
+    { ...observation, kind: "private input" },
+    { ...observation, clientChanged: 1 },
+    { ...observation, clientX: 75 },
+    { ...observation, contents: "private contents" },
+  ])
+    expect(parseCursorInputObservation(invalid)).toBeUndefined();
+});
 
 const step: CursorStep = {
   dpr: 1,
@@ -26,6 +53,47 @@ const visibleWindow = (): CursorWindow => ({
   isMinimized: () => false,
   isFocused: () => false,
   getBounds: () => ({ x: 20, y: 30, width: 900, height: 600 }),
+});
+
+it("reports input interference distinctly instead of accepting a completed capture", async () => {
+  let interfered = false;
+  await expect(
+    runCursorStep(
+      visibleWindow(),
+      step,
+      async () => {
+        interfered = true;
+        return 42;
+      },
+      () => interfered,
+    ),
+  ).rejects.toMatchObject({ category: "input-interference" });
+});
+
+it("does not start another operation after input interference", async () => {
+  const operation = vi.fn(async () => 42);
+  await expect(
+    runCursorStep(visibleWindow(), step, operation, () => true),
+  ).rejects.toMatchObject({ category: "input-interference" });
+  expect(operation).not.toHaveBeenCalled();
+});
+
+it("retains input interference when a renderer await does not settle", async () => {
+  vi.useFakeTimers();
+  let interfered = false;
+  const outcome = expect(
+    runCursorStep(
+      visibleWindow(),
+      step,
+      () => new Promise<never>(() => {}),
+      () => interfered,
+    ),
+  ).rejects.toMatchObject({ category: "input-interference" });
+  await vi.advanceTimersByTimeAsync(1);
+  interfered = true;
+  await vi.advanceTimersByTimeAsync(5000);
+  await outcome;
+  expect(vi.getTimerCount()).toBe(0);
 });
 
 it("rejects a native minimized window before invoking its cursor operation", async () => {
