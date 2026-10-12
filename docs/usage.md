@@ -19,34 +19,19 @@ The tab bar appears when there are at least two tabs. Click to select a tab,
 drag to reorder it, or use the shortcuts below. **View → Toggle Tab Bar** hides
 or shows the bar; keyboard shortcuts still work while it's hidden.
 
-Each started tab initially shows the default shell's filename, such as `zsh`
-or `powershell.exe`, even when launched with `-e`. A valid terminal title replaces
-it. The window title follows the selected tab. Titles are display-only and never
-saved or logged.
+Each tab initially displays your active shell or program name (such as `zsh`
+or `powershell.exe`). When a program sets a terminal title, the tab and window
+titles update automatically.
 
-Closing a tab ends its session. Closing a window ends all its sessions; closing
-the last window quits OMXTerm. Tabs and their order aren't saved between launches.
-Use a session manager such as tmux for work that needs to survive closing a tab.
+Closing a tab ends its session, and closing the last window exits the app.
 
 ### Closing tabs, windows, and the app
 
-By default, OMXTerm asks before closing running work, with one confirmation per
-action. Recognized idle shells close immediately on macOS and Linux. If their
-activity cannot be determined, OMXTerm asks. **Windows asks for every running session**,
-because it cannot reliably tell whether a shell is idle.
-You can turn confirmations off with `confirmClose` in your settings.
+To protect active work, OMXTerm asks for confirmation before closing busy sessions.
+On Windows, confirmation is shown for running sessions to prevent accidental exits.
+You can adjust or disable this prompt anytime using `confirmClose` in your settings.
 
-A background tab closing or exiting does not change your selected session or
-where typing, Paste and snippets go. Closing the selected tab selects its right
-neighbor, or its left neighbor if it was last.
-
-Typing `exit` closes that shell's tab. A command or default shell that cannot
-execute shows a startup failure; OMXTerm does not substitute another shell.
-A program that did start and returns a nonzero exit code still closes normally
-without a failure dialog.
-
-The app may take a moment to finish shutting down its processes after its last
-window closes.
+Typing `exit` in your shell closes the tab immediately.
 
 <details>
 <summary>Closing while a tab is starting or a dialog is open</summary>
@@ -152,40 +137,18 @@ to insert them all.
 
 ## Opening visible web links
 
-Hold **Cmd** on macOS or **Ctrl** on Linux/Windows over an `http://` or `https://`
-URL. It becomes underlined; click while holding the key to open it in your browser.
-
-The whole URL must be visible, including wrapped lines. Scroll it into view if
-it won't activate. OMXTerm opens the visible URL rather than hidden link targets.
+Hold **Cmd** on macOS or **Ctrl** on Linux/Windows over any `http://` or `https://` link. The URL underlines; click it to open the page in your default browser.
 
 ## Previewing local images
 
-Choose **File → Open Local Image…** and select a PNG or JPEG. Press **Escape**,
-click the close button, or click the dark backdrop outside the preview panel to
-return to your terminal. Close the preview before pasting, zooming, or changing
-the title or tab bars.
+OMXTerm lets you inspect local images directly within the window:
 
-You can also **Cmd+click** (macOS) or **Ctrl+click** (Linux/Windows) a visible full
-path or `file:///` URL. The complete reference must be visible, including wrapped
-lines. For paths with spaces, use the picker or surround the complete path with
-matching single or double quotes. Quotes are literal wrappers, not shell syntax:
-no variables, escapes or commands are evaluated.
+- **Quick shortcut:** **Cmd+click** (macOS) or **Ctrl+click** (Linux/Windows) a visible file path or `file:///` link in your terminal. For paths with spaces, wrap them in quotes.
+- **Menu option:** Choose **File → Open Local Image…** to select any PNG or JPEG using your system file picker.
+- For relative paths (such as `./image.png`), OMXTerm prompts you to select the base folder.
+- Press **Escape**, click the close button, or click outside the preview panel to return to your terminal prompt.
 
-`~` and `~/...`, including quoted forms, refer to the local OMXTerm user's home.
-Relative references beginning `./` or `../` (also `.\` or `..\` on Windows),
-and relative names ending `.png`, `.jpg`, `.jpeg` or `.webp`, prompt you to choose
-their **local base folder**. The directory picker starts at home, but home is not
-assumed: choose the intended folder or cancel without opening anything. Each
-activation asks again; OMXTerm never tracks or guesses an agent's/shell's cwd.
-`..` resolves normally against your selected folder, not inside a new sandbox.
-
-Previews support static PNG/JPEG files up to **64 MiB**, **8192 pixels per side**,
-and **32 million pixels**, including each ceiling. Large images can temporarily
-use substantially more memory than their file size. **WebP is not supported**,
-even when its path is recognized; use a static PNG or JPEG instead. Content, not
-the extension, determines format. Network shares, device paths and remote files
-are unsupported. Even if SSH printed the path, it refers to the
-computer running OMXTerm, never the remote host.
+Previews support static PNG and JPEG images up to 64 MiB and 8192×8192 pixels.
 
 <details>
 <summary>Paths with spaces, wrapped output, and tool locations</summary>

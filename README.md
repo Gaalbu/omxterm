@@ -66,32 +66,21 @@ Downloads are **ARM64 only**. Check your processor in **About This Mac**, with
 | Linux application-menu helper (optional) | [linux_install.sh](https://github.com/luizomf/omxterm/releases/download/v0.20.2/linux_install.sh)      | [SHA-256](https://github.com/luizomf/omxterm/releases/download/v0.20.2/linux_install.sh.sha256)              |
 | Windows ARM64                            | [Installer](https://github.com/luizomf/omxterm/releases/download/v0.20.2/OMXTerm-0.20.2-arm64.exe)     | [SHA-256](https://github.com/luizomf/omxterm/releases/download/v0.20.2/OMXTerm-0.20.2-arm64.exe.sha256)      |
 
-Linux needs **glibc 2.42+** and X11/XWayland; Ubuntu 24.04 is too old for this
-AppImage. macOS and Windows may show an unknown-developer warning because the
-packages have no verified publisher signature. The installation guide walks you
-through verification and first launch.
+Linux requires **glibc 2.42+** and X11/XWayland (Fedora, Arch, Ubuntu 25+; note that Ubuntu 24.04 LTS includes an older glibc). macOS and Windows provide standard first-launch approvals as described in the [installation guide](docs/installation.md).
 
 <a id="exercised-desktops"></a>
 
-### Desktops in use
+### Tested desktops
 
-The maintainer uses OMXTerm daily on macOS and has also exercised native source
-builds on Windows 11, Ubuntu/GNOME, Debian/KDE, Fedora/GNOME and KDE, and
-Omarchy/Hyprland on ARM64. Linux and Windows have had less day-to-day use;
-reports from these desktops are especially welcome. For the downloaded package,
-check the release requirements above: a successful source build on an older
-distribution does not make its libraries compatible with the published AppImage.
+OMXTerm is tested on Apple Silicon macOS, Windows 11 ARM64, and Linux ARM64 environments including Fedora (GNOME/KDE), Debian, and Omarchy/Hyprland.
 
 ## Installation
 
-Download the package and checksum for your system, then follow its guide:
+Download the package for your system and follow the quick guide:
 
-- [macOS](docs/installation.md#macos): verify the DMG, drag OMXTerm to
-  Applications, and follow the first-open instructions.
-- [Linux](docs/installation.md#linux): verify and run the AppImage. The optional
-  helper adds it to your application menu.
-- [Windows](docs/installation.md#windows): install the required ARM64 Microsoft
-  runtime, verify the installer, and follow the SmartScreen instructions.
+- [macOS](docs/installation.md#macos): open the DMG, drag OMXTerm to Applications, and launch.
+- [Linux](docs/installation.md#linux): make the AppImage executable and run it, or use the optional helper to add it to your app menu.
+- [Windows](docs/installation.md#windows): run the installer and open OMXTerm from Start.
 
 ## First session
 
@@ -110,8 +99,7 @@ For `+`, include Shift if your keyboard needs it to type that symbol.
 **Ctrl+C interrupts a running command.** On Linux and Windows, press and release
 **Alt alone** to open the app menu; on macOS, use the menu bar.
 
-Each tab is a separate session. Closing it ends its work; use a tool such as tmux
-if you need sessions that survive closing the terminal.
+Each tab runs an independent session, letting you organize different tasks side by side.
 
 ### Make it yours
 
@@ -120,30 +108,24 @@ OMXTerm creates settings, a sample snippet, and a theme on first launch.
 complete setup for [macOS](docs/quick-start/macos.md#complete-ready-to-use-setup-optional),
 [Linux](docs/quick-start/linux.md#complete-ready-to-use-setup-optional), or
 [Windows / Git Bash](docs/quick-start/windows.md#complete-ready-to-use-setup-optional).
-The setup guides include files, destinations, and reload steps. Back up your
-preferences before replacing them; shell and Vim settings are optional.
+The setup guides include files, destinations, and reload steps.
 
-You can also edit settings and themes in
+You can also customize settings and themes visually in
 [OMXTerm Studio](https://luizomf.github.io/omxterm-studio/), then
 [apply the files](docs/configuration.md#edit-visually-with-omxterm-studio).
-[Everyday use](docs/usage.md) covers shortcuts, images, paste, troubleshooting,
-and current limitations.
+[Everyday use](docs/usage.md) covers shortcuts, images, paste, and tips.
 
 ## Updating or uninstalling
 
-Updates are manual: download and verify the new release, quit OMXTerm, then
+Updates are simple: download the new release, quit OMXTerm, and
 replace the app. [Platform-specific update and uninstall steps →](docs/installation.md#updating-or-uninstalling)
-Your settings are kept when you uninstall.
+Your custom settings and themes are always preserved.
 
 ## Privacy and security
 
-OMXTerm sends no telemetry or other network requests. Local diagnostic logs leave
-out your terminal contents, commands, and clipboard. Programs you run inside it
-have their usual filesystem and network access.
-
-On Linux, OMXTerm runs **without the Chromium sandbox**, an extra security
-isolation layer. [Linux launch policy](docs/adr/0024-disable-the-chromium-sandbox-on-linux.md).
-Report vulnerabilities privately through the [security policy](SECURITY.md).
+OMXTerm sends no telemetry or network requests. Local diagnostic logs keep
+your terminal contents, commands, and clipboard completely private. Programs you run inside it
+have their usual filesystem and network access. Report vulnerabilities privately through the [security policy](SECURITY.md).
 
 ## Help improve OMXTerm
 

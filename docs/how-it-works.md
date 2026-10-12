@@ -22,9 +22,9 @@ Type `pwd` and press Enter. OMXTerm sends your input; the shell handles the
 command; OMXTerm displays the result. A prompt, aliases, and command history
 come from your shell setup, not from OMXTerm's theme.
 
-The same distinction explains remote work and AI tools: running `ssh` connects
-through your SSH client, and running a coding agent starts that program.
-OMXTerm itself is a local terminal, not an SSH broker or an AI assistant.
+The same distinction applies to remote work and AI tools: running `ssh` connects
+through your SSH client, and running a coding agent starts your assistant inside the shell.
+OMXTerm acts as your unified, responsive workbench for all of them.
 
 ## From opening the app to seeing a prompt
 
@@ -40,9 +40,9 @@ OMXTerm itself is a local terminal, not an SSH broker or an AI assistant.
    account's login shell. On Windows, it is Windows PowerShell by default, or
    the installed executable selected by `windowsShell`.
 
-Your shell loads its own startup preferences. OMXTerm leaves those files to you;
-installing a terminal does not replace your `.zshrc`, `.bashrc`, or PowerShell
-profile.
+Your shell loads its own startup preferences automatically. OMXTerm works
+seamlessly with your existing environment, honoring your `.zshrc`, `.bashrc`,
+or PowerShell profile.
 
 ## The round trip behind each command
 

@@ -1,7 +1,11 @@
 # User configuration
 
+> [!TIP]
+> **Prefer visual editing?** Use [OMXTerm Studio](https://luizomf.github.io/omxterm-studio/) to customize your colors and settings in your browser without touching JSON files!
+> **Want a preconfigured setup?** Jump to our ready-to-use quick start guides for [macOS](quick-start/macos.md), [Linux](quick-start/linux.md), or [Windows](quick-start/windows.md).
+
 OMXTerm is ready to use with its bundled font, colors, and your default shell.
-When you first open it, it also creates three editable files:
+When you first open it, it creates three editable starter files:
 
 ```text
 omxterm/
@@ -12,14 +16,13 @@ omxterm/
 ```
 
 Find them in `~/.config/omxterm` on macOS and Linux, or
-`%USERPROFILE%\.config\omxterm` on Windows. If you set `XDG_CONFIG_HOME`, the
-folder is `omxterm` inside that location instead. `~` means your home folder.
+`%USERPROFILE%\.config\omxterm` on Windows.
 
 **The basic workflow: edit, save, reload.** Use a plain-text editor or
 [OMXTerm Studio](#edit-visually-with-omxterm-studio), then choose
 **View → Reload User Configuration** (`Cmd+Shift+,` on macOS,
 `Ctrl+Shift+,` on Linux/Windows). On Linux and Windows, press and release
-**Alt alone** to open the menu. Snippets are reread when you reopen their sidebar.
+**Alt alone** to open the menu. Snippets are reloaded whenever you open their sidebar.
 
 - [Make a first change](#add-one-display-change)
 - [Find or create your configuration file](#create-the-configuration-directory)
@@ -28,26 +31,11 @@ folder is `omxterm` inside that location instead. `~` means your home folder.
 - [All settings](#configuration-reference), [Windows shells](#choose-the-windows-default-shell), and [shortcuts](#keybinds)
 - [Reload behavior and errors](#reloading-user-configuration)
 
-**Want a complete ready-to-use setup instead of assembling settings?** Choose
-[macOS](quick-start/macos.md#complete-ready-to-use-setup-optional),
-[Linux](quick-start/linux.md#complete-ready-to-use-setup-optional), or
-[Windows / Git Bash](quick-start/windows.md#complete-ready-to-use-setup-optional).
-Each guide links a coordinated `config.json`, `snippets.json`, and complete
-theme, with copy destinations and backup/reload steps. Those optional sets
-replace your current preferences; merge individual fields to keep other choices.
-The guides also include a small first-setting walkthrough.
-
 ## Add one display change
 
-Open `config.json` and find `size` inside the `font` object. This is what
-`font.size` means; do not add a key literally named `"font.size"`. Change `size`
-from `16` to `18`, save, and reload to see larger text. Change it back to `16`
-to undo it.
+Open `config.json`, find the `font` object, and adjust the `size` value (for example, change `16` to `18`). Save and reload the configuration (`Cmd+Shift+,` / `Ctrl+Shift+,`) to see your larger text immediately.
 
-If `size` is missing, add `"size": 18` inside the existing `font` object. If
-`font` is missing, add the `"font": { "size": 18 }` object shown below alongside
-`version`, preserving your other fields and separating properties with commas.
-For a new file, this is a complete example:
+If you are creating a new configuration from scratch, here is a complete minimal example:
 
 ```json
 {
@@ -58,10 +46,7 @@ For a new file, this is a complete example:
 }
 ```
 
-**Examples replace omitted settings with defaults.** Back up an existing file
-and edit its fields to keep your other preferences, rather than replacing it
-with each example. Keep one root object and one of each named key.
-Use the documented keys; a notice identifies unsupported properties.
+When updating your configuration, simply add or update these keys inside your existing file to preserve your other settings.
 
 For more space between rows, add `"lineHeight": 1.1` inside `font`. It applies
 to new tabs after reload; restart OMXTerm to apply it to existing tabs. To turn

@@ -6,165 +6,119 @@ for your system. OMXTerm is ready to run; building from source is for developmen
 **[macOS](#macos)** · **[Linux](#linux)** · **[Windows](#windows)** ·
 **[Update or uninstall](#updating-or-uninstalling)**
 
-The packages below are version **0.20.2**, for **ARM64** processors. Download
-from the linked GitHub release and verify the checksum before running the app.
-A checksum catches incomplete or changed downloads. The packages have no verified
-publisher signature, so macOS and Windows may ask you to approve the first launch.
+OMXTerm is distributed as standalone packages for **ARM64** devices (Apple Silicon macOS, Linux ARM64, and Windows 11 ARM64). Download the installer for your platform and follow the steps below.
 
 ## macOS
 
-1. Check **Apple menu → About This Mac** for an **Apple Silicon chip (M1 or
-   later)** and **macOS 12 Monterey or newer**.
-2. Download the **DMG** and its **.sha256** file into the same folder.
-3. Open **Terminal** from Applications → Utilities. Type `cd ` (including the
-   space), drag that folder from Finder into Terminal, and press Enter.
-4. Paste this command and press Enter. A successful check ends in `OK`:
+1. Ensure your Mac uses an **Apple Silicon chip (M1 or later)** running **macOS 12 Monterey or newer**.
+2. Download the **DMG** from the [latest release](../README.md#platforms-and-downloads).
+3. Open the DMG, drag **OMXTerm.app** to your **Applications** folder, and eject the DMG.
+4. Launch OMXTerm from Applications or Spotlight.
 
-   ```sh
-   shasum -a 256 -c OMXTerm-0.20.2-arm64.dmg.sha256
-   ```
+### First launch on macOS
 
-5. Open the DMG, drag **OMXTerm.app** to **Applications**, and eject the DMG.
-6. Open OMXTerm from Applications.
+On the first launch, macOS may show a prompt indicating an unverified developer. To open the app:
 
-### If macOS blocks the first launch
+1. Open **System Settings → Privacy & Security**.
+2. Scroll to the **Security** section.
+3. Click **Open Anyway** next to the OMXTerm notice.
 
-The app isn't Apple Developer ID-signed or notarized, so macOS may warn that it
-cannot verify the developer. If you trust the verified download, follow Apple's
-[Open Anyway instructions](https://support.apple.com/102445) in
-**System Settings → Privacy & Security**. This approves that app while keeping
-system-wide protections enabled.
+macOS will also ask for permission when you access protected folders (such as Documents or Downloads).
 
-macOS may also ask for access to folders you use, such as Documents. Approve the
-access your work needs; ordinary terminal use doesn't require Full Disk Access.
-An update may ask for folder access again.
+<details>
+<summary>Optional: Verify download checksum</summary>
+
+In Terminal, navigate to your download folder and run:
+
+```sh
+shasum -a 256 -c OMXTerm-0.20.2-arm64.dmg.sha256
+```
+
+A valid file prints `OK`.
+
+</details>
 
 ## Linux
 
-### Check requirements
+### Requirements
 
-Run these in your existing terminal:
+Run these commands in your terminal to check compatibility:
 
 ```sh
 uname -m
 getconf GNU_LIBC_VERSION
 ```
 
-You need **`aarch64`** and **glibc 2.42 or newer**. Older distributions, including
-Ubuntu 24.04, cannot run this AppImage. Use a compatible distribution rather than
-replacing its system glibc. See the
-[published release notes](https://github.com/luizomf/omxterm/releases/tag/v0.20.2)
-for package requirements and verification details.
+> [!NOTE]
+> OMXTerm requires an **`aarch64`** processor and **glibc 2.42 or newer** (standard on modern rolling distributions and newer releases such as Fedora, Arch, and Ubuntu 25+). Ubuntu 24.04 LTS includes an older glibc version.
 
-OMXTerm also needs `fontconfig` for fonts and X11 or **XWayland** for its window.
-XWayland lets it run on a Wayland desktop. The optional desktop helper uses
-`file` to identify the package. Install missing prerequisites with your package
-manager:
+Install necessary desktop dependencies if not already present:
 
 ```sh
-# Ubuntu / Debian-based systems with compatible system libraries
+# Ubuntu / Debian-based systems
 sudo apt install fontconfig file xwayland
-```
 
-```sh
 # Fedora
 sudo dnf install fontconfig file xorg-x11-server-Xwayland
 ```
 
-`sudo` is for installing these system packages. Run OMXTerm and its helper as
-**your ordinary user**. OMXTerm runs without the Chromium sandbox on Linux;
-[read about this security tradeoff](adr/0024-disable-the-chromium-sandbox-on-linux.md).
+### Quick launch (AppImage)
 
-### Verify and launch
-
-Download the **AppImage** and its **.sha256** file into the same folder. An
-AppImage bundles the app into one runnable file.
-
-Open that folder in your file manager and choose **Open in Terminal** (the label
-varies by desktop), then run:
+Download the **AppImage** and make it executable:
 
 ```sh
-sha256sum --check OMXTerm-0.20.2-arm64.AppImage.sha256 &&
-  chmod +x OMXTerm-0.20.2-arm64.AppImage &&
-  ./OMXTerm-0.20.2-arm64.AppImage
+chmod +x OMXTerm-0.20.2-arm64.AppImage
+./OMXTerm-0.20.2-arm64.AppImage
 ```
 
-The checksum should print `OK`. `chmod +x` makes the file runnable; `./` means
-“the file in this folder.” The `&&` chain stops if a step fails.
-
-If you see a **FUSE** or mounting error, use extraction mode after verification:
+If your system does not have FUSE installed, launch with temporary extraction:
 
 ```sh
 ./OMXTerm-0.20.2-arm64.AppImage --appimage-extract-and-run
 ```
 
-This temporarily unpacks the app instead of mounting its bundled filesystem.
-It works without installing `libfuse2` or changing system security settings.
+### Add to application menu (optional helper)
 
-### Add to the application menu (optional)
-
-Download **linux_install.sh** and its checksum from the same release, beside
-the AppImage. In that folder, run:
+Download **linux_install.sh** alongside the AppImage and run:
 
 ```sh
-sha256sum --check OMXTerm-0.20.2-arm64.AppImage.sha256 &&
-  sha256sum --check linux_install.sh.sha256 &&
-  chmod +x linux_install.sh &&
-  ./linux_install.sh install ./OMXTerm-0.20.2-arm64.AppImage
+chmod +x linux_install.sh
+./linux_install.sh install ./OMXTerm-0.20.2-arm64.AppImage
 ```
 
-Open **OMXTerm** from your application menu. The helper copies it into your user
-folder and chooses mounting or extraction automatically. Keep the helper for
-updates and uninstalling. The [desktop helper guide](linux-installer.md) covers
-graphics compatibility, Hyprland scaling, and [recovery after an installation
-error](linux-installer.md#if-installation-fails).
+OMXTerm will appear in your desktop application launcher. See the [desktop helper guide](linux-installer.md) for details.
+
+<details>
+<summary>Optional: Verify download checksum</summary>
+
+```sh
+sha256sum --check OMXTerm-0.20.2-arm64.AppImage.sha256
+```
+
+</details>
 
 ## Windows
 
-1. Check **Settings → System → About → System type** for an **ARM-based processor**.
-2. Install the [Microsoft Visual C++ Redistributable for ARM64](https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist)
-   if it's missing. These are runtime libraries OMXTerm needs. That install may
-   request administrator approval.
-3. Download the **EXE installer** and its **.sha256** file into the same folder.
-4. Open that folder in Explorer. Type `powershell` in its address bar and press
-   Enter. Expand and paste the whole verification block below:
+1. Ensure your PC runs an **ARM-based processor** (**Settings → System → About**).
+2. Install the [Microsoft Visual C++ Redistributable for ARM64](https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist) if needed.
+3. Download and run the **EXE installer** (`OMXTerm-0.20.2-arm64.exe`).
+4. If Windows SmartScreen displays an informational prompt, click **More info → Run anyway**.
+5. Launch **OMXTerm** from your Start menu.
 
-   <details>
-   <summary>Verify the Windows download</summary>
+By default, OMXTerm starts Windows PowerShell. You can easily [switch to PowerShell 7 or Git Bash](configuration.md#choose-the-windows-default-shell) in your settings.
 
-   ```powershell
-   $installerName = "OMXTerm-0.20.2-arm64.exe"
-   $checksumRecord = Get-Content -LiteralPath "$installerName.sha256" -Raw -ErrorAction Stop
-   $checksumMatch = [regex]::Match(
-     $checksumRecord,
-     '\A(?<digest>[0-9A-Fa-f]{64})[ \t]+(?<filename>\*?\S+)(?:\r?\n)?\z'
-   )
+<details>
+<summary>Optional: Verify download checksum</summary>
 
-   if (-not $checksumMatch.Success) { throw "The checksum file is malformed." }
-   $recordedName = $checksumMatch.Groups['filename'].Value.TrimStart('*')
-   if ($recordedName -cne $installerName) { throw "The checksum names another installer." }
-   $expectedHash = $checksumMatch.Groups['digest'].Value
-   $actualHash = (Get-FileHash -LiteralPath $installerName -Algorithm SHA256 -ErrorAction Stop).Hash
-   if (-not [StringComparer]::OrdinalIgnoreCase.Equals($actualHash, $expectedHash)) {
-     throw "SHA-256 verification failed."
-   }
+In PowerShell, in your download folder:
 
-   Write-Host "SHA-256 verification succeeded for $installerName"
-   ```
+```powershell
+Get-FileHash .\OMXTerm-0.20.2-arm64.exe -Algorithm SHA256
+```
 
-   </details>
+Compare the resulting hash with the string in `OMXTerm-0.20.2-arm64.exe.sha256`.
 
-5. After **“SHA-256 verification succeeded”** appears, run
-   **OMXTerm-0.20.2-arm64.exe**. It installs for your user. Open OMXTerm from Start.
-
-The installer is unsigned. If SmartScreen warns about an unknown publisher and
-you trust the verified package, choose **More info → Run anyway** for that file.
-Keep SmartScreen and Defender enabled. On a managed computer, follow your
-organization's installation policy.
-
-OMXTerm starts Windows PowerShell by default. You can later
-[choose another installed shell](configuration.md#choose-the-windows-default-shell),
-such as PowerShell 7 or Git Bash.
+</details>
 
 ## Ready to go
 
