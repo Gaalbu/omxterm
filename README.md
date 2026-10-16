@@ -55,7 +55,7 @@ Prebuilt packages are currently **ARM64 only** (Apple Silicon on macOS, `aarch64
 | Linux application-menu helper (optional) | [linux_install.sh](https://github.com/luizomf/omxterm/releases/download/v0.20.2/linux_install.sh)      | [SHA-256](https://github.com/luizomf/omxterm/releases/download/v0.20.2/linux_install.sh.sha256)              |
 | Windows ARM64                            | [Installer](https://github.com/luizomf/omxterm/releases/download/v0.20.2/OMXTerm-0.20.2-arm64.exe)     | [SHA-256](https://github.com/luizomf/omxterm/releases/download/v0.20.2/OMXTerm-0.20.2-arm64.exe.sha256)      |
 
-Linux requires **glibc 2.42+** and X11/XWayland (such as Fedora, Arch, or Ubuntu 25+). First-launch notes for macOS Gatekeeper and Windows SmartScreen are covered in the [installation guide](docs/installation.md).
+Linux requires **glibc 2.42+** and X11/XWayland (for example Fedora 43+, Ubuntu 25.10+, or Arch). First-launch notes for macOS Gatekeeper and Windows SmartScreen are in the [installation guide](docs/installation.md).
 
 <a id="exercised-desktops"></a>
 

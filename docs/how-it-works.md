@@ -29,15 +29,13 @@ OMXTerm never modifies your shell startup files or injects custom shell scripts.
 ## How input and output flow
 
 ```text
-Your keyboard
-     │
-     ▼
-Terminal Surface (Restty/WebGL2) ⇄ Preload bridge ⇄ Electron main ⇄ Local PTY ⇄ Shell / Program
+Keyboard ─▶ OMXTerm ─▶ PTY ─▶ Shell / program
+Screen   ◀─ OMXTerm ◀─ PTY ◀─ Shell / program
 ```
 
-- **Terminal Surface:** interprets text and ANSI escape sequences (colors, cursor movement, full-screen TUI layouts, and inline Kitty images) and renders them with WebGL2.
-- **Electron main process:** manages native windows, local PTY processes, configuration files, clipboard access, and safe file/URL opening.
-- **Resizing:** when you resize a window or zoom the font, OMXTerm recalculates how many rows and columns fit and notifies the PTY so full-screen apps like Vim or `btop` redraw automatically.
+- **OMXTerm** turns the program's output (text, colors, cursor movement, full-screen apps, and inline images) into pixels using your GPU.
+- **The PTY** (pseudo-terminal) is the operating system's pipe between OMXTerm and your shell.
+- **Resizing:** when you resize the window or zoom, OMXTerm tells the PTY the new number of rows and columns, so apps like Vim or `btop` redraw to fit.
 
 ## Tabs and sessions
 

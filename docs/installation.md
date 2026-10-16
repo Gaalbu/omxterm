@@ -1,34 +1,31 @@
 # Install OMXTerm
 
-Get the **[latest download and its checksum](../README.md#platforms-and-downloads)**
-for your system. OMXTerm is ready to run; building from source is for development.
+OMXTerm ships ready-to-run packages for **ARM64** computers: Apple Silicon Macs, Linux ARM64, and Windows 11 ARM64. Grab the file for your system from the [downloads table](../README.md#platforms-and-downloads) and follow the steps below.
 
-**[macOS](#macos)** · **[Linux](#linux)** · **[Windows](#windows)** ·
-**[Update or uninstall](#updating-or-uninstalling)**
-
-OMXTerm is distributed as standalone packages for **ARM64** devices (Apple Silicon macOS, Linux ARM64, and Windows 11 ARM64). Download the installer for your platform and follow the steps below.
+**[macOS](#macos)** · **[Linux](#linux)** · **[Windows](#windows)** · **[Update or uninstall](#updating-or-uninstalling)**
 
 ## macOS
 
-1. Ensure your Mac uses an **Apple Silicon chip (M1 or later)** running **macOS 12 Monterey or newer**.
-2. Download the **DMG** from the [latest release](../README.md#platforms-and-downloads).
-3. Open the DMG, drag **OMXTerm.app** to your **Applications** folder, and eject the DMG.
-4. Launch OMXTerm from Applications or Spotlight.
+You need an Apple Silicon Mac (M1 or later) with macOS 12 Monterey or newer.
+
+1. Download the **DMG**.
+2. Open it and drag **OMXTerm.app** to your **Applications** folder.
+3. Launch OMXTerm from Applications or Spotlight.
 
 ### First launch on macOS
 
-On the first launch, macOS may show a prompt indicating an unverified developer. To open the app:
+OMXTerm is not notarized by Apple, so macOS blocks it the first time. To allow it:
 
 1. Open **System Settings → Privacy & Security**.
-2. Scroll to the **Security** section.
-3. Click **Open Anyway** next to the OMXTerm notice.
+2. Scroll down to **Security**.
+3. Click **Open Anyway** next to the OMXTerm message.
 
-macOS will also ask for permission when you access protected folders (such as Documents or Downloads).
+You only do this once. Later, macOS may also ask before OMXTerm opens protected folders such as Documents or Downloads.
 
 <details>
-<summary>Optional: Verify download checksum</summary>
+<summary>Optional: verify the download</summary>
 
-In Terminal, navigate to your download folder and run:
+Download the matching `.sha256` file, then run this in the folder where both files are:
 
 ```sh
 shasum -a 256 -c OMXTerm-0.20.2-arm64.dmg.sha256
@@ -42,56 +39,55 @@ A valid file prints `OK`.
 
 ### Requirements
 
-Run these commands in your terminal to check compatibility:
+OMXTerm needs an `aarch64` (ARM64) processor and **glibc 2.42 or newer**. Check both with:
 
 ```sh
 uname -m
 getconf GNU_LIBC_VERSION
 ```
 
-> [!NOTE]
-> OMXTerm requires an **`aarch64`** processor and **glibc 2.42 or newer** (standard on modern rolling distributions and newer releases such as Fedora, Arch, and Ubuntu 25+). Ubuntu 24.04 LTS includes an older glibc version.
+Recent releases such as Fedora 43, Ubuntu 25.10, and Arch meet this requirement. Ubuntu 24.04 LTS and other older releases ship an older glibc and cannot run the current package.
 
-Install necessary desktop dependencies if not already present:
+Then install the few desktop packages OMXTerm relies on (most desktops already have them):
 
 ```sh
-# Ubuntu / Debian-based systems
+# Ubuntu / Debian
 sudo apt install fontconfig file xwayland
 
 # Fedora
 sudo dnf install fontconfig file xorg-x11-server-Xwayland
 ```
 
-### Quick launch (AppImage)
+### Run the AppImage
 
-Download the **AppImage** and make it executable:
+Make the AppImage executable and run it:
 
 ```sh
 chmod +x OMXTerm-0.20.2-arm64.AppImage
 ./OMXTerm-0.20.2-arm64.AppImage
 ```
 
-If your system does not have FUSE installed, launch with temporary extraction:
+If you get a FUSE error, run it this way instead:
 
 ```sh
 ./OMXTerm-0.20.2-arm64.AppImage --appimage-extract-and-run
 ```
 
-### Add to application menu (optional helper)
+### Add it to your application menu (optional)
 
-Download **linux_install.sh** alongside the AppImage and run:
+Download `linux_install.sh` next to the AppImage and run:
 
 ```sh
 chmod +x linux_install.sh
 ./linux_install.sh install ./OMXTerm-0.20.2-arm64.AppImage
 ```
 
-OMXTerm will appear in your desktop application launcher. See the [desktop helper guide](linux-installer.md) for details.
-For optional blur, HiDPI scaling, or VM graphics help, use
-[Linux desktop tips](linux-desktop.md).
+OMXTerm now shows up in your application launcher. The [Linux installer guide](linux-installer.md) has the details. For blur, HiDPI scaling, or VM graphics, see [Linux desktop tips](linux-desktop.md).
 
 <details>
-<summary>Optional: Verify download checksum</summary>
+<summary>Optional: verify the download</summary>
+
+Download the matching `.sha256` file next to the AppImage and run:
 
 ```sh
 sha256sum --check OMXTerm-0.20.2-arm64.AppImage.sha256
@@ -101,16 +97,17 @@ sha256sum --check OMXTerm-0.20.2-arm64.AppImage.sha256
 
 ## Windows
 
-1. Ensure your PC runs an **ARM-based processor** (**Settings → System → About**).
-2. Install the [Microsoft Visual C++ Redistributable for ARM64](https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist) if needed.
-3. Download and run the **EXE installer** (`OMXTerm-0.20.2-arm64.exe`).
-4. If Windows SmartScreen displays an informational prompt, click **More info → Run anyway**.
-5. Launch **OMXTerm** from your Start menu.
+You need a Windows 11 PC with an ARM processor (check **Settings → System → About**).
 
-By default, OMXTerm starts Windows PowerShell. You can easily [switch to PowerShell 7 or Git Bash](configuration.md#choose-the-windows-default-shell) in your settings.
+1. Install the [Microsoft Visual C++ Redistributable for ARM64](https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist) if you don't have it yet.
+2. Download and run the installer (`OMXTerm-0.20.2-arm64.exe`).
+3. If SmartScreen warns about an unrecognized app, click **More info → Run anyway**.
+4. Launch **OMXTerm** from the Start menu.
+
+OMXTerm starts Windows PowerShell by default. You can [switch to PowerShell 7 or Git Bash](configuration.md#choose-the-windows-default-shell) in your settings.
 
 <details>
-<summary>Optional: Verify download checksum</summary>
+<summary>Optional: verify the download</summary>
 
 In PowerShell, in your download folder:
 
@@ -118,31 +115,25 @@ In PowerShell, in your download folder:
 Get-FileHash .\OMXTerm-0.20.2-arm64.exe -Algorithm SHA256
 ```
 
-Compare the resulting hash with the string in `OMXTerm-0.20.2-arm64.exe.sha256`.
+Compare the result with the hash inside `OMXTerm-0.20.2-arm64.exe.sha256`.
 
 </details>
 
 ## Ready to go
 
-Try your [first session](../README.md#first-session), then explore
-[everyday controls](usage.md) or [change a setting](configuration.md).
+Try your [first session](../README.md#first-session), then explore [everyday use](usage.md) or [change a setting](configuration.md).
 
-If a command says “file not found,” check that your terminal is in the download
-folder and that both filenames match the commands. For other problems, see
-[installation troubleshooting](usage.md#the-download-will-not-open) or
-[ask for help](../CONTRIBUTING.md#report-a-problem).
+Something went wrong? Check [installation troubleshooting](usage.md#the-download-will-not-open) or [ask for help](../CONTRIBUTING.md#report-a-problem).
 
 ## Updating or uninstalling
 
-Updates are manual. Download the new release and matching checksum, verify it,
-and quit OMXTerm before replacing it. Back up your settings before updating.
+OMXTerm does not update itself. To update, quit OMXTerm, download the new version, and replace the old one:
 
-| System                 | Update                                                        | Uninstall                                               |
-| ---------------------- | ------------------------------------------------------------- | ------------------------------------------------------- |
-| macOS                  | Replace OMXTerm.app in Applications.                          | Move the app to Trash.                                  |
-| Linux, direct AppImage | Replace the file you launch.                                  | Delete that file.                                       |
-| Linux, desktop helper  | Verify the new AppImage and helper, then run `install` again. | Run your verified `./linux_install.sh uninstall`.       |
-| Windows                | Run the verified new installer.                               | Settings → Apps → Installed apps → OMXTerm → Uninstall. |
+| System                 | Update                                                  | Uninstall                                               |
+| ---------------------- | ------------------------------------------------------- | ------------------------------------------------------- |
+| macOS                  | Replace OMXTerm.app in Applications.                    | Move the app to the Trash.                              |
+| Linux, AppImage only   | Replace the AppImage file.                              | Delete the AppImage file.                               |
+| Linux, with the helper | Run `./linux_install.sh install` with the new AppImage. | Run `./linux_install.sh uninstall`.                     |
+| Windows                | Run the new installer.                                  | Settings → Apps → Installed apps → OMXTerm → Uninstall. |
 
-Your settings, themes, snippets, and local logs stay in place. Their locations
-are in [Configuration](configuration.md) and [Local diagnostics](usage.md#local-diagnostics).
+Updating or uninstalling never touches your settings, themes, snippets, or logs. See [Configuration](configuration.md) and [Local diagnostics](usage.md#local-diagnostics) for where they live.

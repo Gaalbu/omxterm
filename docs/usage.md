@@ -81,7 +81,7 @@ Hold **Cmd** (macOS) or **Ctrl** (Linux/Windows) while hovering over an `http://
 
 ## Previewing local images
 
-You can preview local static PNG and JPEG images (up to 64 MiB and 8192×8192 pixels) in an in-window overlay without leaving OMXTerm:
+You can preview local PNG and JPEG images in an overlay without leaving OMXTerm (up to 64 MiB, 8192 pixels per side, and 32 megapixels; animated images are not supported):
 
 - **Click a path in output:** hold **Cmd** (macOS) or **Ctrl** (Linux/Windows) and click a visible image path or `file:///` URL.
 - **Open via file picker:** choose **File → Open Local Image…** from the menu.
@@ -133,7 +133,7 @@ See the [installation guide](installation.md) for your platform:
 | macOS warns about an unverified developer                    | Open **System Settings → Privacy & Security** and click **Open Anyway** ([details](installation.md#first-launch-on-macos)). |
 | Linux says `Permission denied`                               | Run `chmod +x OMXTerm-*.AppImage` first, and make sure the file is on a partition that allows executing programs.           |
 | Linux reports a FUSE or mount error                          | Launch with `./OMXTerm-*.AppImage --appimage-extract-and-run` or install with `linux_install.sh`.                           |
-| Linux reports `GLIBC_2.42 not found`                         | The prebuilt AppImage requires a newer distribution with glibc 2.42+ (such as Fedora, Arch, or Ubuntu 25+).                 |
+| Linux reports `GLIBC_2.42 not found`                         | Your distribution is too old for the prebuilt AppImage. It needs glibc 2.42+ (for example Fedora 43+ or Ubuntu 25.10+).     |
 | Linux reports an executable format error                     | Check `uname -m` — prebuilt packages require `aarch64` (ARM64).                                                             |
 | Windows reports a missing runtime DLL or `ERR_DLOPEN_FAILED` | Install the [Microsoft Visual C++ Redistributable for ARM64](installation.md#windows).                                      |
 | Checksum verification fails                                  | Ensure both the installer and `.sha256` file were downloaded from the same release.                                         |
@@ -176,9 +176,9 @@ See [reloading user configuration](configuration.md#reloading-user-configuration
 
 The Snippets sidebar has a fixed width of 280 px. In a very narrow window, widen the window or press `Cmd+Shift+S` / `Ctrl+Shift+S` (**View → Toggle Snippets**) to hide the sidebar.
 
-### A terminal program misplaces cursor output
+### A program draws text in the wrong place
 
-After wide characters, combining marks, or window resizes at wrap boundaries, cursor-position replies (`CSI 6 n`) can occasionally disagree with the rendered cursor position ([#568](https://github.com/luizomf/omxterm/issues/568)).
+This is a known issue ([#568](https://github.com/luizomf/omxterm/issues/568)). Programs that ask the terminal where the cursor is can get a slightly wrong answer after emoji, other wide characters, or a window resize.
 
 ### The renderer cannot start
 

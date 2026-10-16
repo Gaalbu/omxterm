@@ -50,9 +50,3 @@ source/test boundaries and known limitations.
 - User-owned configuration and live application: 0002, 0003, 0025, 0029, 0030.
 - Renderer privilege and explicit payload actions: 0006, 0009–0011, 0021, 0024, 0026.
 - Native distribution, verification and installers: 0015, 0019, 0020, 0023, 0031.
-
-The native minimum-size calculation omits the fixed 280 px Snippets Sidebar;
-showing it in a narrow window can crowd out the grid. Enlarge the window,
-reduce padding or hide the sidebar. The
-[window contract](../spec.md#window-and-session-behavior) describes this accepted
-layout limitation.

@@ -68,9 +68,9 @@ You can also adjust line height (`"lineHeight": 1.1`), disable programming ligat
 - **Line height and font family:** apply immediately to new tabs; restart OMXTerm to apply them to already-open tabs.
 - **Temporary zoom:** use `Cmd++` / `Cmd+-` (`Ctrl++` / `Ctrl+-` on Linux/Windows) to zoom a window temporarily, and `Cmd+0` / `Ctrl+0` (**Actual Size**) to reset to your configured size.
 
-## Quick start: use the bundled defaults
+## Configuration basics
 
-Every setting except `"version": 1` is optional. The smallest valid `config.json` uses all built-in defaults:
+Every setting except `"version": 1` is optional. Anything you leave out uses the built-in default, so this is a valid `config.json`:
 
 ```json
 {
@@ -80,7 +80,7 @@ Every setting except `"version": 1` is optional. The smallest valid `config.json
 
 ### Create the configuration directory
 
-Normally OMXTerm creates this directory on first launch. To open or create it from your terminal:
+OMXTerm creates this folder on first launch. If you deleted it or want to find it from your terminal:
 
 **macOS and Linux:**
 
@@ -216,7 +216,7 @@ To open new windows with a minimal, borderless layout:
 }
 ```
 
-### Choose the Windows Default Shell
+### Choose the Windows default shell
 
 On Windows, set `windowsShell` to the full executable path of your preferred shell (remember to double backslashes in JSON).
 
@@ -277,9 +277,9 @@ Example overriding a single shortcut:
 }
 ```
 
-- Every shortcut needs at least one non-Shift modifier (`Command`, `Control`, `Alt`, `Option`, `CommandOrControl`, or `AltGr`) and a single key.
+- Every shortcut needs one key plus at least one modifier other than Shift (such as `CommandOrControl`, `Control`, `Alt`, or `AltGr`), so a shortcut can never swallow normal typing.
 - Use literal punctuation characters (such as `Control+Shift+,`), except for `+`, which is written as `Plus`.
-- Each action must have a unique shortcut. If you bind an action on Linux or Windows to a bare `Ctrl+<key>` used by terminal programs (like `Ctrl+C` or `Ctrl+D`), OMXTerm displays a non-blocking warning so you don't accidentally shadow your shell's control keys.
+- Each action needs its own shortcut. If you bind an action on Linux or Windows to a bare `Ctrl+<key>` that terminal programs use (like `Ctrl+C` or `Ctrl+D`), OMXTerm keeps the binding but shows a warning, since that key no longer reaches your shell.
 
 ## Snippets
 
@@ -303,7 +303,7 @@ Snippets let you save commonly used commands or text in `snippets.json` (next to
 - Set `"execute": true` if you want OMXTerm to append `Enter` automatically after inserting the snippet.
 - Up to 512 snippets are supported (`name` up to 128 characters, `body` up to 65,536 characters, optional `description` up to 512 characters).
 
-## Terminal Themes
+## Terminal themes
 
 On first launch, OMXTerm copies its default theme to `themes/omtheme.json` and links it in `config.json`. You can edit `themes/omtheme.json` directly, design a palette in [OMXTerm Studio](#edit-visually-with-omxterm-studio), or create a new theme file such as `themes/my-theme.json`:
 
@@ -363,7 +363,7 @@ node scripts/convert-ghostty-theme.mjs input-theme output-theme.json
 
 </details>
 
-## Reloading User Configuration
+## Reloading user configuration
 
 Choose **View → Reload User Configuration** (`Cmd+Shift+,` / `Ctrl+Shift+,`) after saving edits to `config.json` or your theme file:
 

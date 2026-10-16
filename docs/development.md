@@ -94,11 +94,10 @@ Test runs write a summary to `.scratch/vitest-results.json`.
 
 ### Qualification scope
 
-`npm run check:portable` runs formatting, lint, typecheck, the default Vitest suite, and an unpackaged build:
+`npm run check:portable` is the baseline for every code change (formatting, lint, typecheck, the default Vitest suite, and an unpackaged build). Two things to know before running it:
 
-- Keep the desktop unlocked and idle while graphical fixtures execute so pointer movement or focus changes do not interfere with hover, selection, or menu assertions.
-- On Linux, run the full test suite from an external system terminal rather than inside OMXTerm itself (running the About integration fixtures inside OMXTerm on Fedora and Ubuntu can hit a relaunch timeout; see [#609](https://github.com/luizomf/omxterm/issues/609)).
-- Current runtime known issues are listed in the [Restty guide](restty-development.md#current-runtime-limitations).
+- On Linux, run the full suite from an external system terminal, not inside OMXTerm itself. The About integration fixtures can hit a relaunch timeout when nested inside OMXTerm on Fedora and Ubuntu ([#609](https://github.com/luizomf/omxterm/issues/609)).
+- Known runtime limitations that tests account for are listed in the [Restty guide](restty-development.md#current-runtime-limitations).
 
 ### Focused checks
 

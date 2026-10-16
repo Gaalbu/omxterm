@@ -1,12 +1,8 @@
 # Linux desktop tips
 
-Use this guide for background blur, a larger interface on a HiDPI display, or
-VM and driver graphics troubleshooting. For ordinary setup, start with
-[Linux installation](installation.md#linux) and [configuration](configuration.md).
+You only need this page for extras: background blur, a bigger interface on a HiDPI screen, or a VM that cannot draw the window. For a normal setup, see [Linux installation](installation.md#linux).
 
-OMXTerm uses X11, or XWayland in a Wayland desktop session. Published Linux
-packages are ARM64. The desktop controls transparency and blur; choose the
-section for your desktop rather than just your distribution:
+OMXTerm runs on X11, or through XWayland on Wayland desktops. Your desktop, not your distribution, decides how transparency and blur work, so pick the section that matches it:
 
 - [GNOME](#ubuntu-with-gnome-blur-my-shell)
 - [KDE Plasma](#fedora-with-kde-plasma-and-other-kde-desktops)
@@ -14,83 +10,54 @@ section for your desktop rather than just your distribution:
 - [HiDPI interface size](#small-interface-text-on-a-hidpi-display)
 - [Graphics troubleshooting](#graphics-troubleshooting)
 
-For background-only transparency, keep whole-window opacity at full strength
-in your desktop's settings and use OMXTerm's
-[`window.transparency`](configuration.md#background-transparency-and-blur).
-That keeps text solid. Desktop-wide blur settings can affect other applications
-and graphics performance.
+> [!TIP]
+> Use OMXTerm's [`window.transparency`](configuration.md#background-transparency-and-blur) instead of your desktop's whole-window opacity. That way only the background fades and your text stays solid.
 
 ## Ubuntu with GNOME: Blur my Shell
 
-First check the [AppImage's glibc requirement](installation.md#requirements).
-These desktop preferences do not make an older distribution such as Ubuntu
-24.04 compatible with the current package.
+GNOME has no built-in blur for app windows, so you need the **Blur my Shell** extension:
 
-1. Install **Extension Manager**:
+1. Install Extension Manager:
 
    ```sh
    sudo apt install gnome-shell-extension-manager
    ```
 
-2. Open it, find **Blur my Shell** by **aunetx**, and install/enable a version
-   compatible with your GNOME release.
-3. In the extension's **Applications** preferences, enable application blur
-   and add the running **OMXTerm** window to its allowlist/whitelist. Labels
-   vary by extension version.
-4. Set OMXTerm's `window.transparency` above `0` and reload its configuration.
-   Adjust blur strength in the extension. On GNOME, the extension supplies blur;
-   OMXTerm's `window.blur` setting alone is not enough.
+2. Open it, search for **Blur my Shell** (by aunetx), and install it.
+3. In the extension's **Applications** settings, turn on application blur and add **OMXTerm** to the list of blurred apps.
+4. In OMXTerm's `config.json`, set `window.transparency` above `0` and reload.
 
-To undo, remove OMXTerm from the application list or disable the extension.
-Set transparency to `0` for an opaque terminal. See the
-[Blur my Shell project](https://github.com/aunetx/blur-my-shell) for supported
-GNOME versions and troubleshooting.
+Adjust the blur strength in the extension. OMXTerm's `window.blur` setting has no effect on GNOME. To undo, remove OMXTerm from the extension's list or set transparency back to `0`.
 
 ## Fedora with KDE Plasma (and other KDE desktops)
 
-KDE Plasma includes a **Blur** desktop effect. In **System Settings**, search
-for [Desktop Effects](https://docs.kde.org/stable_kf6/en/kwin/kcontrol/kwineffects/index.html),
-enable **Blur**, and adjust its strength if desired.
+1. In **System Settings → Desktop Effects**, make sure **Blur** is enabled.
+2. In OMXTerm's `config.json`, set `window.blur` to `true` and `window.transparency` above `0`, then reload.
 
-Set OMXTerm's `window.blur` to `true` and `window.transparency` above `0`, then
-reload. Its KDE request uses `xprop`. If blur has no effect, check for it:
+OMXTerm asks KDE for blur using the `xprop` tool. If blur does not appear, install it:
 
 ```sh
-command -v xprop
+sudo dnf install xprop          # Fedora
+sudo apt install x11-utils      # Ubuntu / Kubuntu
 ```
-
-Install the `xprop` package on Fedora (`sudo dnf install xprop`) or `x11-utils`
-on Ubuntu/Kubuntu (`sudo apt install x11-utils`) if needed. Missing `xprop`
-affects the blur request, not terminal startup.
-
-To return to an opaque terminal, set `blur` to `false` and transparency to `0`.
 
 ## Hyprland, including Omarchy
 
-Omarchy is an Arch-based desktop built around Hyprland. OMXTerm uses
-**X11 through XWayland** here. Some setups export
-`ELECTRON_OZONE_PLATFORM_HINT=wayland`; for a direct AppImage launch, explicitly
-select X11 if needed. Replace `VERSION` with your downloaded version:
+OMXTerm runs through XWayland on Hyprland. If your setup forces Electron apps to use Wayland (for example with `ELECTRON_OZONE_PLATFORM_HINT=wayland`), launch the AppImage with X11 explicitly (replace `VERSION` with the version you downloaded):
 
 ```sh
 ./OMXTerm-VERSION-arm64.AppImage --ozone-platform=x11
 ```
 
-The desktop installer places the executable at
-`~/.local/opt/omxterm/OMXTerm.AppImage`. The [helper](linux-installer.md)
-records X11 in its desktop entry; a command typed in a terminal only affects
-that launch.
+The [Linux installer](linux-installer.md) already adds this to the application-menu entry.
 
-Hyprland provides its own blur. Check whether it is enabled:
+Hyprland handles blur itself. Check whether it is on:
 
 ```sh
 hyprctl getoption decoration:blur:enabled
 ```
 
-Back up the user configuration file used by your installation before editing it.
-For a **Lua-based Hyprland configuration**, add this override, retaining your
-other settings. Omarchy can use `~/.config/hypr/looknfeel.lua`; check that your
-installation loads that file rather than creating an unused one.
+To turn it on with a Lua-based configuration (Omarchy uses `~/.config/hypr/looknfeel.lua`), add this and keep your other settings:
 
 ```lua
 hl.config({
@@ -104,74 +71,47 @@ hl.config({
 })
 ```
 
-For this Lua configuration, reload with `hyprctl reload config-only`, then check
-`hyprctl configerrors` and the blur option again. In OMXTerm, keep
-`window.transparency` above `0` and reload its configuration separately.
-OMXTerm's `window.blur` setting sends a KDE-specific hint; Hyprland uses its own
-policy instead.
+Reload with `hyprctl reload config-only` and check `hyprctl configerrors`. Then set OMXTerm's `window.transparency` above `0` and reload OMXTerm too. On Hyprland, `window.blur` is not needed.
 
-This enables blur for transparent windows generally. Per-window rules can
-still suppress it. Start with one pass, especially in a VM; higher size/pass
-counts can cost performance. To undo the desktop change, restore your backup
-or set this override's `enabled` to `false`, then reload Hyprland. To make only
-OMXTerm opaque, set its transparency to `0`.
+A few tips:
 
-Edit your user configuration rather than defaults under `/usr/share/omarchy`.
-Follow your installed version's
-[Hyprland blur documentation](https://wiki.hypr.land/Configuring/Basics/Variables/#blur)
-for its files and syntax; do not mix Lua and hyprlang examples.
-
-For a compact tiled layout, optionally set OMXTerm's `window.showTitleBar` to
-`false` for new windows, or toggle the current window with `Ctrl+Shift+D`.
-Press and release Alt alone to open the menu with the title bar hidden.
+- Edit your own configuration, not the defaults under `/usr/share/omarchy`.
+- If your setup uses hyprlang instead of Lua, follow the [Hyprland blur documentation](https://wiki.hypr.land/Configuring/Basics/Variables/#blur) for the matching syntax.
+- Start with one blur pass, especially in a VM. Higher values cost performance.
+- For a compact tiled layout, hide the title bar with `Ctrl+Shift+D` (or set `window.showTitleBar` to `false`). Press and release **Alt** to open the menu.
 
 ## Small interface text on a HiDPI display
 
-Terminal font zoom (`Ctrl++` / `Ctrl+-`) changes terminal text, while Electron's
-display scale also affects the title row, tabs, and sidebar.
+Terminal zoom (`Ctrl++` / `Ctrl+-`) only changes terminal text. If the tabs, title bar, and sidebar look too small, Electron's display scale is the issue.
 
-The [Linux helper](linux-installer.md#interface-size-on-hyprland) can record a
-uniform Hyprland monitor scale at installation time. For direct AppImage
-launches or manual adjustments, inspect:
+On Hyprland, this usually happens when XWayland zero-scaling is on. Check with:
 
 ```sh
 hyprctl monitors
 hyprctl getoption xwayland:force_zero_scaling
 ```
 
-With monitor scale `2` and zero-scaling enabled, XWayland windows are not
-enlarged by the compositor. Add `--force-device-scale-factor=2` to the OMXTerm
-launch command if the interface is too small. Choose the value for your display;
-`2` is only an example.
+If your monitor scale is `2` and zero-scaling is enabled, launch OMXTerm with a matching scale factor:
 
-This is an Electron launch option, not a `config.json` key. Add it before `-e`
-when launching a command. To keep it, add it to your application launcher; a
-bare AppImage launch bypasses that customization. Remove it if the interface
-becomes too large or automatic scaling works after a display change. See
-Hyprland's [XWayland scaling notes](https://wiki.hypr.land/Configuring/Advanced-and-Cool/XWayland/).
+```sh
+./OMXTerm-VERSION-arm64.AppImage --force-device-scale-factor=2
+```
+
+Use the value that matches your display. This is a launch option, not a `config.json` setting. The [Linux installer](linux-installer.md#interface-size-on-hyprland) detects it for you when all monitors share the same scale. See also Hyprland's [XWayland scaling notes](https://wiki.hypr.land/Configuring/Advanced-and-Cool/XWayland/).
 
 ## Graphics troubleshooting
 
-OMXTerm needs a working **WebGL2** backend before its shell can start. A VM's
-virtual GPU or an incompatible driver can prevent initialization. Start with
-normal installation; if the window is blank or reports a rendering-backend
-failure, try the [helper's compatibility mode](linux-installer.md#only-if-graphics-fail).
+OMXTerm needs **WebGL2** to draw the terminal. Some VMs and older GPU drivers cannot provide it, and you see a blank window or a rendering error instead of a shell.
 
-For a direct AppImage launch, replace `VERSION` with your downloaded version:
+If you use the [Linux installer](linux-installer.md#only-if-graphics-fail), reinstall with `--compatibility`. If you launch the AppImage directly, run:
 
 ```sh
 LIBGL_ALWAYS_SOFTWARE=1 ./OMXTerm-VERSION-arm64.AppImage \
   --ozone-platform=x11 --ignore-gpu-blocklist
 ```
 
-`LIBGL_ALWAYS_SOFTWARE=1` selects Mesa's CPU renderer; `--ignore-gpu-blocklist`
-bypasses Chromium's GPU compatibility blocklist for this process. Use these
-options only for a graphics failure: they can reduce performance or stability. Keep them local to this launch rather than exporting them globally.
-If initialization still fails, include the error and your GPU or VM details in
-a [problem report](../CONTRIBUTING.md#report-a-problem).
+This switches to CPU rendering and skips Chromium's GPU blocklist. It is slower, so use it only when normal launch fails, and keep it to this command instead of exporting it globally.
 
-For a FUSE mounting error, add `--appimage-extract-and-run` immediately after
-the AppImage path, before the Electron options. The helper chooses this mode
-automatically when installing. Its `install --compatibility` command also saves
-the graphics options in the application-menu entry; a normal reinstall removes
-them. A bare AppImage launch bypasses that entry.
+If you also need `--appimage-extract-and-run` (no FUSE), put it right after the AppImage path, before the other options.
+
+Still not working? [Open a bug report](../CONTRIBUTING.md#report-a-problem) with the error message and your GPU or VM details.

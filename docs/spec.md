@@ -95,8 +95,8 @@ succeeds ([ADR 0025](adr/0025-use-restty-as-the-terminal-surface.md)).
   explicitly choose a shell and pass literal arguments such as `-lc`. The
   request is consumed only by the first Terminal Tab of the first Terminal
   Window in that application process; all later tabs and windows use the Default
-  Shell. A terminal `-e` is an actionable startup failure and never falls back
-  to the Default Shell.
+  Shell. A trailing `-e` with no program is an actionable startup failure and
+  never falls back to the Default Shell.
 - An explicit command starts in the user's home directory, inherits the normal
   process environment, and receives the Terminal Capability Identity. It is a
   Busy Session for its complete live lifetime. Its clean exit, unexpected
@@ -134,11 +134,11 @@ succeeds ([ADR 0025](adr/0025-use-restty-as-the-terminal-surface.md)).
   tab's initialization, however, the renderer has not yet subscribed to tab
   commands: an early Close Tab, New Tab or tab-navigation command can be lost
   rather than queued. Clipboard, zoom, tab-bar and snippets actions also
-  subscribe only after that readiness; earlier notifications are not buffered. Close Window and
-  Quit use separate main-owned paths and can still cancel initialization. Close
-  Window defaults to `Cmd+Shift+W` on macOS and `Ctrl+Shift+Q` on Linux and
-  Windows and closes all of the selected window's tabs. Closing the last window
-  quits OMXTerm.
+  subscribe only after that readiness; earlier notifications are not buffered.
+  Close Window and Quit use separate main-owned paths and can still cancel
+  initialization. Close Window defaults to `Cmd+Shift+W` on macOS and
+  `Ctrl+Shift+Q` on Linux and Windows and closes all of the selected window's
+  tabs. Closing the last window quits OMXTerm.
 - Quit defaults to `Cmd+Q` on macOS and `Ctrl+Alt+Shift+Q` on Linux and Windows.
   It requests one confirmation for all open windows when confirmation is enabled
   and at least one Live Terminal Session is Busy.
