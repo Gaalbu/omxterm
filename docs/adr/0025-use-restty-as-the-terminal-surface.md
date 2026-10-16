@@ -109,7 +109,7 @@ input without the unused `sbix` bitmap table, retaining all faces and other
 tables. Native Canvas still uses the unchanged installed font. This reduces font
 bytes, not total RSS/GPU memory. The pinned fallback already renders blank Apple
 emoji if Canvas is unavailable. Upgrades must revalidate the assumption using
-[the shaping diagnostics](../emoji-shaping-diagnostics.md); it is not a general
+[the shaping diagnostics](../restty-development.md#optional-rendering-and-memory-diagnostics); it is not a general
 policy for bitmap fonts or an on-disk derivative.
 
 ### Creation-time settings and restart notices

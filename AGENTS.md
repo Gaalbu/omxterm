@@ -1,43 +1,31 @@
 # Working on OMXTerm
 
-OMXTerm is a personal desktop terminal for ARM64 macOS, Linux and Windows,
-using Electron, TypeScript, a portable DOM+Restty Terminal Surface and a local
-PTY Adapter.
+OMXTerm is an open-source desktop terminal for ARM64 macOS, Linux, and Windows, built with Electron, TypeScript, a portable DOM + Restty Terminal Surface (Ghostty WASM core), and a local `node-pty` Adapter.
 
-## Shared contributor guidance
+## Quick commands
 
-[CONTRIBUTING.md](CONTRIBUTING.md) is the contribution guide for humans and
-agents alike: setup, engineering and security standards, verification, commits
-and PRs. Use [docs/development.md](docs/development.md) for platform prerequisites,
-native tests and fixture safety. No particular agent harness, skill collection,
-private tooling or worktree location is required.
+```sh
+npm ci                       # Install locked dependencies and prepare native runtimes
+npm run dev                  # Build and launch OMXTerm in development
+npm test -- test/unit        # Run headless unit tests
+npm run check:portable       # Format check, lint, typecheck, default tests, and build
+npm run format:check         # Check formatting with Prettier
+```
 
-For the task's context, read its issue, [docs/spec.md](docs/spec.md),
-[CONTEXT.md](CONTEXT.md) and relevant [ADRs](docs/adr/README.md). These are shared
-technical references, not agent-only requirements. Update affected contracts
-alongside behavior changes; documentation corrections alone do not authorize
-code changes. The [documentation map](docs/README.md) identifies each subject's
-home.
+> **Note:** Graphical integration tests included in `npm test` and `npm run check:portable` open and focus real Electron windows. Run one graphical suite at a time on an unlocked, idle desktop. Use `npm test -- test/unit` for fast headless feedback.
 
-## Agent working guidance
+## Architecture and repository layout
 
-- Chat in the user's language; write code, docs and GitHub artifacts in English.
-- Inspect working-tree changes and related issues/branches/PRs before editing.
-  Preserve unrelated work and coordinate with active writers. Check current
-  tracker state; completed work stays closed unless the task calls for reopening.
-- Carry the actual request and delivery boundary into plans and delegations.
-  Prefer the smallest complete solution and existing tools; do not add
-  unrequested work, approval gates or implementation to a documentation task.
-- Continue while the next step is clear and in scope. Ask when missing information
-  blocks progress or a destructive consequence needs authorization. Report
-  blockers with evidence and a recommended next step.
-- Apply the shared [engineering standards](CONTRIBUTING.md#making-a-change) and
-  [verification guidance](CONTRIBUTING.md#verification). Inspect the final diff;
-  report actual checks, unavailable checks and retained failures, not inferred
-  passes. Keep private data out of commits and public evidence.
-- Leave integration and releases to the authorized maintainer workflow under
-  [maintainer responsibilities](CONTRIBUTING.md#maintainer-integration-and-releases).
-  Do not treat a contribution request as permission to publish or release.
+- `src/main/` — Electron main process: native windows, local PTY sessions, configuration and theme loading, font validation, clipboard, external link validation, bounded local-image reads, and operational logging.
+- `src/preload/` — Minimal typed preload bridge with sender and payload validation.
+- `src/renderer/` — Window host, tabs, chrome, snippets sidebar, and local image preview overlay (runs with context isolation enabled and Node integration disabled).
+- `src/terminal-surface/` — Framework-independent DOM Terminal Surface powered by Restty and Ghostty WASM. Receives a session Adapter rather than importing Electron or `node-pty`.
+- `docs/` — User guides and developer references (see [`docs/README.md`](docs/README.md)).
 
-GitHub: `luizomf/omxterm`. Maintainer tracker operations and label meanings are in
-[docs/agents/](docs/agents/issue-tracker.md); consult them when doing tracker work.
+## Repository standards
+
+- Write code, documentation, commit messages, and GitHub issues/PRs in English.
+- Read [`CONTRIBUTING.md`](CONTRIBUTING.md) for setup, engineering standards, verification, and PR workflow, and [`docs/development.md`](docs/development.md) for platform prerequisites and native test suites.
+- Consult [`docs/spec.md`](docs/spec.md), [`CONTEXT.md`](CONTEXT.md), and [`docs/adr/README.md`](docs/adr/README.md) when changing observable behavior or architecture. Update affected user guides and technical contracts in the same commit as behavior changes.
+- Keep privileged capabilities in Electron `main`, validate external inputs at IPC and PTY boundaries, pass untrusted values as literal arguments (never interpolated shell strings), and keep terminal contents, commands, clipboard data, and private paths out of logs and commits.
+- Leave version bumps, release tagging, and package publication to the maintainer release workflow in [`docs/release.md`](docs/release.md). Tracker conventions and triage labels are documented in [`docs/agents/`](docs/agents/issue-tracker.md).

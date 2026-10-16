@@ -1,31 +1,27 @@
 ---
-name: Agent task
-about: Define focused planning or implementation work
+name: Development task
+about: Define a scoped implementation, refactoring, or investigation task
 title: ""
 labels: needs-triage
 assignees: ""
 ---
 
-## Intent
+## Goal
 
-<!-- What outcome should this task produce, for whom, and why? -->
+<!-- What problem does this task solve, and why? -->
 
-## Relevant sources
+## Context
 
-<!-- Link the issue context, spec sections and ADRs needed for this work. -->
+<!-- Link relevant issues, code paths, spec sections, or ADRs. -->
 
 ## Scope
 
-<!-- Describe the work and any meaningful scope boundaries. -->
-
-## Dependencies
-
-<!-- List blockers and required ordering, or write "None". -->
+<!-- Describe the planned changes and any explicit non-goals. -->
 
 ## Acceptance criteria
 
-- [ ] <!-- An observable, reviewable outcome. -->
+- [ ] <!-- Observable, testable outcome -->
 
-## Verification and review
+## Verification
 
-<!-- Name the checks that demonstrate completion and any task-specific review needs. Use synthetic examples and keep private data out of evidence. -->
+<!-- List the tests or checks that verify completion. -->

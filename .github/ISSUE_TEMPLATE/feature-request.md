@@ -1,21 +1,19 @@
 ---
 name: Feature request
-about: Suggest an improvement to OMXTerm
+about: Suggest an improvement or feature for OMXTerm
 title: "feat: "
 labels: needs-triage
 assignees: ""
 ---
 
-<!-- Thanks for sharing an idea! Search existing issues first. You can describe the problem without designing the implementation. -->
-
 ## Problem or use case
 
 <!-- What are you trying to do, and what makes it difficult today? -->
 
-## Suggested improvement
+## Proposed solution
 
-<!-- What would you like to happen? -->
+<!-- How would you like this to work? -->
 
-## Optional context
+## Additional context
 
-<!-- Include alternatives you have tried and relevant platforms. Use synthetic examples and keep private data out of the request. -->
+<!-- Optional: alternatives you have tried or platforms this affects. -->

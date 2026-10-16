@@ -1,17 +1,15 @@
-<!-- Thanks for contributing! Use synthetic examples and keep private data out of this PR. -->
-
 ## Summary
 
-<!-- What problem does this solve? For an issue with acceptance criteria, explain how the change meets them. -->
+<!-- What does this PR change, and why? -->
 
 ## Related issue
 
-<!-- Use "Closes #123" when applicable, or remove this section. -->
+<!-- e.g., Closes #123 -->
 
 ## Verification
 
-<!-- List commands and results, including any relevant checks you could not run and why. -->
+<!-- List the checks and tests run (e.g., `npm test -- test/unit`, `npm run check:portable`). -->
 
-## Documentation and concerns
+## Documentation
 
-<!-- Link guides and product contracts (spec, ADRs, terminology) updated in the same commit as changed behavior, or explain why none is affected. Mention any security impact or unresolved concern. -->
+<!-- Note any user guides, specs, or ADRs updated alongside behavior changes. -->
