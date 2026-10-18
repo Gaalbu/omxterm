@@ -11,7 +11,7 @@ for **Apple Silicon macOS, Linux ARM64, and Windows ARM64**.
 Need a VPS server (or any other hosting service)? Use my link and coupon code
 for 10% discount:
 
-- [hostinger.com/otaviomiranda](hostinger.com/otaviomiranda)
+- [hostinger.com/otaviomiranda](https://hostinger.com/otaviomiranda)
 - Coupon: `OTAVIOMIRANDA`
 
 ---
