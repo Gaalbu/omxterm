@@ -1168,9 +1168,10 @@ cleanup preserves user data and is part of full verification; unpacked-only
 diagnostics are partial.
 
 Release verification separates behavioral tests, native builds, exact-artifact
-checks and publication. Each artifact needs native verification against its own
-identity and checksum. Recorded results are reusable only with known equivalent
-relevant inputs. Version-only changes need new packages and package/version
+checks and publication. Each artifact needs verification against its own
+identity and checksum: native by default, or the explicitly approved Windows x64
+emulation exception in ADR 0034 with its limits recorded. Recorded results are
+reusable only with known equivalent relevant inputs. Version-only changes need new packages and package/version
 checks, not wholesale behavioral reruns; changed product, dependency or build
 inputs invalidate affected results. Build-to-tag differences retain the full
 build SHA and digest and require a verified non-artifact explanation. Applicable

@@ -163,7 +163,9 @@ requests. Child processes retain normal network access; explicitly activated web
 links open through the OS.
 
 **Release Artifact** — An exact native package (ARM64, or x64 on Windows) (DMG, AppImage or NSIS)
-published with its source tag, checksum and native verification evidence.
+published with its source tag, checksum and verification evidence: native by
+default, or explicitly approved Windows x64 emulation with recorded limitations
+under [ADR 0034](docs/adr/0034-support-native-windows-x64-packages.md).
 Artifacts have no verified publisher identity; the macOS app has an ad-hoc
 integrity seal, not Developer ID signing or notarization. See the
 [release procedure](docs/release.md).
