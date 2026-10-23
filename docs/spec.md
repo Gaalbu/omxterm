@@ -1128,8 +1128,12 @@ in main.
 OMXTerm uses the MIT License and follows the [versioning policy](versioning.md).
 Packages are built natively on ARM64 macOS, Linux and Windows, and on x64 Windows, using native
 filesystems rather than VM shared folders. The formats are DMG, AppImage and
-NSIS respectively. Linux also provides `linux_install.sh` and
-`linux_install.sh.sha256`; the helper's embedded version matches the release.
+NSIS respectively. An explicit maintainer-approved Windows x64 release may use
+x64 emulation on Windows ARM64 while native hardware is unavailable (ADR 0034);
+release evidence must identify that exception and pending native qualification.
+Installer safety requirements are unchanged. Linux also provides
+`linux_install.sh` and `linux_install.sh.sha256`; the helper's embedded version
+matches the release.
 
 Artifacts include SHA-256 checksums but no verified publisher identity. The
 macOS app has an ad-hoc integrity seal, not Developer ID signing or
