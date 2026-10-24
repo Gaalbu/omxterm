@@ -1,6 +1,5 @@
 import { mountWindowChrome, type WindowChromeBridge } from "./window-chrome";
-import { mountAboutDialog } from "./about/about-dialog";
-import { mountSettingsDialog } from "./settings/settings-dialog";
+import { mountWindowDialogs } from "./window-dialogs";
 import type { SettingsBridge } from "../shared/settings";
 import type { AboutBridge } from "../shared/about";
 import type { TerminalSessionAdapter } from "../terminal-surface/terminal-session-adapter";
@@ -27,10 +26,8 @@ import {
   TERMINAL_TAB_DRAG_DATA_TYPE,
   type TerminalTabs,
 } from "./terminal-tabs";
-import {
-  createSnippetsSidebar,
-  type SnippetsSidebar,
-} from "./snippets-sidebar";
+import { createSnippetsView } from "./snippets-sidebar";
+import { createAuxiliaryPanel, type AuxiliaryPanel } from "./auxiliary-panel";
 import { renderUserFileErrorBanner } from "./user-file-error-banner";
 import {
   createLocalImagePreview,
@@ -124,15 +121,12 @@ export function mountTerminalWindowPage(
   let removeTabCommandListener: (() => void) | undefined;
   let removeTabTitleListener: (() => void) | undefined;
   let removeGuardedActionListeners: (() => void) | undefined;
-  let snippetsSidebar: SnippetsSidebar | undefined;
+  let auxiliaryPanel: AuxiliaryPanel | undefined;
   let removeSnippetsToggleListener: (() => void) | undefined;
   let removeLocalImageOpenListener: (() => void) | undefined;
   let localImagePreview: LocalImagePreview | undefined;
-  let about: ReturnType<typeof mountAboutDialog>;
-  let settings: ReturnType<typeof mountSettingsDialog>;
-  // About and Settings each own modal input; at most one overlay is active.
-  const dialogActive = () =>
-    (about?.isActive() ?? false) || (settings?.isActive() ?? false);
+  let dialogs: ReturnType<typeof mountWindowDialogs> | undefined;
+  const dialogActive = () => dialogs?.isActive() ?? false;
   const previewActive = () =>
     (localImagePreview?.isActive() ?? false) || dialogActive();
   const hoverAvailabilityListeners = new Set<() => void>();
@@ -145,26 +139,13 @@ export function mountTerminalWindowPage(
     ? surfaceConfiguration(options.configuration)
     : undefined;
 
-  const applyPageTheme = (theme: TerminalTheme, transparency: number) => {
-    const { background, foreground } = theme.colors;
-    page.document.documentElement.style.setProperty(
-      "--terminal-background-opacity",
-      String(1 - transparency),
+  const applyPageTheme = (theme: TerminalTheme, transparency: number) =>
+    applyWindowTheme(
+      page.document,
+      elements.tabsContainer,
+      theme,
+      transparency,
     );
-    page.document.documentElement.style.setProperty(
-      "--terminal-background",
-      background,
-    );
-    page.document.documentElement.style.setProperty(
-      "--terminal-foreground",
-      foreground,
-    );
-    page.document.body.style.setProperty("--terminal-background", background);
-    elements.tabsContainer.style.setProperty(
-      "--terminal-background",
-      background,
-    );
-  };
 
   if (options.configuration) {
     page.document.documentElement.style.setProperty(
@@ -180,6 +161,7 @@ export function mountTerminalWindowPage(
   const surfaceOptions: TerminalSurfaceOptions = {
     ...activeSurfaceConfiguration,
     background: "host",
+    focus: false,
     ...(fontGenerations ? { acquireFontInputs: fontGenerations.acquire } : {}),
     ...(options.clipboard ? { clipboard: options.clipboard } : {}),
     ...(options.onExternalLink
@@ -197,7 +179,7 @@ export function mountTerminalWindowPage(
             },
           },
           onLocalImageActivation: (source: LocalImageActivation) => {
-            if (!about?.isActive()) void localImagePreview?.open(source);
+            if (!dialogActive()) void localImagePreview?.open(source);
           },
         }
       : {}),
@@ -210,7 +192,9 @@ export function mountTerminalWindowPage(
     { strip: elements.tabStrip, container: elements.tabsContainer },
     {
       createAdapter: () => options.createAdapter(fontConfigurationId),
-      canFocus: () => !disposed && !about?.isActive(),
+      canFocus: () => !disposed && !dialogActive(),
+      canAutoFocus: (unchangedFocus) =>
+        !previewActive() && (unchangedFocus || !auxiliaryPanel?.ownsFocus()),
       mount,
       surfaceOptions,
       showTabBar: options.configuration?.showTabBar ?? true,
@@ -230,12 +214,14 @@ export function mountTerminalWindowPage(
 
   const chrome = options.chrome
     ? mountWindowChrome(page.document, options.chrome, () => {
-        if (!previewActive()) tabs.focusSelected();
+        if (!previewActive() && !auxiliaryPanel?.ownsFocus())
+          tabs.focusSelected();
       })
     : undefined;
 
   const onOverlayActivity = () => {
     chrome?.setPreviewActive(previewActive());
+    auxiliaryPanel?.setBlocked(previewActive());
     for (const listener of hoverAvailabilityListeners) listener();
   };
   if (options.loadLocalImage) {
@@ -249,26 +235,14 @@ export function mountTerminalWindowPage(
     });
   }
 
-  about = mountAboutDialog(
+  dialogs = mountWindowDialogs(
     page.document,
-    options.about,
+    options,
     () => !disposed && !previewActive(),
-    {
-      focusTerminal: tabs.focusSelected,
-      onActivityChange: onOverlayActivity,
-    },
-  );
-  settings = mountSettingsDialog(
-    page.document,
-    options.settings,
-    () => !disposed && !previewActive(),
-    {
-      focusTerminal: tabs.focusSelected,
-      onActivityChange: onOverlayActivity,
-    },
+    { focusTerminal: tabs.focusSelected, onActivityChange: onOverlayActivity },
   );
   const onPageFocus = () => {
-    if (!previewActive()) tabs.focusSelected();
+    if (!previewActive() && !auxiliaryPanel?.ownsFocus()) tabs.focusSelected();
   };
   const removeFileDrops = installFileDrops(
     page.document,
@@ -288,15 +262,13 @@ export function mountTerminalWindowPage(
     removeTabTitleListener?.();
     removeSnippetsToggleListener?.();
     removeLocalImageOpenListener?.();
-    about?.dispose();
-    about = undefined;
-    settings?.dispose();
-    settings = undefined;
+    dialogs?.dispose();
+    dialogs = undefined;
     chrome?.dispose();
     localImagePreview?.dispose();
     localImagePreview = undefined;
-    snippetsSidebar?.dispose();
-    snippetsSidebar = undefined;
+    auxiliaryPanel?.dispose();
+    auxiliaryPanel = undefined;
     tabs.dispose();
     fontGenerations?.dispose();
   };
@@ -348,29 +320,45 @@ export function mountTerminalWindowPage(
       options,
       tabs,
       previewActive,
-      (action) => settings?.editClipboard(action, options.clipboard),
+      (action) => dialogs?.editClipboard(action, options.clipboard),
+      (action) => auxiliaryPanel?.clipboardAction(action) ?? false,
     );
     removeTabCommandListener = options.subscribeToTabCommands?.((command) => {
       if (
-        about?.isActive() &&
+        dialogActive() &&
         ["new", "next", "previous", "select"].includes(command.action)
       )
         return;
       tabs.handleCommand(command);
     });
     if (options.snippets) {
-      const sidebar = createSnippetsSidebar(options.snippets.element, {
-        loadSnippets: options.snippets.load,
-        inject: (snippet) => {
-          if (!previewActive())
-            tabs.injectSnippet(snippet.body, { submit: snippet.execute });
-        },
-        focusTerminal: onPageFocus,
+      const snippets = options.snippets;
+      const panel = createAuxiliaryPanel(snippets.element, {
+        content: snippets.element.parentElement!,
+        focusTerminal: tabs.focusSelected,
+        ...(options.clipboard ? { clipboard: options.clipboard } : {}),
+        views: [
+          {
+            id: "snippets",
+            label: "Snippets",
+            create: (isInteractive) =>
+              createSnippetsView(page.document, {
+                loadSnippets: snippets.load,
+                isInteractive,
+                inject: (snippet) => {
+                  if (previewActive()) return;
+                  tabs.injectSnippet(snippet.body, { submit: snippet.execute });
+                  tabs.focusSelected();
+                },
+              }),
+          },
+        ],
       });
-      snippetsSidebar = sidebar;
-      removeSnippetsToggleListener = options.snippets.subscribeToToggle(() => {
-        if (!previewActive()) void sidebar.toggle();
-      });
+      auxiliaryPanel = panel;
+      panel.setBlocked(previewActive());
+      removeSnippetsToggleListener = snippets.subscribeToToggle(() =>
+        panel.toggle("snippets"),
+      );
     }
   });
 
@@ -383,6 +371,7 @@ function subscribeToGuardedActions(
   tabs: TerminalTabs,
   blocked: () => boolean,
   editBlocked: (action: TerminalClipboardAction) => void,
+  panelClipboard: (action: TerminalClipboardAction) => boolean,
 ): () => void {
   const removals = [
     options.subscribeToFontZoom?.((command) => {
@@ -391,8 +380,8 @@ function subscribeToGuardedActions(
     // While an overlay owns input, editing goes to its focused field, never
     // to the terminal.
     options.subscribeToClipboardActions?.((action) => {
-      if (!blocked()) tabs.clipboardAction(action);
-      else editBlocked(action);
+      if (blocked()) editBlocked(action);
+      else if (!panelClipboard(action)) tabs.clipboardAction(action);
     }),
     options.subscribeToTabBarToggle?.(() => {
       if (!blocked()) tabs.toggleTabBar();
@@ -440,6 +429,29 @@ function installFileDrops(
     document.removeEventListener("dragover", onDragOver, true);
     document.removeEventListener("drop", onDrop, true);
   };
+}
+
+function applyWindowTheme(
+  document: Document,
+  tabs: HTMLElement,
+  theme: TerminalTheme,
+  transparency: number,
+): void {
+  const { background, foreground } = theme.colors;
+  document.documentElement.style.setProperty(
+    "--terminal-background-opacity",
+    String(1 - transparency),
+  );
+  document.documentElement.style.setProperty(
+    "--terminal-background",
+    background,
+  );
+  document.documentElement.style.setProperty(
+    "--terminal-foreground",
+    foreground,
+  );
+  document.body.style.setProperty("--terminal-background", background);
+  tabs.style.setProperty("--terminal-background", background);
 }
 
 function sameSurfaceConfiguration(

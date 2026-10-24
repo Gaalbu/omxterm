@@ -23,6 +23,14 @@ it("owns input while open: blocks terminal actions and edits its own field", asy
   let openAbout!: () => void;
   let clipboardAction!: (action: "copy" | "paste" | "select-all") => void;
   let find!: () => void;
+  let tabCommand!: (command: { action: "new" }) => void;
+  const createAdapter = vi.fn(() => ({
+    sessionId: () => "s1",
+    start: async () => {},
+    write: vi.fn(),
+    resize: vi.fn(),
+    close: vi.fn(),
+  }));
   const surface = {
     dispose: vi.fn(),
     focus: vi.fn(),
@@ -42,13 +50,7 @@ it("owns input while open: blocks terminal actions and edits its own field", asy
     { tabStrip, tabsContainer },
     {
       page: window,
-      createAdapter: () => ({
-        sessionId: () => "s1",
-        start: async () => {},
-        write: vi.fn(),
-        resize: vi.fn(),
-        close: vi.fn(),
-      }),
+      createAdapter,
       mount: async () => surface,
       clipboard: {
         readText: vi.fn(async () => "Installed Mono"),
@@ -81,6 +83,10 @@ it("owns input while open: blocks terminal actions and edits its own field", asy
         find = listener;
         return () => {};
       },
+      subscribeToTabCommands: (listener) => {
+        tabCommand = listener;
+        return () => {};
+      },
     },
   );
   try {
@@ -99,9 +105,11 @@ it("owns input while open: blocks terminal actions and edits its own field", asy
     family.focus();
     clipboardAction("paste");
     find();
+    tabCommand({ action: "new" });
     await vi.waitFor(() => expect(family.value).toBe("Installed Mono"));
     expect(surface.paste).not.toHaveBeenCalled();
     expect(surface.find).not.toHaveBeenCalled();
+    expect(createAdapter).toHaveBeenCalledOnce();
     window.dispatchEvent(new Event("focus"));
     expect(surface.focus).not.toHaveBeenCalled();
 

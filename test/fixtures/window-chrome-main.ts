@@ -16,6 +16,7 @@ import {
 } from "../../src/main/terminal-application";
 import { createTerminalWindowTitleController } from "../../src/main/terminal-window-title";
 import { registerTerminalIpcRouter } from "../../src/main/terminal-ipc-controller";
+import type { SessionCallbacks } from "../../src/main/terminal-ipc-types";
 import {
   terminalRendererConfiguration,
   applyActiveUserConfiguration,
@@ -34,6 +35,8 @@ import { createAboutExercise } from "./about-dialog-exercise";
 import { createSettingsExercise } from "./settings-dialog-exercise";
 import { exerciseAboutKeyboard } from "./about-keyboard-exercise";
 import { exerciseWindowChrome } from "./window-chrome-exercise";
+import { exerciseAuxiliaryPanel } from "./auxiliary-panel-exercise";
+import type { LocalImageData } from "../../src/shared/local-image";
 import { assertNativeChromeConstruction } from "./window-chrome-construction";
 import { chromeNativeExpectation } from "./window-policy";
 import { exerciseWindowsHandleDrag } from "./window-chrome-native-drag";
@@ -43,6 +46,9 @@ import {
 } from "./application-menu-exercise";
 
 const root = __dirname;
+const auxiliaryOnly = process.argv.includes("--fixture-auxiliary-only");
+const panelClipboard = { text: "", writes: [] as string[], reads: 0 };
+let finishPanelImage: ((image: LocalImageData | null) => void) | undefined;
 for (const name of ["userData", "sessionData"] as const) {
   const directory = path.join(root, name);
   mkdirSync(directory, { recursive: true });
@@ -69,6 +75,60 @@ let cursor = { x: -100_000, y: -100_000 };
 let nativeCursor = false;
 let application: TerminalApplication<BrowserWindow>;
 let failing = false;
+function createChromeSession(callbacks: SessionCallbacks) {
+  if (failing) throw new Error("Chrome fixture is completing");
+  const index = sessions.length;
+  sizes[index] = [];
+  sessionOutputs[index] = callbacks.onOutput;
+  let queryingCell = false;
+  cellQueries[index] = () => {
+    queryingCell = true;
+    callbacks.onOutput("\u001b[16t");
+  };
+  let resolveExit: () => void = () => {};
+  sessionExits.push(
+    new Promise<void>((resolve) => {
+      resolveExit = resolve;
+    }),
+  );
+  let terminal: ReturnType<typeof createLocalTerminalSession>;
+  try {
+    terminal = createLocalTerminalSession(spawnFixturePty, {
+      shell: nativeFixturePlatform.defaultShell,
+      launchRequest: explicitFixtureLaunchRequest(),
+      platform: process.platform,
+      homeDirectory: root,
+      environment: { ...process.env, HOME: root },
+      applicationVersionProvider: app,
+      ...callbacks,
+      onExit(exit, launchKind) {
+        resolveExit();
+        callbacks.onExit(exit, launchKind);
+      },
+    });
+  } catch (error) {
+    // No session was returned; do not leave an unowned pending slot.
+    resolveExit();
+    throw error;
+  }
+  sessions.push(terminal);
+  return {
+    ...terminal,
+    write(data: string) {
+      if (keyboardInput) return keyboardInput(data);
+      const cell = queryingCell && /^\u001b\[6;(\d+);(\d+)t$/u.exec(data);
+      if (cell) {
+        cells[index] = { width: Number(cell[2]), height: Number(cell[1]) };
+        queryingCell = false;
+      } else terminal.write(data);
+    },
+    resize(size: { cols: number; rows: number }) {
+      sizes[index]!.push(size);
+      terminal.resize(size);
+    },
+  };
+}
+
 function exerciseMenu(showAbout: () => void) {
   return exerciseApplicationMenu(
     windows[0]!,
@@ -123,7 +183,14 @@ async function exerciseSettingsOnly(router: TerminalIpcRouter) {
 async function exerciseScenario(
   about: ReturnType<typeof createAboutExercise>,
   router: TerminalIpcRouter,
-  options: Parameters<typeof exerciseWindowChrome>[0],
+  options: Omit<
+    Parameters<typeof exerciseWindowChrome>[0],
+    "nativeExpectation"
+  > & {
+    readonly nativeExpectation?: Parameters<
+      typeof exerciseWindowChrome
+    >[0]["nativeExpectation"];
+  },
 ) {
   try {
     if (process.argv.includes("--fixture-settings-only"))
@@ -137,7 +204,35 @@ async function exerciseScenario(
       await about.exercise();
       return { about: "menu-keyboard-focus-layout-verified" };
     }
-    const result = await exerciseWindowChrome(options);
+    if (auxiliaryOnly) {
+      return await exerciseAuxiliaryPanel({
+        window: windows[0]!,
+        application,
+        second: options.second,
+        sizes,
+        output: (index, data) => sessionOutputs[index]!(data),
+        captureInput: (listener) => {
+          keyboardInput = listener;
+        },
+        clipboard: panelClipboard,
+        showAbout: about.show,
+        imagePending: () => finishPanelImage !== undefined,
+        finishImage: (image) => {
+          const finish = finishPanelImage;
+          finishPanelImage = undefined;
+          finish!(image);
+        },
+        reload: options.reload,
+      });
+    }
+    assert.ok(
+      options.nativeExpectation,
+      "Chrome continuity requires a native observation",
+    );
+    const result = await exerciseWindowChrome({
+      ...options,
+      nativeExpectation: options.nativeExpectation,
+    });
     await about.exercise();
     return result;
   } finally {
@@ -190,10 +285,13 @@ app
       });
       return;
     }
-    const nativeExpectation = chromeNativeExpectation(process.argv);
-    process.stdout.write(
-      `__OMXTERM_CHROME_NATIVE_EXPECTATION__${nativeExpectation}\n`,
-    );
+    const nativeExpectation = auxiliaryOnly
+      ? undefined
+      : chromeNativeExpectation(process.argv);
+    if (nativeExpectation !== undefined)
+      process.stdout.write(
+        `__OMXTERM_CHROME_NATIVE_EXPECTATION__${nativeExpectation}\n`,
+      );
     const router = registerTerminalIpcRouter(ipcMain);
     const about = createAboutExercise(router, () => windows[0]!);
     application = startTerminalApplication<BrowserWindow>({
@@ -252,63 +350,7 @@ app
             { configuration, userFileErrors: [] },
             process.platform === "darwin" ? 30 : 0,
           ),
-          createSession(callbacks) {
-            if (failing) throw new Error("Chrome fixture is completing");
-            const index = sessions.length;
-            sizes[index] = [];
-            sessionOutputs[index] = callbacks.onOutput;
-            let queryingCell = false;
-            cellQueries[index] = () => {
-              queryingCell = true;
-              callbacks.onOutput("\u001b[16t");
-            };
-            let resolveExit: () => void = () => {};
-            sessionExits.push(
-              new Promise<void>((resolve) => {
-                resolveExit = resolve;
-              }),
-            );
-            let terminal: ReturnType<typeof createLocalTerminalSession>;
-            try {
-              terminal = createLocalTerminalSession(spawnFixturePty, {
-                shell: nativeFixturePlatform.defaultShell,
-                launchRequest: explicitFixtureLaunchRequest(),
-                platform: process.platform,
-                homeDirectory: root,
-                environment: { ...process.env, HOME: root },
-                applicationVersionProvider: app,
-                ...callbacks,
-                onExit(exit, launchKind) {
-                  resolveExit();
-                  callbacks.onExit(exit, launchKind);
-                },
-              });
-            } catch (error) {
-              // No session was returned; do not leave an unowned pending slot.
-              resolveExit();
-              throw error;
-            }
-            sessions.push(terminal);
-            return {
-              ...terminal,
-              write(data) {
-                if (keyboardInput) return keyboardInput(data);
-                const cell =
-                  queryingCell && /^\u001b\[6;(\d+);(\d+)t$/u.exec(data);
-                if (cell) {
-                  cells[index] = {
-                    width: Number(cell[2]),
-                    height: Number(cell[1]),
-                  };
-                  queryingCell = false;
-                } else terminal.write(data);
-              },
-              resize(size) {
-                sizes[index]!.push(size);
-                terminal.resize(size);
-              },
-            };
-          },
+          createSession: createChromeSession,
           onSessionStarted: title.sessionStarted,
           onSessionSelected: title.selectSession,
           onSessionStartError: lifecycle.onSessionStartError,
@@ -319,14 +361,32 @@ app
           onTitleRequest: title.requestTitle,
           onBell: title.ringBell,
           onUserInteraction: title.resetAttention,
-          writeClipboardText() {},
-          readClipboardText: () => "",
+          writeClipboardText(text) {
+            if (auxiliaryOnly) panelClipboard.writes.push(text);
+          },
+          readClipboardText: () => {
+            panelClipboard.reads += 1;
+            return panelClipboard.text;
+          },
           confirmPaste: async () => false,
           showClipboardContextMenu() {},
           openExternalLink: async () => {},
           onExternalLinkOpenError() {},
-          loadSnippets: async () => ({ snippets: [] }),
-          loadLocalImage: async () => null,
+          loadSnippets: async () => ({
+            snippets: auxiliaryOnly
+              ? Array.from({ length: 40 }, (_, index) => ({
+                  name: `Synthetic ${index}`,
+                  body: " synthetic  snippet ",
+                  execute: index !== 0,
+                }))
+              : [],
+          }),
+          loadLocalImage: async () =>
+            auxiliaryOnly
+              ? new Promise<LocalImageData | null>((resolve) => {
+                  finishPanelImage = resolve;
+                })
+              : null,
         });
         registerTerminalWindowHost(
           window,
@@ -363,14 +423,16 @@ app
         window.webContents.send(terminalIpc.fontZoom, command),
       sendClipboardAction: (window, action) =>
         window.webContents.send(terminalIpc.clipboardAction, action),
-      sendSnippetsToggle() {},
-      sendLocalImageOpen() {},
+      sendSnippetsToggle: (window) =>
+        window.webContents.send(terminalIpc.snippetsToggle),
+      sendLocalImageOpen: (window) =>
+        window.webContents.send(terminalIpc.localImageOpen),
       toggleDeveloperTools() {},
       quit() {},
     });
     await application.newWindow();
     const result = await exerciseScenario(about, router, {
-      nativeExpectation,
+      ...(nativeExpectation !== undefined ? { nativeExpectation } : {}),
       window: windows[0]!,
       cells,
       queryCell: (index) => cellQueries[index]!(),
@@ -402,7 +464,20 @@ app
             ...configuration.terminalTheme,
             colors: {
               ...configuration.terminalTheme.colors,
-              background: "#123456",
+              background: auxiliaryOnly
+                ? configuration.terminalTheme.colors.background === "#f5f5f5"
+                  ? "#000000"
+                  : "#f5f5f5"
+                : "#123456",
+              ...(auxiliaryOnly
+                ? {
+                    foreground:
+                      configuration.terminalTheme.colors.background ===
+                      "#f5f5f5"
+                        ? "#f0f0ff"
+                        : "#161616",
+                  }
+                : {}),
             },
           },
         };
