@@ -139,8 +139,13 @@ function harness(
     "./native-fixture-pty": {},
     "./window-chrome-native-drag": {},
     "./application-menu-exercise": {},
+    "./about-keyboard-exercise": { exerciseAboutKeyboard: async () => {} },
     "./about-dialog-exercise": {
-      createAboutExercise: () => ({ show() {}, exercise: async () => {} }),
+      createAboutExercise: () => ({
+        show() {},
+        exercise: async () => {},
+        dispose() {},
+      }),
     },
     "../../src/main/native-application-menu": {},
   };
