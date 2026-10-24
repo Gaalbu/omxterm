@@ -22,9 +22,11 @@ afterEach(() => {
 function fixture(load = vi.fn(async () => catalog)) {
   let interactive = true;
   const inject = vi.fn();
+  const preview = vi.fn();
   const view = createSnippetsView(document, {
     loadSnippets: load,
     inject,
+    preview,
     isInteractive: () => interactive,
   });
   document.body.append(view.element);
@@ -42,9 +44,13 @@ function fixture(load = vi.fn(async () => catalog)) {
     results,
     input,
     inject,
+    preview,
     load,
     block: () => {
       interactive = false;
+    },
+    unblock: () => {
+      interactive = true;
     },
   };
 }
@@ -102,21 +108,72 @@ describe("Snippets auxiliary view", () => {
     const f = fixture();
     f.view.activate();
     await settle();
-    const old = f.root.querySelectorAll("li button")[1] as HTMLButtonElement;
+    const old = f.root.querySelectorAll(
+      "li .snippet-activate",
+    )[1] as HTMLButtonElement;
     old.click();
     expect(f.inject).toHaveBeenCalledExactlyOnceWith(catalog.snippets[1]);
     f.inject.mockClear();
     f.input("brew");
     old.click();
-    const filtered = f.root.querySelector<HTMLButtonElement>("li button")!;
+    const filtered = f.root.querySelector<HTMLButtonElement>(
+      "li .snippet-activate",
+    )!;
     f.view.deactivate();
     filtered.click();
     f.view.activate();
     filtered.click();
     await settle();
     f.block();
-    f.root.querySelector<HTMLButtonElement>("li button")!.click();
+    f.root.querySelector<HTMLButtonElement>("li .snippet-activate")!.click();
     expect(f.inject).not.toHaveBeenCalled();
+  });
+
+  it("shows each row's default intent and opens a preview without delivering", async () => {
+    const f = fixture();
+    f.view.activate();
+    await settle();
+    expect(
+      [...f.root.querySelectorAll(".snippet-intent")].map((e) => e.textContent),
+    ).toEqual(["Insert", "Run · adds Enter"]);
+    const previews = f.root.querySelectorAll<HTMLButtonElement>(
+      "li .snippet-preview-open",
+    );
+    expect(previews[1]!.getAttribute("aria-label")).toBe("Preview update brew");
+    previews[1]!.click();
+    expect(f.inject).not.toHaveBeenCalled();
+    expect(f.preview).toHaveBeenCalledExactlyOnceWith(
+      catalog.snippets[1],
+      expect.any(Function),
+    );
+    f.block();
+    previews[0]!.click();
+    expect(f.preview).toHaveBeenCalledOnce();
+  });
+
+  it("returns focus to the preview control, then search, never to a hidden view", async () => {
+    const f = fixture();
+    f.view.activate();
+    await settle();
+    f.root
+      .querySelector<HTMLButtonElement>("li .snippet-preview-open")!
+      .click();
+    const [, returnFocus] = f.preview.mock.calls[0] as [unknown, () => boolean];
+    expect(returnFocus()).toBe(true);
+    expect(document.activeElement).toHaveProperty(
+      "className",
+      "snippet-preview-open",
+    );
+    f.input("brew");
+    expect(returnFocus()).toBe(true);
+    expect(document.activeElement).toBe(f.search);
+    f.block();
+    expect(returnFocus()).toBe(false);
+    f.unblock();
+    f.view.deactivate();
+    (document.activeElement as HTMLElement).blur();
+    expect(returnFocus()).toBe(false);
+    expect(document.activeElement).toBe(document.body);
   });
 
   it.each(["resolve", "reject"])(

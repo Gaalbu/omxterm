@@ -221,3 +221,44 @@ it.each(["About", "image"])(
     expect(f.load).toHaveBeenCalledOnce();
   },
 );
+
+it("keeps a snippet preview exclusive and delivers its final choice to the captured tab", async () => {
+  const f = await fixture();
+  f.tabCommand({ action: "new" });
+  await vi.waitFor(() => expect(f.surfaces).toHaveLength(2));
+  f.toggle();
+  await vi.waitFor(() =>
+    expect(f.root.querySelector(".snippet-intent")?.textContent).toBe(
+      "Run · adds Enter",
+    ),
+  );
+  f.root.querySelector<HTMLButtonElement>(".snippet-preview-open")!.click();
+  expect(document.querySelectorAll(".snippet-preview")).toHaveLength(1);
+  expect(document.querySelector(".snippet-preview pre")!.textContent).toBe(
+    " a  b\n$VALUE\n",
+  );
+
+  f.about();
+  f.image();
+  f.tabCommand({ action: "previous" });
+  f.root.querySelector<HTMLButtonElement>(".snippet-activate")!.click();
+  expect(document.querySelector(".about-dialog")).toBeNull();
+  expect(document.querySelectorAll(".snippet-preview")).toHaveLength(1);
+  expect(f.loadImage).not.toHaveBeenCalled();
+  for (const surface of f.surfaces)
+    expect(surface.inject).not.toHaveBeenCalled();
+
+  document.querySelector<HTMLButtonElement>(".snippet-preview-insert")!.click();
+  expect(document.querySelector(".snippet-preview")).toBeNull();
+  expect(f.surfaces[1]!.inject).toHaveBeenCalledExactlyOnceWith(
+    " a  b\n$VALUE\n",
+    { submit: false },
+  );
+  expect(f.surfaces[0]!.inject).not.toHaveBeenCalled();
+  expect(f.surfaces[1]!.focus).toHaveBeenCalled();
+
+  f.about();
+  expect(document.querySelector(".about-dialog")).not.toBeNull();
+  f.root.querySelector<HTMLButtonElement>(".snippet-preview-open")!.click();
+  expect(document.querySelector(".snippet-preview")).toBeNull();
+});

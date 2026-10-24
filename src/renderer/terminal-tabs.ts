@@ -15,6 +15,7 @@ import type {
 } from "../terminal-surface/terminal-surface";
 import { DEFAULT_TERMINAL_FONT_SIZE } from "../shared/user-configuration";
 import type { ElectronTerminalAdapter } from "./electron-terminal-adapter";
+import { snippetTarget, type SnippetTarget } from "./snippet-target";
 
 export const TERMINAL_TAB_DRAG_DATA_TYPE = "application/x-omxterm-tab";
 
@@ -57,7 +58,8 @@ export interface TerminalTabs {
   clipboardAction(action: TerminalClipboardAction): void;
   find(): void;
   injectText(text: string): void;
-  injectSnippet(body: string, options: { readonly submit: boolean }): void;
+  // The selected live terminal, captured for one snippet action.
+  captureSnippetTarget(): SnippetTarget | undefined;
   toggleTabBar(): void;
   focusSelected(): void;
   dispose(): void;
@@ -328,9 +330,7 @@ export function createTerminalTabs(
     injectText(text) {
       void selectedTab()?.surface?.inject(text);
     },
-    injectSnippet(body, injectOptions) {
-      void selectedTab()?.surface?.inject(body, injectOptions);
-    },
+    captureSnippetTarget: () => snippetTarget(selectedTab()),
     toggleTabBar() {
       if (disposed) return;
       tabBarEnabled = !tabBarEnabled;
