@@ -21,6 +21,8 @@ import {
   applyActiveUserConfiguration,
 } from "../../src/main/active-user-configuration";
 import { DEFAULT_USER_CONFIGURATION } from "../../src/main/user-configuration";
+import type { TerminalIpcRouter } from "../../src/main/terminal-ipc-types";
+import type { ActiveUserConfiguration } from "../../src/main/user-configuration-reloader";
 import { createLocalTerminalSession } from "../../src/main/local-terminal-session";
 import { spawnFixturePty } from "./native-fixture-pty";
 import {
@@ -29,6 +31,7 @@ import {
 } from "./restty-host-platform";
 import { terminalIpc } from "../../src/shared/terminal-ipc";
 import { createAboutExercise } from "./about-dialog-exercise";
+import { createSettingsExercise } from "./settings-dialog-exercise";
 import { exerciseAboutKeyboard } from "./about-keyboard-exercise";
 import { exerciseWindowChrome } from "./window-chrome-exercise";
 import { assertNativeChromeConstruction } from "./window-chrome-construction";
@@ -88,11 +91,43 @@ async function exerciseKeyboard(about: ReturnType<typeof createAboutExercise>) {
     keyboardInput = undefined;
   }
 }
+function applyFixtureConfiguration(router: TerminalIpcRouter) {
+  return (state: ActiveUserConfiguration, committed: boolean) =>
+    applyActiveUserConfiguration(
+      state,
+      committed,
+      router,
+      windows,
+      application,
+      {
+        rebuildMenu() {},
+        nativeTitleInset: process.platform === "darwin" ? 30 : 0,
+        platform: process.platform,
+        applyBackgroundEffects: backgroundEffects.apply,
+      },
+    );
+}
+async function exerciseSettingsOnly(router: TerminalIpcRouter) {
+  const settings = createSettingsExercise(
+    root,
+    router,
+    () => windows[0]!,
+    applyFixtureConfiguration(router),
+  );
+  try {
+    return { settings: await settings.exercise() };
+  } finally {
+    settings.dispose();
+  }
+}
 async function exerciseScenario(
   about: ReturnType<typeof createAboutExercise>,
+  router: TerminalIpcRouter,
   options: Parameters<typeof exerciseWindowChrome>[0],
 ) {
   try {
+    if (process.argv.includes("--fixture-settings-only"))
+      return await exerciseSettingsOnly(router);
     if (process.argv.includes("--fixture-about-only")) {
       await exerciseMenu(about.show);
       // This independent scenario still owns only its initial selected session.
@@ -334,7 +369,7 @@ app
       quit() {},
     });
     await application.newWindow();
-    const result = await exerciseScenario(about, {
+    const result = await exerciseScenario(about, router, {
       nativeExpectation,
       window: windows[0]!,
       cells,

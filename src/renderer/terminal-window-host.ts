@@ -1,5 +1,7 @@
 import { mountWindowChrome, type WindowChromeBridge } from "./window-chrome";
 import { mountAboutDialog } from "./about/about-dialog";
+import { mountSettingsDialog } from "./settings/settings-dialog";
+import type { SettingsBridge } from "../shared/settings";
 import type { AboutBridge } from "../shared/about";
 import type { TerminalSessionAdapter } from "../terminal-surface/terminal-session-adapter";
 import {
@@ -10,6 +12,7 @@ import {
   type TerminalSurfaceOptions,
 } from "../terminal-surface/terminal-surface";
 import type {
+  TerminalClipboardAction,
   TerminalFontZoom,
   TerminalSessionId,
   TerminalTabCommand,
@@ -52,6 +55,7 @@ export interface TerminalWindowPageElements {
 
 interface TerminalWindowPageOptions {
   readonly about?: AboutBridge;
+  readonly settings?: SettingsBridge;
   readonly createAdapter: (
     fontConfigurationId?: string,
   ) => ElectronTerminalAdapter;
@@ -125,8 +129,12 @@ export function mountTerminalWindowPage(
   let removeLocalImageOpenListener: (() => void) | undefined;
   let localImagePreview: LocalImagePreview | undefined;
   let about: ReturnType<typeof mountAboutDialog>;
+  let settings: ReturnType<typeof mountSettingsDialog>;
+  // About and Settings each own modal input; at most one overlay is active.
+  const dialogActive = () =>
+    (about?.isActive() ?? false) || (settings?.isActive() ?? false);
   const previewActive = () =>
-    (localImagePreview?.isActive() ?? false) || (about?.isActive() ?? false);
+    (localImagePreview?.isActive() ?? false) || dialogActive();
   const hoverAvailabilityListeners = new Set<() => void>();
   let fontConfigurationId = options.configuration?.fontConfigurationId;
   let activeFontFamily = options.configuration?.fontFamily;
@@ -226,32 +234,37 @@ export function mountTerminalWindowPage(
       })
     : undefined;
 
+  const onOverlayActivity = () => {
+    chrome?.setPreviewActive(previewActive());
+    for (const listener of hoverAvailabilityListeners) listener();
+  };
   if (options.loadLocalImage) {
     localImagePreview = createLocalImagePreview(page.document, {
       loadImage: options.loadLocalImage,
       focusTerminal: () => tabs.focusSelected(),
-      onActivityChange: () => {
-        chrome?.setPreviewActive(previewActive());
-        for (const listener of hoverAvailabilityListeners) listener();
-      },
+      onActivityChange: onOverlayActivity,
     });
     removeLocalImageOpenListener = options.subscribeToLocalImageOpen?.(() => {
-      if (!about?.isActive()) void localImagePreview?.open();
+      if (!dialogActive()) void localImagePreview?.open();
     });
   }
 
   about = mountAboutDialog(
     page.document,
     options.about,
-    () => !disposed && !localImagePreview?.isActive(),
+    () => !disposed && !previewActive(),
     {
       focusTerminal: tabs.focusSelected,
-      onActivityChange: (active) => {
-        chrome?.setPreviewActive(
-          active || (localImagePreview?.isActive() ?? false),
-        );
-        for (const listener of hoverAvailabilityListeners) listener();
-      },
+      onActivityChange: onOverlayActivity,
+    },
+  );
+  settings = mountSettingsDialog(
+    page.document,
+    options.settings,
+    () => !disposed && !previewActive(),
+    {
+      focusTerminal: tabs.focusSelected,
+      onActivityChange: onOverlayActivity,
     },
   );
   const onPageFocus = () => {
@@ -277,6 +290,8 @@ export function mountTerminalWindowPage(
     removeLocalImageOpenListener?.();
     about?.dispose();
     about = undefined;
+    settings?.dispose();
+    settings = undefined;
     chrome?.dispose();
     localImagePreview?.dispose();
     localImagePreview = undefined;
@@ -333,6 +348,7 @@ export function mountTerminalWindowPage(
       options,
       tabs,
       previewActive,
+      (action) => settings?.editClipboard(action, options.clipboard),
     );
     removeTabCommandListener = options.subscribeToTabCommands?.((command) => {
       if (
@@ -366,13 +382,17 @@ function subscribeToGuardedActions(
   options: TerminalWindowPageOptions,
   tabs: TerminalTabs,
   blocked: () => boolean,
+  editBlocked: (action: TerminalClipboardAction) => void,
 ): () => void {
   const removals = [
     options.subscribeToFontZoom?.((command) => {
       if (!blocked()) tabs.zoom(command);
     }),
+    // While an overlay owns input, editing goes to its focused field, never
+    // to the terminal.
     options.subscribeToClipboardActions?.((action) => {
       if (!blocked()) tabs.clipboardAction(action);
+      else editBlocked(action);
     }),
     options.subscribeToTabBarToggle?.(() => {
       if (!blocked()) tabs.toggleTabBar();

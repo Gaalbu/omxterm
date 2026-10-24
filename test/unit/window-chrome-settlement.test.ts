@@ -147,6 +147,12 @@ function harness(
         dispose() {},
       }),
     },
+    "./settings-dialog-exercise": {
+      createSettingsExercise: () => ({
+        exercise: async () => ({}),
+        dispose() {},
+      }),
+    },
     "../../src/main/native-application-menu": {},
   };
   runInNewContext(entry, {
