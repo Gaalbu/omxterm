@@ -36,6 +36,10 @@ function menuActions() {
     reloadUserConfiguration: vi.fn(),
     openLocalImage: vi.fn(),
     showAbout: vi.fn(),
+    splitSelectedPane: vi.fn(),
+    closeSelectedPane: vi.fn(),
+    focusSelectedPane: vi.fn(),
+    equalizeSelectedPanes: vi.fn(),
   };
 }
 

@@ -37,8 +37,12 @@ void window.omxterm.terminal.configuration().then((configuration) => {
         surfaceFailure.textContent = message;
         surfaceFailure.hidden = false;
       },
-      createAdapter: (configurationId) =>
-        createElectronTerminalAdapter(window.omxterm.terminal, configurationId),
+      createAdapter: (configurationId, workingDirectoryOf) =>
+        createElectronTerminalAdapter(
+          window.omxterm.terminal,
+          configurationId,
+          workingDirectoryOf,
+        ),
       subscribeToFontZoom: window.omxterm.terminal.onFontZoom,
       subscribeToConfigurationUpdates:
         window.omxterm.terminal.onConfigurationUpdate,

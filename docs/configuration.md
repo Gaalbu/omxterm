@@ -244,28 +244,38 @@ Reload your configuration and open a new tab to start the new shell. Only the ex
 
 Customize application shortcuts under `keybinds` using [Electron accelerator](https://www.electronjs.org/docs/latest/tutorial/keyboard-shortcuts#accelerators) syntax (or edit them with conflict checking in [OMXTerm Studio](#edit-visually-with-omxterm-studio)):
 
-| Action                      | macOS default              | Linux/Windows default |
-| --------------------------- | -------------------------- | --------------------- |
-| `quit`                      | `CommandOrControl+Q`       | `Control+Alt+Shift+Q` |
-| `copy`                      | `CommandOrControl+C`       | `Control+Shift+C`     |
-| `paste`                     | `CommandOrControl+V`       | `Control+Shift+V`     |
-| `selectAll`                 | `CommandOrControl+A`       | `Control+Shift+A`     |
-| `find`                      | `CommandOrControl+F`       | `Control+Shift+F`     |
-| `newWindow`                 | `CommandOrControl+N`       | `Control+Shift+N`     |
-| `newTab`                    | `CommandOrControl+T`       | `Control+Shift+T`     |
-| `closeTab`                  | `CommandOrControl+W`       | `Control+Shift+W`     |
-| `closeWindow`               | `CommandOrControl+Shift+W` | `Control+Shift+Q`     |
-| `nextTab`                   | `Control+Tab`              | `Control+PageDown`    |
-| `previousTab`               | `Control+Shift+Tab`        | `Control+PageUp`      |
-| `selectTab1` … `selectTab9` | `CommandOrControl+1` … `9` | `Alt+1` … `9`         |
-| `zoomIn`                    | `CommandOrControl+Plus`    | `Control+Plus`        |
-| `zoomOut`                   | `CommandOrControl+-`       | `Control+-`           |
-| `actualSize`                | `CommandOrControl+0`       | `Control+0`           |
-| `toggleFullScreen`          | `Control+Command+F`        | `F11`                 |
-| `toggleSnippets`            | `CommandOrControl+Shift+S` | `Control+Shift+S`     |
-| `toggleTabBar`              | `CommandOrControl+Shift+B` | `Control+Shift+B`     |
-| `toggleTitleBar`            | `CommandOrControl+Shift+D` | `Control+Shift+D`     |
-| `reloadConfig`              | `CommandOrControl+Shift+,` | `Control+Shift+,`     |
+| Action                      | macOS default                | Linux/Windows default |
+| --------------------------- | ---------------------------- | --------------------- |
+| `quit`                      | `CommandOrControl+Q`         | `Control+Alt+Shift+Q` |
+| `copy`                      | `CommandOrControl+C`         | `Control+Shift+C`     |
+| `paste`                     | `CommandOrControl+V`         | `Control+Shift+V`     |
+| `selectAll`                 | `CommandOrControl+A`         | `Control+Shift+A`     |
+| `find`                      | `CommandOrControl+F`         | `Control+Shift+F`     |
+| `newWindow`                 | `CommandOrControl+N`         | `Control+Shift+N`     |
+| `newTab`                    | `CommandOrControl+T`         | `Control+Shift+T`     |
+| `closeTab`                  | `CommandOrControl+W`         | `Control+Shift+W`     |
+| `closeWindow`               | `CommandOrControl+Shift+W`   | `Control+Shift+Q`     |
+| `nextTab`                   | `Control+Tab`                | `Control+PageDown`    |
+| `previousTab`               | `Control+Shift+Tab`          | `Control+PageUp`      |
+| `selectTab1` … `selectTab9` | `CommandOrControl+1` … `9`   | `Alt+1` … `9`         |
+| `splitRight`                | `CommandOrControl+D`         | `Control+Shift+O`     |
+| `splitDown`                 | `CommandOrControl+Shift+E`   | `Control+Shift+E`     |
+| `closePane`                 | `CommandOrControl+Alt+W`     | `Control+Shift+K`     |
+| `focusNextPane`             | `CommandOrControl+]`         | `Control+Shift+]`     |
+| `focusPreviousPane`         | `CommandOrControl+[`         | `Control+Shift+[`     |
+| `focusPaneLeft`             | `CommandOrControl+Alt+Left`  | `Alt+Shift+Left`      |
+| `focusPaneRight`            | `CommandOrControl+Alt+Right` | `Alt+Shift+Right`     |
+| `focusPaneUp`               | `CommandOrControl+Alt+Up`    | `Alt+Shift+Up`        |
+| `focusPaneDown`             | `CommandOrControl+Alt+Down`  | `Alt+Shift+Down`      |
+| `equalizePanes`             | `Command+Control+=`          | `Control+Shift+0`     |
+| `zoomIn`                    | `CommandOrControl+Plus`      | `Control+Plus`        |
+| `zoomOut`                   | `CommandOrControl+-`         | `Control+-`           |
+| `actualSize`                | `CommandOrControl+0`         | `Control+0`           |
+| `toggleFullScreen`          | `Control+Command+F`          | `F11`                 |
+| `toggleSnippets`            | `CommandOrControl+Shift+S`   | `Control+Shift+S`     |
+| `toggleTabBar`              | `CommandOrControl+Shift+B`   | `Control+Shift+B`     |
+| `toggleTitleBar`            | `CommandOrControl+Shift+D`   | `Control+Shift+D`     |
+| `reloadConfig`              | `CommandOrControl+Shift+,`   | `Control+Shift+,`     |
 
 Example overriding a single shortcut:
 

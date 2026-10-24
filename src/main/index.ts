@@ -20,6 +20,7 @@ import {
   terminalClipboardContextMenuTemplate,
 } from "./application-menu";
 import * as applicationAbout from "./application-about";
+import { confirmClose } from "./native-confirmations";
 import { deliverKeybindsFromKeyEvents } from "./keybind-delivery";
 import { createDefaultShellResolver, defaultShellName } from "./default-shell";
 import {
@@ -251,12 +252,13 @@ app
                 active.configuration,
               ),
               webContents: window.webContents,
-              createSession(callbacks) {
+              createSession(callbacks, workingDirectory) {
                 return shutdown.createSession(nodePty.spawn, {
                   shell: resolveCurrentDefaultShell(),
                   launchRequest: consumeLaunch(),
                   platform: process.platform,
                   homeDirectory: account.homedir,
+                  ...(workingDirectory ? { workingDirectory } : {}),
                   applicationVersionProvider: app,
                   environment: process.env,
                   ...callbacks,
@@ -364,32 +366,21 @@ app
                 : await dialog.showMessageBox(options);
             return result.response === 0;
           },
-          async showCloseWindowConfirmation(window) {
-            const result = await dialog.showMessageBox(window, {
-              type: "question",
-              title: "Close Window",
-              message: "Close this Terminal Window and all of its tabs?",
-              detail: "All of its Live Terminal Sessions will end.",
-              buttons: ["Close", "Cancel"],
-              defaultId: 1,
-              cancelId: 1,
-              noLink: true,
-            });
-            return result.response === 0;
-          },
-          async showCloseTabConfirmation(window) {
-            const result = await dialog.showMessageBox(window, {
-              type: "question",
-              title: "Close Tab",
-              message: "Close this Terminal Tab?",
-              detail: "Its Live Terminal Session will end.",
-              buttons: ["Close", "Cancel"],
-              defaultId: 1,
-              cancelId: 1,
-              noLink: true,
-            });
-            return result.response === 0;
-          },
+          showCloseWindowConfirmation: (window) =>
+            confirmClose(window, "Close Window", [
+              "Close this Terminal Window and all of its tabs?",
+              "All of its Live Terminal Sessions will end.",
+            ]),
+          showCloseTabConfirmation: (window) =>
+            confirmClose(window, "Close Tab", [
+              "Close this Terminal Tab?",
+              "Its Live Terminal Session will end.",
+            ]),
+          showClosePaneConfirmation: (window) =>
+            confirmClose(window, "Close Pane", [
+              "Close this Terminal Pane?",
+              "Its Live Terminal Session will end.",
+            ]),
           async showSessionFailure(window, failure) {
             const failureDialog = terminalSessionFailureDialog(failure);
             await dialog.showMessageBox(window, {
@@ -430,6 +421,11 @@ app
             void terminalApplication!.closeSelectedWindow(),
           newTabInSelectedWindow: terminalApplication.newTabInSelectedWindow,
           closeSelectedTab: () => void terminalApplication!.closeSelectedTab(),
+          closeSelectedPane: () =>
+            void terminalApplication!.closeSelectedPane(),
+          splitSelectedPane: terminalApplication.splitSelectedPane,
+          focusSelectedPane: terminalApplication.focusSelectedPane,
+          equalizeSelectedPanes: terminalApplication.equalizeSelectedPanes,
           selectNextTab: terminalApplication.selectNextTab,
           selectPreviousTab: terminalApplication.selectPreviousTab,
           selectTabInSelectedWindow:

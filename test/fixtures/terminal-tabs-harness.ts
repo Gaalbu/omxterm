@@ -1,5 +1,8 @@
 import { vi } from "vitest";
-import { createTerminalTabs } from "../../src/renderer/terminal-tabs";
+import {
+  createTerminalTabs,
+  type TerminalTabsOptions,
+} from "../../src/renderer/terminal-tabs";
 import type { ElectronTerminalAdapter } from "../../src/renderer/electron-terminal-adapter";
 import type {
   TerminalSessionAdapter,
@@ -28,6 +31,7 @@ export function createTabsHarness(
   options: {
     failMountAt?: number;
     surfaceOptions?: TerminalSurfaceOptions;
+    tabsOptions?: Partial<TerminalTabsOptions>;
   } = {},
 ) {
   document.body.innerHTML = "";
@@ -60,6 +64,8 @@ export function createTabsHarness(
   });
   let mountCount = 0;
   const mountedSurfaceOptions: TerminalSurfaceOptions[] = [];
+  // The Surface-facing adapters, so a test can report a pane's grid size.
+  const sessionAdapters: TerminalSessionAdapter[] = [];
   const mount = vi.fn(
     async (
       _container: HTMLElement,
@@ -70,6 +76,7 @@ export function createTabsHarness(
       if (mountCount === options.failMountAt)
         throw new Error("The Default Shell could not be started");
       mountedSurfaceOptions.push(surfaceOptions);
+      sessionAdapters.push(adapter);
       await adapter.start({ onOutput: vi.fn(), onExit: vi.fn() });
       const surface = createFakeSurface();
       surfaces.push(surface);
@@ -88,6 +95,7 @@ export function createTabsHarness(
       notifySelection,
       notifyTitle,
       notifyBell,
+      ...options.tabsOptions,
     },
   );
   return {
@@ -98,6 +106,8 @@ export function createTabsHarness(
     surfaces,
     mount,
     mountedSurfaceOptions,
+    sessionAdapters,
+    createAdapter,
     notifySelection,
     notifyTitle,
     notifyBell,

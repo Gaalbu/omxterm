@@ -1,9 +1,41 @@
-# Adopt tabs with one live session per tab
+# Adopt tabs with one live session per pane
 
-A Terminal Window holds one or more Terminal Tabs. Each tab owns a Terminal
-Surface and, after successful initialization, one ephemeral Live Terminal
-Session. Application-drawn tabs provide selectable independent local sessions;
-tmux remains the user's persistence and reconnection tool.
+A Terminal Window holds one or more Terminal Tabs. Each tab owns one or more
+Terminal Panes; each pane owns a Terminal Surface and, after successful
+initialization, one ephemeral Live Terminal Session. A tab starts with one
+pane. Application-drawn tabs and panes provide selectable independent local
+sessions; tmux remains the user's persistence and reconnection tool.
+
+## Panes
+
+`View -> Pane` splits the selected tab's focused pane to the right or down.
+Splitting in the parent's direction adds a sibling, so a layout is an n-ary
+tree of rows and columns with weights; rebuilding it moves pane containers and
+never recreates a Surface or session. A split is admitted only when the focused
+pane's current grid leaves both panes at least 20 columns or 5 rows, using its
+current cell geometry, and a tab holds at most 16 panes. A refused split starts
+no session. Dividers are pointer- and keyboard-operable separators limited by
+the same reference minimum; a later resize or zoom that cannot fit every
+minimum keeps sessions and layout rather than closing panes or raising the
+window's minimum size. Maximizing a pane is outside this slice.
+
+Exactly one pane per tab is focused. It receives keyboard input and every
+terminal-directed action (clipboard, Find, snippets, file drops); clicking a
+pane or Focus Next/Previous/Left/Right/Above/Below moves focus, and the focused
+pane carries a theme-derived ring that never dims or recolors the others.
+Equalize Panes resets the shares of the split that holds the focused pane.
+
+A new pane starts the Default Shell. When the source pane's shell reported a
+local directory through OSC 7 in its own output, the new pane starts there if
+that directory still exists; otherwise it starts in the home directory, like a
+new tab. Main reads OSC 7 from the PTY output it already relays, accepts only an
+empty, `localhost` or local host name and a local absolute path (a drive path on
+Windows; UNC and device paths are rejected), and never logs, persists or sends
+the directory. OMXTerm injects nothing to make shells report it (ADR 0013). A
+remote shell that reports no host name, or this machine's name, is
+indistinguishable from a local one, and program output can also emit the
+sequence; either can only choose an existing local start directory, never run
+anything. A Launch Request applies only to the first tab's first pane.
 
 ## Window presentation
 
@@ -33,12 +65,17 @@ boundary. Moving tabs across windows is not implemented.
 
 ## Session ownership and lifecycle
 
-Every session has exactly one tab lifetime owner. Ordinary shell exit closes
-its tab; closing a tab requests termination of that session. Closing a window
-closes its tabs. Closing the final tab closes its window, and closing the last
-window requests application quit. Close confirmation is once per action and
-only for affected Busy Sessions under
-[ADR 0017](0017-confirm-close-only-for-busy-sessions.md).
+Every session has exactly one pane lifetime owner. Ordinary shell exit closes
+its pane, and its nearest sibling takes the space and focus; removing a tab's
+last pane closes the tab through the existing last-tab path. Close Pane requests
+termination of the focused pane's session; closing a tab requests termination
+of all its panes. Closing a window closes its tabs. Closing the final tab
+closes its window, and closing the last window requests application quit. Close
+confirmation is once per action and only for affected Busy Sessions under
+[ADR 0017](0017-confirm-close-only-for-busy-sessions.md): Close Pane counts the
+focused pane only, Close Tab every pane of the tab. The renderer reports the
+focused pane's session together with the selected tab's sessions, and main
+counts only sessions it still owns.
 [ADR 0028](0028-wait-for-native-sessions-before-application-quit.md) independently
 waits for actual native exit before accepted Quit completes; tab/controller
 disposal or `kill()` is not completion.
@@ -62,7 +99,8 @@ separate paths.
 Main counts failure acknowledgements independently per window, including
 pre-start rendering failures and failures while siblings remain live. An empty
 tab-owner notification waits for all pending acknowledgements. Acknowledgement
-removes only the failed tab; sibling exit or another acknowledged failure does
+removes only the failed pane (its tab when it is the last pane); sibling exit or
+another acknowledged failure does
 not release its window. Runtime rendering failure requests session termination
 and retains its failed tab until native exit and acknowledgement. Explicit
 window/application closure remains separately authorized; disposed owners make
@@ -78,9 +116,9 @@ native completion.
 ## Titles and commands
 
 Titles remain display-only under
-[ADR 0010](0010-keep-terminal-titles-display-only.md). Each tab shows its sanitized
-session title or starting-shell basename; the selected tab supplies the native
-window title with `OMXTerm` as final fallback. No foreground-process name is
+[ADR 0010](0010-keep-terminal-titles-display-only.md). Each tab shows its focused
+pane's sanitized session title or starting-shell basename; the selected tab's
+focused pane supplies the native window title with `OMXTerm` as final fallback. No foreground-process name is
 used as a display label.
 
 New Tab/Window defaults are `Cmd+T`/`Cmd+N` on macOS and
@@ -89,7 +127,11 @@ New Tab/Window defaults are `Cmd+T`/`Cmd+N` on macOS and
 cycling uses `Ctrl+Tab`/`Ctrl+Shift+Tab` on macOS and
 `Ctrl+PageDown`/`Ctrl+PageUp` on Linux/Windows; literal tab positions use
 `Cmd+1` through `Cmd+9` or `Alt+1` through `Alt+9`. Toggle Tab Bar uses
-`Cmd+Shift+B` or `Ctrl+Shift+B`.
+`Cmd+Shift+B` or `Ctrl+Shift+B`. Split Right/Down default to `Cmd+D`/
+`Cmd+Shift+E` and `Ctrl+Shift+O`/`Ctrl+Shift+E`; Close Pane to `Cmd+Alt+W` and
+`Ctrl+Shift+K`; Focus Next/Previous Pane to `Cmd+]`/`Cmd+[` and
+`Ctrl+Shift+]`/`Ctrl+Shift+[`; directional pane focus to `Cmd+Alt+Arrow` and
+`Alt+Shift+Arrow`; Equalize Panes to `Cmd+Ctrl+=` and `Ctrl+Shift+0`.
 
 The effective native map remains remappable and duplicate-checked. Main's menu
 and key-event delivery share actions under
@@ -101,9 +143,10 @@ removal chooses its right neighbor or, at the end, its left neighbor.
 
 IPC gains per-session identity beneath each window controller, and selection
 refits the active grid. Tab order and visibility are in-memory presentation;
-restoration, workspaces, splits and inter-window moves are outside current
-scope.
+restoration, workspaces, broadcast input, pane maximize and moving tabs or
+panes between tabs or windows are outside current scope.
 
 Production ownership tests cover mounting siblings, ordinary exits, failure
-acknowledgement, tab removal, selection and native shutdown. Exact native
+acknowledgement, tab and pane removal, split admission, pane focus routing,
+selection and native shutdown. Exact native
 artifact evidence is separate from source review and mocked/DOM tests.

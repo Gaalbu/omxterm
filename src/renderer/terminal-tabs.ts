@@ -5,16 +5,25 @@ import type {
   TerminalTabCommand,
 } from "../shared/terminal-contract";
 import type {
-  TerminalSessionAdapter,
-  TerminalSessionHandlers,
-} from "../terminal-surface/terminal-session-adapter";
-import type {
   TerminalSurface,
   TerminalSurfaceConfiguration,
   TerminalSurfaceOptions,
 } from "../terminal-surface/terminal-surface";
+import type { TerminalSessionAdapter } from "../terminal-surface/terminal-session-adapter";
 import { DEFAULT_TERMINAL_FONT_SIZE } from "../shared/user-configuration";
-import type { ElectronTerminalAdapter } from "./electron-terminal-adapter";
+import { createPaneOperations } from "./terminal-pane-operations";
+import { createPaneMount } from "./terminal-pane-mount";
+import {
+  appendTab,
+  disposePane,
+  findPaneBySession,
+  paneSessionAdapter,
+  tabPanes,
+  tabSessionIds,
+  type CreatePaneAdapter,
+  type TerminalPane,
+  type TerminalTab,
+} from "./terminal-panes";
 
 export const TERMINAL_TAB_DRAG_DATA_TYPE = "application/x-omxterm-tab";
 
@@ -30,7 +39,8 @@ export interface TerminalTabsElements {
 }
 
 export interface TerminalTabsOptions {
-  readonly createAdapter: () => ElectronTerminalAdapter;
+  // A split pane passes its source session to inherit a reported directory.
+  readonly createAdapter: CreatePaneAdapter;
   readonly mount: MountTerminalSurface;
   readonly surfaceOptions: TerminalSurfaceOptions;
   readonly showTabBar?: boolean;
@@ -39,7 +49,11 @@ export interface TerminalTabsOptions {
   // was pending. Other passive paths pass false.
   readonly canAutoFocus?: (unchangedFocus: boolean) => boolean;
   readonly notifyEmpty?: (reason?: "rendering-failure") => void;
-  readonly notifySelection?: (sessionId: TerminalSessionId) => void;
+  // The selected tab's focused pane and every started session of that tab.
+  readonly notifySelection?: (
+    sessionId: TerminalSessionId,
+    tabSessionIds: readonly TerminalSessionId[],
+  ) => void;
   readonly notifyTitle?: (
     sessionId: TerminalSessionId,
     request: string,
@@ -61,21 +75,6 @@ export interface TerminalTabs {
   toggleTabBar(): void;
   focusSelected(): void;
   dispose(): void;
-}
-
-interface TerminalTab {
-  readonly container: HTMLElement;
-  readonly adapter: ElectronTerminalAdapter;
-  readonly mountAbort: AbortController;
-  surface: TerminalSurface | undefined;
-  label: string;
-  removed: boolean;
-  startRequested: boolean;
-}
-
-function closePendingTab(tab: TerminalTab): void {
-  tab.mountAbort.abort();
-  tab.adapter.close();
 }
 
 export function createTerminalTabs(
@@ -100,6 +99,7 @@ export function createTerminalTabs(
   };
 
   const selectedTab = (): TerminalTab | undefined => tabs[selectedIndex];
+  const focusedPane = () => selectedTab()?.focused;
   const tabDragging = installTabDragging(elements.strip, (tab, clientX) => {
     const selected = selectedTab();
     if (!moveTabToHorizontalDrop(tabs, tab, elements.strip, clientX)) return;
@@ -120,9 +120,9 @@ export function createTerminalTabs(
         const button = document.createElement("button");
         button.type = "button";
         tabDragging.bind(button, tab);
-        // Sanitized display title pushed by main (ADR 0010); the literal
-        // position stands in until the first push lands.
-        button.textContent = tab.label || String(index + 1);
+        // The focused pane's sanitized title pushed by main (ADR 0010); the
+        // literal position stands in until the first push lands.
+        button.textContent = tab.focused.label || String(index + 1);
         button.setAttribute("role", "tab");
         button.setAttribute(
           "aria-selected",
@@ -136,24 +136,35 @@ export function createTerminalTabs(
     );
   };
 
+  // Main tracks the focused pane for titles and Close Pane, and the whole
+  // tab for Close Tab (a pane still starting is reported once it starts).
+  const notifyFocus = (tab: TerminalTab) => {
+    if (disposed || tab !== selectedTab()) return;
+    const sessionId = tab.focused.adapter.sessionId();
+    if (sessionId !== undefined)
+      options.notifySelection?.(sessionId, tabSessionIds(tab));
+  };
+
   const select = (index: number, passive = false) => {
     const tab = tabs[index];
     if (!tab) return;
     selectedIndex = index;
-    for (const [position, candidate] of tabs.entries())
+    for (const [position, candidate] of tabs.entries()) {
       candidate.container.hidden = position !== index;
+      // Each Surface reads its own container's visibility.
+      for (const pane of tabPanes(candidate))
+        pane.container.hidden = position !== index;
+    }
     renderStrip();
-    // Main tracks the selected session for close confirmations (a tab still
-    // starting has no id yet and is reported once its session starts).
-    const sessionId = tab.adapter.sessionId();
-    if (sessionId !== undefined) options.notifySelection?.(sessionId);
-    focusTab(tab, options, passive);
+    notifyFocus(tab);
+    focusPane(tab.focused, options, passive);
   };
 
   const removeTab = (tab: TerminalTab, notify = true) => {
     const index = tabs.indexOf(tab);
     if (tab.removed || index < 0) return;
     tab.removed = true;
+    for (const pane of tabPanes(tab)) pane.removed = true;
     tabs.splice(index, 1);
     tab.container.remove();
     if (tabs.length === 0) {
@@ -166,110 +177,75 @@ export function createTerminalTabs(
     select(Math.min(selectedIndex, tabs.length - 1), true);
   };
 
+  const closeTab = (tab: TerminalTab | undefined) => {
+    if (!tab || tab.removed) return;
+    const panes = tabPanes(tab);
+    removeTab(tab);
+    for (const pane of panes) disposePane(pane);
+  };
+
   const onSessionEnd = (
-    tab: TerminalTab,
+    pane: TerminalPane,
     exit: { signal: number; startupFailed?: true },
   ) => {
-    if (disposed || tab.removed) return;
-    // An ordinary end removes the tab; an unexpected signal keeps the dead
-    // tab visible until main acknowledges the failure and orders removal.
-    if (exit.signal === 0 && !exit.startupFailed) removeTab(tab);
+    if (disposed || pane.removed) return;
+    // An ordinary end removes the pane; an unexpected signal keeps the dead
+    // pane visible until main acknowledges the failure and orders removal.
+    if (exit.signal === 0 && !exit.startupFailed) panes.removePane(pane);
   };
 
-  const replayZoom = (surface: TerminalSurface) => {
-    for (let step = 0; step < Math.abs(zoomSteps); step += 1)
-      surface.zoom(zoomSteps > 0 ? "in" : "out");
-  };
+  const mountPane = createPaneMount({
+    document,
+    options,
+    surfaceOptions: () => activeSurfaceOptions,
+    zoomSteps: () => zoomSteps,
+    disposed: () => disposed,
+    selectedTab,
+    onSessionEnd,
+    notifyFocus,
+    removePane: (pane, notify) => panes.removePane(pane, notify),
+    notifyEmpty,
+    focus: (pane, unchanged) => focusPane(pane, options, true, unchanged),
+  });
+
+  const panes = createPaneOperations({
+    selectedTab,
+    removeTab,
+    createAdapter: options.createAdapter,
+    mountPane,
+    focusSurface: (pane, passive) => focusPane(pane, options, passive),
+    onFocusChange: (tab) => {
+      notifyFocus(tab);
+      renderStrip();
+    },
+    disposed: () => disposed,
+  });
 
   const createTab = async (): Promise<void> => {
-    const tab = appendTab(elements.container, options.createAdapter);
-    const { container, adapter } = tab;
-    tabs.push(tab);
+    const pane = appendTab(elements.container, options.createAdapter);
+    tabs.push(pane.tab);
+    panes.renderTab(pane.tab);
+    panes.trackFocus(pane);
     select(tabs.length - 1);
-
-    const sessionAdapter = tabSessionAdapter(tab, onSessionEnd, () => {
-      if (disposed || tab.removed) return;
-      const sessionId = adapter.sessionId();
-      if (sessionId !== undefined) options.syncTitle?.(sessionId);
-    });
-    // Title and BEL events carry the emitting tab's session id; the Surface
-    // itself stays tab-unaware. Events can only follow session output, so
-    // the id is always known by the time they fire.
-    const tabSurfaceOptions: TerminalSurfaceOptions = {
-      ...activeSurfaceOptions,
-      abortSignal: tab.mountAbort.signal,
-
-      ...(options.notifyTitle
-        ? {
-            onTitleRequest: (request: string) => {
-              if (disposed || tab.removed) return;
-              const sessionId = adapter.sessionId();
-              if (sessionId !== undefined)
-                options.notifyTitle?.(sessionId, request);
-            },
-          }
-        : {}),
-      ...(options.notifyBell
-        ? {
-            onBell: () => {
-              if (disposed || tab.removed) return;
-              const sessionId = adapter.sessionId();
-              if (sessionId !== undefined) options.notifyBell?.(sessionId);
-            },
-          }
-        : {}),
-    };
-
-    const focus = observeMountFocus(document, tab.mountAbort.signal);
-    let surface: TerminalSurface;
-    try {
-      surface = await options.mount(
-        container,
-        sessionAdapter,
-        tabSurfaceOptions,
-      );
-    } catch (error) {
-      // Once a native session exists, retain its failed tab through asynchronous
-      // termination and main's acknowledgement. A close request is not an exit.
-      if (adapter.sessionId() === undefined) {
-        removeTab(tab, false);
-        if (tab.startRequested) notifyEmpty();
-        else if (!tab.mountAbort.signal.aborted)
-          notifyEmpty("rendering-failure");
-      }
-      throw error;
-    } finally {
-      focus.dispose();
-    }
-    if (disposed || tab.removed) {
-      surface.dispose();
-      return;
-    }
-    tab.surface = surface;
-    const latestConfiguration = completeConfiguration(activeSurfaceOptions);
-    if (latestConfiguration) surface.applyConfiguration(latestConfiguration);
-    replayZoom(surface);
-    if (selectedTab() === tab) {
-      const sessionId = tab.adapter.sessionId();
-      if (sessionId !== undefined) options.notifySelection?.(sessionId);
-      if (document.hasFocus()) focusTab(tab, options, true, focus.unchanged());
-    }
+    await mountPane(pane);
   };
 
   return {
     ready: createTab(),
     setSessionTitle(sessionId, title) {
       if (disposed) return;
-      const tab = findBySession(tabs, sessionId);
-      if (!tab) return;
-      tab.label = title;
+      const pane = findPaneBySession(tabs, sessionId);
+      if (!pane) return;
+      pane.label = title;
       renderStrip();
     },
     applyConfiguration(configuration) {
       if (disposed) return;
       activeSurfaceOptions = { ...activeSurfaceOptions, ...configuration };
       zoomSteps = Math.max(1 - configuration.appearance.fontSize, zoomSteps);
-      for (const tab of tabs) tab.surface?.applyConfiguration(configuration);
+      for (const tab of tabs)
+        for (const pane of tabPanes(tab))
+          pane.surface?.applyConfiguration(configuration);
     },
     handleCommand(command) {
       if (disposed || closing) return;
@@ -280,7 +256,7 @@ export function createTerminalTabs(
           void createTab().catch(() => {});
           return;
         case "close":
-          closeTab(selectedTab(), removeTab);
+          closeTab(selectedTab());
           return;
         case "prepare-close":
           pendingClose = selectedTab();
@@ -288,7 +264,7 @@ export function createTerminalTabs(
         case "resolve-close": {
           const target = pendingClose;
           pendingClose = undefined;
-          if (command.confirmed) closeTab(target, removeTab);
+          if (command.confirmed) closeTab(target);
           return;
         }
         case "next":
@@ -302,8 +278,10 @@ export function createTerminalTabs(
           if (command.position <= tabs.length) select(command.position - 1);
           return;
         case "close-session":
-          closeTab(findBySession(tabs, command.sessionId), removeTab);
+          panes.closePane(findPaneBySession(tabs, command.sessionId));
           return;
+        default:
+          panes.handleCommand(command);
       }
     },
     zoom(command) {
@@ -315,30 +293,31 @@ export function createTerminalTabs(
           : command === "in"
             ? zoomSteps + 1
             : Math.max(1 - baseline, zoomSteps - 1);
-      for (const tab of tabs) tab.surface?.zoom(command);
+      for (const tab of tabs)
+        for (const pane of tabPanes(tab)) pane.surface?.zoom(command);
     },
     clipboardAction(action) {
-      const surface = selectedTab()?.surface;
+      const surface = focusedPane()?.surface;
       if (!surface) return;
       if (action === "copy") void surface.copy();
       else if (action === "paste") void surface.paste();
       else surface.selectAll();
     },
-    find: () => selectedTab()?.surface?.find(),
+    find: () => focusedPane()?.surface?.find(),
     injectText(text) {
-      void selectedTab()?.surface?.inject(text);
+      void focusedPane()?.surface?.inject(text);
     },
     injectSnippet(body, injectOptions) {
-      void selectedTab()?.surface?.inject(body, injectOptions);
+      void focusedPane()?.surface?.inject(body, injectOptions);
     },
     toggleTabBar() {
       if (disposed) return;
       tabBarEnabled = !tabBarEnabled;
       renderStrip();
-      focusTab(selectedTab(), options, true);
+      focusPane(focusedPane(), options, true);
     },
     focusSelected() {
-      focusTab(selectedTab(), options);
+      focusPane(focusedPane(), options);
     },
     dispose() {
       if (disposed) return;
@@ -347,16 +326,18 @@ export function createTerminalTabs(
       tabDragging.dispose();
       for (const tab of [...tabs]) {
         tab.removed = true;
-        if (tab.surface) tab.surface.dispose();
-        else closePendingTab(tab);
+        for (const pane of tabPanes(tab)) {
+          pane.removed = true;
+          disposePane(pane);
+        }
       }
       tabs.length = 0;
     },
   };
 }
 
-function focusTab(
-  tab: TerminalTab | undefined,
+function focusPane(
+  pane: TerminalPane | undefined,
   options: TerminalTabsOptions,
   passive = false,
   unchangedFocus = false,
@@ -365,77 +346,7 @@ function focusTab(
     options.canFocus?.() !== false &&
     (!passive || options.canAutoFocus?.(unchangedFocus) !== false)
   )
-    tab?.surface?.focus();
-}
-
-function observeMountFocus(document: Document, signal: AbortSignal) {
-  let unchanged = true;
-  const changed = () => {
-    unchanged = false;
-  };
-  document.addEventListener("focusin", changed, { once: true, signal });
-  return {
-    unchanged: () => unchanged,
-    dispose: () => document.removeEventListener("focusin", changed),
-  };
-}
-
-function appendTab(
-  parent: HTMLElement,
-  createAdapter: () => ElectronTerminalAdapter,
-): TerminalTab {
-  const container = parent.ownerDocument.createElement("main");
-  container.className = "terminal-surface";
-  container.setAttribute("aria-label", "Terminal Surface");
-  parent.append(container);
-  return {
-    container,
-    adapter: createAdapter(),
-    mountAbort: new AbortController(),
-    surface: undefined,
-    label: "",
-    removed: false,
-    startRequested: false,
-  };
-}
-
-function closeTab(
-  tab: TerminalTab | undefined,
-  removeTab: (tab: TerminalTab) => void,
-): void {
-  if (!tab || tab.removed) return;
-  // Disposing the Surface closes its Terminal Adapter and session; a tab
-  // still mounting has no Surface yet, so its adapter is closed directly.
-  removeTab(tab);
-  if (tab.surface) tab.surface.dispose();
-  else closePendingTab(tab);
-}
-
-function tabSessionAdapter(
-  tab: TerminalTab,
-  onSessionEnd: (
-    tab: TerminalTab,
-    exit: { signal: number; startupFailed?: true },
-  ) => void,
-  onStarted: () => void,
-): TerminalSessionAdapter {
-  const { adapter } = tab;
-  return {
-    start: async (handlers: TerminalSessionHandlers) => {
-      tab.startRequested = true;
-      await adapter.start({
-        onOutput: handlers.onOutput,
-        onExit(exit) {
-          handlers.onExit(exit);
-          onSessionEnd(tab, exit);
-        },
-      });
-      onStarted();
-    },
-    write: (data) => adapter.write(data),
-    resize: (size) => adapter.resize(size),
-    close: (reason) => adapter.close(reason),
-  };
+    pane?.surface?.focus();
 }
 
 function installTabDragging(
@@ -505,40 +416,4 @@ function moveTabToHorizontalDrop(
   tabs.splice(sourceIndex, 1);
   tabs.splice(destinationIndex, 0, tab);
   return true;
-}
-
-function completeConfiguration(
-  options: TerminalSurfaceOptions,
-): TerminalSurfaceConfiguration | undefined {
-  if (
-    options.appearance?.fontSize === undefined ||
-    options.appearance.lineHeight === undefined ||
-    options.appearance.ligatures === undefined ||
-    options.padding === undefined ||
-    options.scrollbackLines === undefined ||
-    options.optionKeyMode === undefined ||
-    options.theme === undefined
-  )
-    return undefined;
-  return {
-    appearance: {
-      fontSize: options.appearance.fontSize,
-      lineHeight: options.appearance.lineHeight,
-      ligatures: options.appearance.ligatures,
-      ...(options.appearance.systemFont
-        ? { systemFont: options.appearance.systemFont }
-        : {}),
-    },
-    padding: options.padding,
-    scrollbackLines: options.scrollbackLines,
-    optionKeyMode: options.optionKeyMode,
-    theme: options.theme,
-  };
-}
-
-function findBySession(
-  tabs: readonly TerminalTab[],
-  sessionId: TerminalSessionId,
-): TerminalTab | undefined {
-  return tabs.find((tab) => tab.adapter.sessionId() === sessionId);
 }

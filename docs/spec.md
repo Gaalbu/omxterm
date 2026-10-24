@@ -51,8 +51,8 @@ OMXTerm:
   the protocol limitations documented below; it renders emoji-presentation and
   ZWJ grapheme clusters as single two-column cells that do not overlap
   neighboring cells;
-- uses one independent shell session per Terminal Tab, with one or more tabs per
-  native Terminal Window;
+- uses one independent shell session per Terminal Pane, with one or more panes
+  per Terminal Tab and one or more tabs per native Terminal Window;
 - provides native new-window, new-tab, close, copy, paste, select-all,
   scrollback search, zoom, fullscreen, always-on-top, bounded local-image
   preview, and quit actions without an in-window toolbar;
@@ -72,7 +72,7 @@ OMXTerm:
   an optional versioned per-user AppImage desktop installer and its checksum;
   running the AppImage directly remains supported.
 
-AI assistance, splits, saved or reconnectable sessions, shell integration,
+AI assistance, broadcast input, saved or reconnectable sessions, shell integration,
 profiles, a theme picker or catalog, automatic configuration reload, automatic
 updates, and remote terminal features are outside the current product contract.
 
@@ -85,8 +85,33 @@ succeeds ([ADR 0025](adr/0025-use-restty-as-the-terminal-surface.md)).
 
 - Launching OMXTerm creates a Terminal Window with one Terminal Tab. New Window
   and New Tab default to `Cmd+N` and `Cmd+T` on macOS, and `Ctrl+Shift+N` and
-  `Ctrl+Shift+T` on Linux and Windows. Each tab owns its own independent Live
-  Terminal Session.
+  `Ctrl+Shift+T` on Linux and Windows. Each tab starts with one Terminal Pane,
+  and each pane owns its own independent Live Terminal Session.
+- `View -> Pane` splits the selected tab's focused pane right or down
+  (`splitRight`, `splitDown`), moves pane focus (`focusNextPane`,
+  `focusPreviousPane`, `focusPaneLeft`, `focusPaneRight`, `focusPaneUp`,
+  `focusPaneDown`), resets the shares of the focused pane's split
+  (`equalizePanes`) and closes the focused pane (`closePane`); every shortcut
+  is remappable and nullable. A split needs room for two panes of at least 20
+  columns (right) or 5 rows (down) in the focused pane's current grid, and a tab
+  holds at most 16 panes; otherwise it starts nothing. Splitting in the same
+  direction adds a sibling; pane containers move without recreating Surfaces or
+  sessions. Dividers drag with the pointer and move with arrow keys as
+  `role="separator"` controls, limited by the same minimum; a later resize or
+  zoom that cannot fit every minimum keeps every session and the layout.
+  Exactly one pane per tab is focused: it receives keyboard input and every
+  terminal-directed action, shows a theme-derived ring without dimming other
+  panes, and supplies the tab and window title. Clicking a pane focuses it, and
+  switching tabs restores each tab's focused pane. A new pane starts the Default
+  Shell in its source pane's last OSC 7-reported local directory when the shell
+  emitted one and it still exists, otherwise in the home directory; main reads
+  the report from PTY output, rejects remote hosts and UNC/device paths, and
+  never logs or persists the directory. Ordinary exit removes only that pane
+  and gives its space and focus to the nearest sibling; an unexpected signal
+  keeps the pane until its failure dialog is acknowledged; the last pane closes
+  its tab. Close Pane confirms only a Busy focused pane, Close Tab counts every
+  pane of the tab, and Close Window and Quit count every pane. Hidden tabs hide
+  their pane Surfaces and keep their layout.
 - A startup Launch Request uses `-e <program> [arguments...]`. The value after
   the first `-e` is required as the executable, and every remaining value —
   including another `-e` or an option-looking value — is literal argv. OMXTerm

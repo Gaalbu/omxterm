@@ -12,11 +12,20 @@ Choose **File → New Tab** for another session in the same window, or **File �
 
 - **Tab bar:** appears automatically when a window has two or more tabs. Click a tab to select it, drag horizontally to reorder tabs, or use keyboard shortcuts. **View → Toggle Tab Bar** (`Cmd+Shift+B` / `Ctrl+Shift+B`) hides or shows the strip at any time.
 - **Tab titles:** each tab starts with your active shell or program name (such as `zsh` or `powershell.exe`) and updates automatically when a program sets a terminal title.
-- **Closing:** closing a tab ends its session, and closing the last window exits the app. Typing `exit` in your shell closes that tab immediately.
+- **Closing:** closing a tab ends its sessions, and closing the last window exits the app. Typing `exit` in your shell closes that pane, or the tab when it is its last pane.
+
+### Split panes
+
+Choose **View → Pane → Split Right** (`Cmd+D` / `Ctrl+Shift+O`) or **Split Down** (`Cmd+Shift+E` / `Ctrl+Shift+E`) to divide the current pane into two independent shells in the same tab.
+
+- **Where the new shell starts:** in the directory your shell last reported through OSC 7, if it reports one (many shells do when configured to; OMXTerm never changes your shell setup to make it happen), otherwise in your home directory. A directory reported by a remote SSH host is never used locally.
+- **Focus:** click a pane, or use **Focus Next/Previous Pane** (`Cmd+]` / `Cmd+[`, `Ctrl+Shift+]` / `Ctrl+Shift+[`) and the arrow variants (`Cmd+Alt+Arrow` / `Alt+Shift+Arrow`). Typing, Copy, Paste, Find, snippets and dropped paths go to the focused pane, which has a subtle outline. The tab title follows it.
+- **Resize:** drag the line between panes, or focus it with Tab and use the arrow keys. **Equalize Panes** (`Cmd+Ctrl+=` / `Ctrl+Shift+0`) gives the panes beside the focused one equal space. Each pane keeps at least 20 columns by 5 rows when OMXTerm can measure it; a split that would go below that is refused.
+- **Close:** **Close Pane** (`Cmd+Alt+W` / `Ctrl+Shift+K`) ends the focused pane's session; its neighbor takes the space. Closing the last pane closes the tab.
 
 ### Close confirmation
 
-To protect active work, OMXTerm asks for confirmation before closing a tab or window with a running command. On Windows, confirmation is shown for all live sessions. You can disable this prompt anytime by setting `"confirmClose": false` in `config.json`.
+To protect active work, OMXTerm asks for confirmation before closing a pane, tab or window with a running command. Close Pane only asks about the focused pane; Close Tab asks once for all of the tab's panes. On Windows, confirmation is shown for all live sessions. You can disable this prompt anytime by setting `"confirmClose": false` in `config.json`.
 
 ## Window controls
 
@@ -31,28 +40,34 @@ These toggles apply to the current window. To change the defaults for new window
 
 The application menu displays your active shortcuts, including any custom bindings from `config.json`.
 
-| Action                    | macOS             | Linux and Windows  |
-| ------------------------- | ----------------- | ------------------ |
-| New Window                | `Cmd+N`           | `Ctrl+Shift+N`     |
-| New Tab                   | `Cmd+T`           | `Ctrl+Shift+T`     |
-| Close Tab                 | `Cmd+W`           | `Ctrl+Shift+W`     |
-| Close Window              | `Cmd+Shift+W`     | `Ctrl+Shift+Q`     |
-| Quit                      | `Cmd+Q`           | `Ctrl+Alt+Shift+Q` |
-| Next Tab                  | `Ctrl+Tab`        | `Ctrl+PageDown`    |
-| Previous Tab              | `Ctrl+Shift+Tab`  | `Ctrl+PageUp`      |
-| Select Tab 1 through 9    | `Cmd+1` … `Cmd+9` | `Alt+1` … `Alt+9`  |
-| Copy                      | `Cmd+C`           | `Ctrl+Shift+C`     |
-| Paste                     | `Cmd+V`           | `Ctrl+Shift+V`     |
-| Select All                | `Cmd+A`           | `Ctrl+Shift+A`     |
-| Find                      | `Cmd+F`           | `Ctrl+Shift+F`     |
-| Zoom In                   | `Cmd++`           | `Ctrl++`           |
-| Zoom Out                  | `Cmd+-`           | `Ctrl+-`           |
-| Actual Size               | `Cmd+0`           | `Ctrl+0`           |
-| Toggle Full Screen        | `Ctrl+Cmd+F`      | `F11`              |
-| Toggle Tab Bar            | `Cmd+Shift+B`     | `Ctrl+Shift+B`     |
-| Toggle Title Bar          | `Cmd+Shift+D`     | `Ctrl+Shift+D`     |
-| Toggle Snippets           | `Cmd+Shift+S`     | `Ctrl+Shift+S`     |
-| Reload User Configuration | `Cmd+Shift+,`     | `Ctrl+Shift+,`     |
+| Action                    | macOS             | Linux and Windows               |
+| ------------------------- | ----------------- | ------------------------------- |
+| New Window                | `Cmd+N`           | `Ctrl+Shift+N`                  |
+| New Tab                   | `Cmd+T`           | `Ctrl+Shift+T`                  |
+| Close Tab                 | `Cmd+W`           | `Ctrl+Shift+W`                  |
+| Close Window              | `Cmd+Shift+W`     | `Ctrl+Shift+Q`                  |
+| Quit                      | `Cmd+Q`           | `Ctrl+Alt+Shift+Q`              |
+| Next Tab                  | `Ctrl+Tab`        | `Ctrl+PageDown`                 |
+| Previous Tab              | `Ctrl+Shift+Tab`  | `Ctrl+PageUp`                   |
+| Select Tab 1 through 9    | `Cmd+1` … `Cmd+9` | `Alt+1` … `Alt+9`               |
+| Split Right               | `Cmd+D`           | `Ctrl+Shift+O`                  |
+| Split Down                | `Cmd+Shift+E`     | `Ctrl+Shift+E`                  |
+| Close Pane                | `Cmd+Alt+W`       | `Ctrl+Shift+K`                  |
+| Focus Next/Previous Pane  | `Cmd+]` / `Cmd+[` | `Ctrl+Shift+]` / `Ctrl+Shift+[` |
+| Focus Pane in a direction | `Cmd+Alt+Arrow`   | `Alt+Shift+Arrow`               |
+| Equalize Panes            | `Cmd+Ctrl+=`      | `Ctrl+Shift+0`                  |
+| Copy                      | `Cmd+C`           | `Ctrl+Shift+C`                  |
+| Paste                     | `Cmd+V`           | `Ctrl+Shift+V`                  |
+| Select All                | `Cmd+A`           | `Ctrl+Shift+A`                  |
+| Find                      | `Cmd+F`           | `Ctrl+Shift+F`                  |
+| Zoom In                   | `Cmd++`           | `Ctrl++`                        |
+| Zoom Out                  | `Cmd+-`           | `Ctrl+-`                        |
+| Actual Size               | `Cmd+0`           | `Ctrl+0`                        |
+| Toggle Full Screen        | `Ctrl+Cmd+F`      | `F11`                           |
+| Toggle Tab Bar            | `Cmd+Shift+B`     | `Ctrl+Shift+B`                  |
+| Toggle Title Bar          | `Cmd+Shift+D`     | `Ctrl+Shift+D`                  |
+| Toggle Snippets           | `Cmd+Shift+S`     | `Ctrl+Shift+S`                  |
+| Reload User Configuration | `Cmd+Shift+,`     | `Ctrl+Shift+,`                  |
 
 On keyboards where `+` shares the `=` key, include `Shift` (`Cmd+Shift+=` or `Ctrl+Shift+=`).
 

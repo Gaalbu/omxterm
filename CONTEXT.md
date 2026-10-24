@@ -28,14 +28,19 @@ See [window and session behavior](docs/spec.md#window-and-session-behavior).
 **Terminal Window** — An independent native window containing one or more
 Terminal Tabs, with exactly one selected.
 
-**Terminal Tab** — A selectable container owning a Terminal Surface and, after
-initialization succeeds, one Live Terminal Session. Pending initialization and
-failure acknowledgement also retain window ownership. Tabs can be reordered
-within their window. Their state is temporary; removing the last tab follows the
-window-close lifecycle, including pending failure acknowledgement.
+**Terminal Tab** — A selectable container owning one or more Terminal Panes,
+with exactly one focused. Pending initialization and failure acknowledgement also
+retain window ownership. Tabs can be reordered within their window. Their state is
+temporary; removing the last tab follows the window-close lifecycle, including
+pending failure acknowledgement.
+
+**Terminal Pane** — One Terminal Surface and, after initialization succeeds, one
+Live Terminal Session inside a tab's split layout. Removing a tab's last pane
+removes the tab. A split pane may start in its source pane's last OSC 7-reported
+local directory; otherwise in the home directory.
 
 **Live Terminal Session** — A running shell or explicitly launched program and
-its terminal state. Closing its tab ends its processes; application quit waits
+its terminal state. Closing its pane or tab ends its processes; application quit waits
 for owned native sessions to exit. Session persistence belongs to tools such as
 tmux.
 

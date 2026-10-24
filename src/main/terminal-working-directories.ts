@@ -1,0 +1,107 @@
+import { statSync } from "node:fs";
+import { hostname } from "node:os";
+import type { TerminalSessionId } from "../shared/terminal-contract";
+import {
+  isWorkingDirectoryUri,
+  localWorkingDirectory,
+  MAX_WORKING_DIRECTORY_REPORT_LENGTH,
+} from "../shared/terminal-panes";
+
+const INTRODUCER = "\u001b]7;";
+
+// The last local directory each session's shell reported through OSC 7 in its
+// own output. It is used only to start a split pane where its source pane is;
+// it is never logged, persisted or sent anywhere. Shells that do not report
+// keep the home directory, and OMXTerm injects nothing to make them report
+// (ADR 0013).
+export function createWorkingDirectoryTracker(
+  options: {
+    readonly platform?: string;
+    readonly hostName?: () => string;
+    readonly isDirectory?: (path: string) => boolean;
+  } = {},
+) {
+  const directories = new Map<TerminalSessionId, string>();
+  // An unterminated report, or a possibly split introducer, per session.
+  const carries = new Map<TerminalSessionId, string>();
+  const platform = options.platform ?? process.platform;
+  const hostName = options.hostName ?? hostname;
+  const isDirectory = options.isDirectory ?? existingDirectory;
+
+  const record = (sessionId: TerminalSessionId, uri: string) => {
+    const directory = isWorkingDirectoryUri(uri)
+      ? localWorkingDirectory(uri, hostName(), platform)
+      : undefined;
+    // A remote or unusable report replaces, never keeps, an older one.
+    if (directory === undefined) directories.delete(sessionId);
+    else directories.set(sessionId, directory);
+  };
+
+  return {
+    observe(sessionId: TerminalSessionId, data: string) {
+      const carried = carries.get(sessionId);
+      if (carried === undefined && !data.includes("\u001b")) return;
+      carries.delete(sessionId);
+      const text = (carried ?? "") + data;
+      let from = 0;
+      for (;;) {
+        const start = text.indexOf(INTRODUCER, from);
+        if (start < 0) {
+          const tail = partialIntroducer(text);
+          if (tail) carries.set(sessionId, tail);
+          return;
+        }
+        const body = start + INTRODUCER.length;
+        const end = terminator(text, body);
+        if (end === undefined) {
+          // A bounded report may continue in the next chunk.
+          if (text.length - body <= MAX_WORKING_DIRECTORY_REPORT_LENGTH)
+            carries.set(sessionId, text.slice(start));
+          return;
+        }
+        record(sessionId, text.slice(body, end.index));
+        from = end.index + end.length;
+      }
+    },
+    // A reported directory may have been removed since; home is the fallback.
+    inherited(sessionId: TerminalSessionId | undefined): string | undefined {
+      const directory =
+        sessionId === undefined ? undefined : directories.get(sessionId);
+      return directory !== undefined && isDirectory(directory)
+        ? directory
+        : undefined;
+    },
+    forget(sessionId: TerminalSessionId) {
+      directories.delete(sessionId);
+      carries.delete(sessionId);
+    },
+  };
+}
+
+// BEL or ST ends an OSC sequence.
+function terminator(
+  text: string,
+  from: number,
+): { readonly index: number; readonly length: number } | undefined {
+  const bel = text.indexOf("\u0007", from);
+  const st = text.indexOf("\u001b\\", from);
+  if (bel < 0 && st < 0) return undefined;
+  if (st < 0 || (bel >= 0 && bel < st)) return { index: bel, length: 1 };
+  return { index: st, length: 2 };
+}
+
+// The longest end of `text` that could begin an introducer in the next chunk.
+function partialIntroducer(text: string): string {
+  for (let length = INTRODUCER.length - 1; length > 0; length -= 1)
+    if (text.endsWith(INTRODUCER.slice(0, length)))
+      return INTRODUCER.slice(0, length);
+  return "";
+}
+
+function existingDirectory(path: string): boolean {
+  try {
+    return statSync(path).isDirectory();
+  } catch {
+    return false;
+  }
+}

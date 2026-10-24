@@ -52,6 +52,7 @@ interface TerminalWindowPageOptions {
   readonly about?: AboutBridge;
   readonly createAdapter: (
     fontConfigurationId?: string,
+    workingDirectoryOf?: TerminalSessionId,
   ) => ElectronTerminalAdapter;
   readonly configuration?: TerminalRendererConfiguration;
   readonly chrome?: WindowChromeBridge;
@@ -82,7 +83,10 @@ interface TerminalWindowPageOptions {
   readonly subscribeToTabTitles?: (
     listener: (sessionId: TerminalSessionId, title: string) => void,
   ) => () => void;
-  readonly notifyTabSelection?: (sessionId: TerminalSessionId) => void;
+  readonly notifyTabSelection?: (
+    sessionId: TerminalSessionId,
+    tabSessionIds?: readonly TerminalSessionId[],
+  ) => void;
   readonly syncTabTitle?: (sessionId: TerminalSessionId) => void;
   readonly notifyTabsEmpty?: (reason?: "rendering-failure") => void;
   readonly onTitleRequest?: (
@@ -187,7 +191,8 @@ export function mountTerminalWindowPage(
   const tabs: TerminalTabs = createTerminalTabs(
     { strip: elements.tabStrip, container: elements.tabsContainer },
     {
-      createAdapter: () => options.createAdapter(fontConfigurationId),
+      createAdapter: (workingDirectoryOf) =>
+        options.createAdapter(fontConfigurationId, workingDirectoryOf),
       canFocus: () => !disposed && !about?.isActive(),
       canAutoFocus: (unchangedFocus) =>
         !previewActive() && (unchangedFocus || !auxiliaryPanel?.ownsFocus()),
