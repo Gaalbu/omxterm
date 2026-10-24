@@ -78,10 +78,12 @@ async function setup(
     copy: vi.fn(async () => {}),
     paste: vi.fn(async () => {}),
     selectAll: vi.fn(),
+    find: vi.fn(),
   };
   let openImage!: () => void;
   let openAbout!: () => void;
   let toggleTabBar!: () => void;
+  let find!: () => void;
   let toggleTitleBar = () => {};
   const chromeCommand = vi.fn();
   let clipboard!: (action: "copy" | "paste" | "select-all") => void;
@@ -160,6 +162,10 @@ async function setup(
         toggleTabBar = listener;
         return () => {};
       },
+      subscribeToFind(listener) {
+        find = listener;
+        return () => {};
+      },
       subscribeToTabCommands: (listener) => {
         tabCommand = listener;
         return () => {};
@@ -178,6 +184,7 @@ async function setup(
     openImage,
     openAbout,
     toggleTabBar,
+    find: () => find(),
     toggleTitleBar: () => toggleTitleBar(),
     chromeCommand,
     tabStrip,
@@ -378,6 +385,7 @@ describe("local image preview through the Terminal Window host", () => {
         view.clipboard("paste");
         view.clipboard("copy");
         view.clipboard("select-all");
+        view.find();
         view.zoom("in");
         fileDrop();
         window.dispatchEvent(new Event("focus"));
@@ -391,6 +399,7 @@ describe("local image preview through the Terminal Window host", () => {
       expect.soft(view.surface.paste).not.toHaveBeenCalled();
       expect.soft(view.surface.copy).not.toHaveBeenCalled();
       expect.soft(view.surface.selectAll).not.toHaveBeenCalled();
+      expect.soft(view.surface.find).not.toHaveBeenCalled();
       expect.soft(view.surface.inject).not.toHaveBeenCalled();
       expect.soft(view.surface.zoom).not.toHaveBeenCalled();
       expect.soft(view.surface.focus).not.toHaveBeenCalled();
@@ -400,6 +409,7 @@ describe("local image preview through the Terminal Window host", () => {
       expect(view.surface.paste).toHaveBeenCalledOnce();
       expect(view.surface.copy).toHaveBeenCalledOnce();
       expect(view.surface.selectAll).toHaveBeenCalledOnce();
+      expect(view.surface.find).toHaveBeenCalledOnce();
       expect(view.surface.inject).toHaveBeenCalledOnce();
       expect(view.surface.zoom).toHaveBeenCalledOnce();
       expect(view.surface.focus).toHaveBeenCalled();

@@ -53,9 +53,9 @@ OMXTerm:
   neighboring cells;
 - uses one independent shell session per Terminal Tab, with one or more tabs per
   native Terminal Window;
-- provides native new-window, new-tab, close, copy, paste, select-all, zoom,
-  fullscreen, always-on-top, bounded local-image preview, and quit actions
-  without an in-window toolbar;
+- provides native new-window, new-tab, close, copy, paste, select-all,
+  scrollback search, zoom, fullscreen, always-on-top, bounded local-image
+  preview, and quit actions without an in-window toolbar;
 - renders the bundled [`omtheme`](omtheme.json) palette by default, allows one
   explicitly configured external Terminal Theme, keeps SGR bold text on its
   requested ANSI `0–7` color without remapping it to bright `8–15` (applications
@@ -703,6 +703,32 @@ alternate screens; Shift retains the selection override, and explicit copy and
 valid modified-link gestures — web or local image — do not produce duplicate PTY
 mouse input. OSC 8 destinations and all other schemes are ignored.
 
+Scrollback Search opens only through **Edit → Find…** or the `find` keybind
+(`Cmd+F` on macOS, `Ctrl+Shift+F` on Linux and Windows). It uses Restty's
+search bar and the pinned core's search over the selected tab's retained
+Scrollback Buffer and visible screen; output evicted by the scrollback limits
+is not searchable. Opening the bar focuses its query field, and invoking Find
+again focuses and selects the query. Keys act on the bar only while its query
+field holds focus: `Enter` or the down button selects the next match below
+(newer output), `Shift+Enter` or the up button the previous match above (older
+output), and `Escape` or the close button closes the bar and returns focus to
+the terminal. The bar owns the whole Escape gesture that closes it: its held
+repeats and its release never reach the terminal, including under Kitty
+keyboard event reporting. An open bar never captures keys while the terminal
+holds focus;
+`Enter`, `Shift+Enter` and `Escape` then remain ordinary terminal input. Window
+focus returns to the query field only when it held focus before. While the
+field holds focus, application Copy, Paste and Select All, from the menu, a
+keybind or the context menu, act on the query instead of the terminal: Paste
+inserts clipboard text at the field's selection with line breaks replaced by
+spaces, and nothing reaches Protected Paste or the PTY. The bar, including its
+match counter, follows the active Terminal Theme. Each tab owns its own query.
+Search state, the query and its matches, stays in renderer memory and is never
+persisted, logged or written to the PTY, and searching never sends it to main.
+Only an explicit Copy from the focused field moves the selected query text,
+through the same main-owned clipboard IPC as any other Copy. Find is ignored
+while a Local Image Preview or About owns modal input.
+
 ## Clipboard
 
 - Selection never copies automatically.
@@ -892,14 +918,21 @@ filesystem access or warning but has no effect on operating-system shell
 selection.
 
 An optional `keybinds` object remaps application-chrome shortcuts for a fixed
-action vocabulary: `quit`, `copy`, `paste`, `selectAll`, `newWindow`,
+action vocabulary: `quit`, `copy`, `paste`, `selectAll`, `find`, `newWindow`,
 `closeWindow`, `newTab`, `closeTab`, `nextTab`, `previousTab`, `selectTab1`
 through `selectTab9`, `zoomIn`, `zoomOut`, `actualSize`, `toggleFullScreen`,
 `toggleSnippets`, `toggleTabBar`, `toggleTitleBar`, and `reloadConfig`. Each
-value is a case-insensitive Electron accelerator containing at least one
-non-Shift modifier and exactly one key; bare or Shift-only accelerators are
-rejected so a keybind can never swallow plain typing. Unmapped actions keep
-their built-in defaults. The application menu displays the effective accelerator
+value is either `null` or a case-insensitive Electron accelerator containing
+exactly one key and at least one non-Shift modifier; bare or Shift-only
+accelerators are rejected so a keybind can never swallow plain typing. Function
+keys `F1` through `F24` type nothing and are the only keys accepted bare or
+with Shift alone. Omitted actions keep their built-in platform defaults. `null`
+removes only that action's shortcut: the menu item stays available without an
+accelerator, and OMXTerm no longer consumes that key for the action. It does not
+guarantee delivery to the terminal; another binding or the operating system may
+still consume the key. Linux and Windows default Find to `Ctrl+Shift+F` and
+Toggle Full Screen to `F11`; macOS keeps `Cmd+F` and `Ctrl+Cmd+F`. The
+application menu displays the effective accelerator
 and is the single shortcut registration point; there is no second shortcut
 system, and terminal control sequences inside the PTY are untouched. An
 effective keybind works even when the platform refuses to fire its menu
@@ -916,7 +949,11 @@ AltGr identity, not an inference from Alt. Intrinsic Shift and native key
 identity also count: `Control+!` duplicates `Control+Shift+1`, and
 `Control+Plus` duplicates `Control+Shift+Plus` and `Control+Shift+=`. A remap
 that collides with another action's remaining default is the same error as two
-explicit entries colliding. The main-process matcher uses this identity when the
+explicit entries colliding; OMXTerm never reassigns another action's shortcut.
+The diagnostic names both actions and the key in a form derived from the parsed
+accelerator, never the configured text, and offers both remedies: choose
+another shortcut, or set one of the actions to `null`. A `null` entry holds no
+shortcut and cannot collide. The main-process matcher uses this identity when the
 logical shifted character and native key position agree; it does not translate
 arbitrary keyboard layouts. Separately, application fallback preserves logical
 keypad delivery (for example, keypad Minus for Zoom Out) and logical `Plus`

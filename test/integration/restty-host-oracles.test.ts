@@ -21,6 +21,7 @@ import {
 } from "../fixtures/run-native-fixture";
 import type { ResttyGestureControl } from "../fixtures/restty-gesture-routing-mutation";
 import type { exerciseResttyOrdinaryGestures } from "../fixtures/restty-link-gestures";
+import type { ResttySearchEvidence } from "../fixtures/restty-host-search";
 
 const electronExecutable = createRequire(import.meta.url)("electron") as string;
 const prefix = "__OMXTERM_RESTTY_HOST_RESULT__";
@@ -30,6 +31,7 @@ interface FocusedResult {
   readonly ptyExits: number;
   readonly outputStress?: OutputStressEvidence;
   readonly backendLoss?: Awaited<ReturnType<typeof exerciseResttyBackendLoss>>;
+  readonly searchEvidence?: ResttySearchEvidence;
   readonly gestureEvidence?: Awaited<
     ReturnType<typeof exerciseResttyOrdinaryGestures>
   >;
@@ -409,5 +411,34 @@ describe.skipIf(!["darwin", "linux", "win32"].includes(process.platform))(
         }
       },
     );
+  },
+);
+
+describe.skipIf(!["darwin", "linux", "win32"].includes(process.platform))(
+  "focused Scrollback Search host oracle",
+  () => {
+    it("finds scrollback matches, edits the query through the application clipboard, and leaves keys to a focused terminal", async (testContext) => {
+      const result = readResult(
+        await runOracle("scrollback-search", testContext),
+      );
+      expect(result.sessionStarts).toBe(1);
+      const { selectedStatus, ...evidence } = result.searchEvidence!;
+      expect(selectedStatus).toMatch(/^\d+\/10$/);
+      expect(evidence).toEqual({
+        openedFocused: true,
+        asciiStatus: "10",
+        pastedQuery: "needleprivate",
+        unicodeStatus: "1",
+        themed: true,
+        counterMatchesField: true,
+        terminalKeysWhileOpen: true,
+        openAfterTerminalKeys: true,
+        closed: true,
+        focusReturned: true,
+        queryReachedPty: false,
+        // Only the terminal-owned Escape's press and release.
+        kittyEscapeWrites: "\u001b[27;1:1u\u001b[27;1:3u",
+      });
+    }, 130_000);
   },
 );

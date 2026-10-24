@@ -39,7 +39,13 @@ import {
   resttyContextMenuHandler,
   resttyHostServices,
 } from "./restty-host-services";
-import { toGhosttyTheme } from "./restty-theme";
+import { toGhosttyTheme, toResttySearchUiStyle } from "./restty-theme";
+import {
+  applySearchTheme,
+  focusedSearchField,
+  retainSearchEscapeGesture,
+  withSearchFieldClipboard,
+} from "./restty-search-field";
 import type {
   TerminalFontInputLease,
   TerminalSurface,
@@ -143,6 +149,7 @@ export async function mountResttyTerminalSurface(
   const scrollbackLines = validateScrollbackLines(options.scrollbackLines);
   const initialFamily = options.appearance?.systemFont?.family;
   const onContextMenu = resttyContextMenuHandler(options.clipboard);
+  const releaseSearchEscape = retainSearchEscapeGesture(container);
   const revealInput = () => {
     visibleLinkController?.invalidate();
     pane?.runtime.interaction.scrollToBottom();
@@ -159,6 +166,7 @@ export async function mountResttyTerminalSurface(
     paintContainer(container, padding, terminalTheme, options.background);
   const applyRuntimeTheme = (theme: TerminalTheme) => {
     pane?.runtime.terminal.applyTheme(toGhosttyTheme(theme), "OMXTerm");
+    applySearchTheme(restty, container, theme);
   };
   const isSurfaceVisible = () =>
     !isInactive() && !container.hidden && container.isConnected;
@@ -201,6 +209,7 @@ export async function mountResttyTerminalSurface(
       () => delivery.dispose(),
       () => container.removeEventListener("contextmenu", onContextMenu),
       () => removeRuntimeListener?.(),
+      releaseSearchEscape,
       () => visibleLinkController?.dispose(),
       () => adapter.close(reason),
       () => restty?.destroy(),
@@ -262,19 +271,13 @@ export async function mountResttyTerminalSurface(
     );
     restty = new PatchedRestty({
       root: container,
-      surface: {
-        autoInit: false,
-        createInitialPane: true,
-        defaultContextMenu: false,
-        paneStyles: false,
-        searchUi: false,
-        shortcuts: false,
-      },
+      surface: resttySurfaceConfig(terminalTheme),
       terminal: { ...terminal, isSurfaceVisible },
       services: resttyHostServices(transport, delivery, options, revealInput),
     });
     pane = restty.getActivePane() ?? undefined;
     if (!pane) throw new Error("Restty did not create its terminal pane");
+    applySearchTheme(restty, container, terminalTheme);
 
     removeRuntimeListener = pane.runtime.events.subscribe((event) => {
       if (isInactive()) return;
@@ -340,7 +343,8 @@ export async function mountResttyTerminalSurface(
 
     return {
       focus: () => {
-        if (disposed) return;
+        // Window focus returns to a focused query field, not the terminal.
+        if (disposed || focusedSearchField(restty, container)) return;
         refit();
         pane?.runtime.interaction.focus();
         // Tab selection calls focus in the switching task, before presentation.
@@ -365,9 +369,14 @@ export async function mountResttyTerminalSurface(
         applyRuntimeSize(nextSize);
         refit();
       },
-      ...resttyClipboardActions(delivery, options, () =>
-        disposed ? undefined : pane?.runtime.interaction,
+      ...withSearchFieldClipboard(
+        resttyClipboardActions(delivery, options, () =>
+          disposed ? undefined : pane?.runtime.interaction,
+        ),
+        () => (disposed ? undefined : focusedSearchField(restty, container)),
+        options,
       ),
+      find: () => openSearch(disposed ? undefined : restty),
       dispose,
     };
   } catch (cause) {
@@ -457,6 +466,22 @@ function throwInitializationFailure(
   throw new Error("Failed to mount the OMXTerm Terminal Surface", { cause });
 }
 
+function openSearch(restty: PatchedRestty | undefined): void {
+  restty?.openSearch({ selectAll: true });
+}
+
+function resttySurfaceConfig(theme: TerminalTheme) {
+  return {
+    autoInit: false,
+    createInitialPane: true,
+    defaultContextMenu: false,
+    paneStyles: false,
+    // Opened only through the application's find keybind and menu item.
+    searchUi: { shortcut: false, styles: toResttySearchUiStyle(theme) },
+    shortcuts: false,
+  };
+}
+
 function paintContainer(
   container: HTMLElement,
   padding: TerminalPadding,
@@ -483,6 +508,7 @@ function createDisposedSurface(): TerminalSurface {
     paste: async () => undefined,
     inject: async () => undefined,
     selectAll: () => undefined,
+    find: () => undefined,
     dispose: () => undefined,
   };
 }
