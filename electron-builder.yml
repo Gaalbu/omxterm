@@ -35,6 +35,8 @@ extraResources:
     to: licenses/node-pty.txt
   - from: node_modules/yaml/LICENSE
     to: licenses/yaml.txt
+  - from: assets/licenses/ashyterm-MIT.txt
+    to: licenses/ashyterm.txt
   - from: assets/licenses/restty-MIT.txt
     to: licenses/restty.txt
   - from: assets/licenses/text-shaper-MIT.txt
