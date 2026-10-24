@@ -152,3 +152,15 @@ async function exerciseSettingsDialog(
     focusReturned: true,
   };
 }
+
+// Runs one settings exercise and always releases its IPC and profile.
+export async function runSettingsExercise(
+  ...options: Parameters<typeof createSettingsExercise>
+): Promise<SettingsEvidence> {
+  const settings = createSettingsExercise(...options);
+  try {
+    return await settings.exercise();
+  } finally {
+    settings.dispose();
+  }
+}

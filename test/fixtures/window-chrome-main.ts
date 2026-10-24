@@ -16,25 +16,29 @@ import {
 } from "../../src/main/terminal-application";
 import { createTerminalWindowTitleController } from "../../src/main/terminal-window-title";
 import { registerTerminalIpcRouter } from "../../src/main/terminal-ipc-controller";
-import type { SessionCallbacks } from "../../src/main/terminal-ipc-types";
-import {
-  terminalRendererConfiguration,
-  applyActiveUserConfiguration,
-} from "../../src/main/active-user-configuration";
+import type {
+  SessionCallbacks,
+  TerminalIpcRouter,
+} from "../../src/main/terminal-ipc-types";
+import { terminalRendererConfiguration } from "../../src/main/active-user-configuration";
 import { DEFAULT_USER_CONFIGURATION } from "../../src/main/user-configuration";
-import type { TerminalIpcRouter } from "../../src/main/terminal-ipc-types";
-import type { ActiveUserConfiguration } from "../../src/main/user-configuration-reloader";
 import { createLocalTerminalSession } from "../../src/main/local-terminal-session";
 import { spawnFixturePty } from "./native-fixture-pty";
 import {
   explicitFixtureLaunchRequest,
+  explicitFixtureReadyMarker,
   nativeFixturePlatform,
 } from "./restty-host-platform";
 import { terminalIpc } from "../../src/shared/terminal-ipc";
 import { createAboutExercise } from "./about-dialog-exercise";
-import { createSettingsExercise } from "./settings-dialog-exercise";
+import { runSettingsExercise } from "./settings-dialog-exercise";
+import { fixtureConfigurationApplier } from "./window-chrome-configuration";
 import { exerciseAboutKeyboard } from "./about-keyboard-exercise";
-import { exerciseWindowChrome } from "./window-chrome-exercise";
+import {
+  exerciseWindowChrome,
+  waitFor as waitForChrome,
+} from "./window-chrome-exercise";
+import { createFixtureSessionInput } from "./fixture-session-input";
 import { exerciseAuxiliaryPanel } from "./auxiliary-panel-exercise";
 import type { LocalImageData } from "../../src/shared/local-image";
 import { assertNativeChromeConstruction } from "./window-chrome-construction";
@@ -60,7 +64,7 @@ const sizes: Array<Array<{ cols: number; rows: number }>> = [];
 const cells: Array<{ width: number; height: number } | undefined> = [];
 const cellQueries: Array<() => void> = [];
 const sessionOutputs: Array<(data: string) => void> = [];
-let keyboardInput: ((data: string) => void) | undefined;
+const sessionInputs: Array<ReturnType<typeof createFixtureSessionInput>> = [];
 const windows: BrowserWindow[] = [];
 const backgroundTransparencies = new WeakMap<BrowserWindow, () => number>();
 const backgroundEffects = createWindowBackgroundEffectsOwner(
@@ -80,6 +84,8 @@ function createChromeSession(callbacks: SessionCallbacks) {
   const index = sessions.length;
   sizes[index] = [];
   sessionOutputs[index] = callbacks.onOutput;
+  const input = createFixtureSessionInput(explicitFixtureReadyMarker);
+  sessionInputs[index] = input;
   let queryingCell = false;
   cellQueries[index] = () => {
     queryingCell = true;
@@ -101,13 +107,19 @@ function createChromeSession(callbacks: SessionCallbacks) {
       environment: { ...process.env, HOME: root },
       applicationVersionProvider: app,
       ...callbacks,
+      onOutput(data) {
+        input.observeOutput(data);
+        callbacks.onOutput(data);
+      },
       onExit(exit, launchKind) {
+        input.dispose();
         resolveExit();
         callbacks.onExit(exit, launchKind);
       },
     });
   } catch (error) {
     // No session was returned; do not leave an unowned pending slot.
+    input.dispose();
     resolveExit();
     throw error;
   }
@@ -115,12 +127,11 @@ function createChromeSession(callbacks: SessionCallbacks) {
   return {
     ...terminal,
     write(data: string) {
-      if (keyboardInput) return keyboardInput(data);
       const cell = queryingCell && /^\u001b\[6;(\d+);(\d+)t$/u.exec(data);
       if (cell) {
         cells[index] = { width: Number(cell[2]), height: Number(cell[1]) };
         queryingCell = false;
-      } else terminal.write(data);
+      } else input.write(data, (bytes) => terminal.write(bytes));
     },
     resize(size: { cols: number; rows: number }) {
       sizes[index]!.push(size);
@@ -139,7 +150,11 @@ function exerciseMenu(showAbout: () => void) {
 }
 async function exerciseKeyboard(about: ReturnType<typeof createAboutExercise>) {
   const inputs: string[] = [];
-  keyboardInput = (data) => inputs.push(data);
+  await waitForChrome(
+    () => sessionInputs[0]!.isReady(),
+    "About native child ready",
+  );
+  const release = sessionInputs[0]!.capture((data) => inputs.push(data));
   try {
     await exerciseAboutKeyboard(
       windows[0]!,
@@ -148,38 +163,16 @@ async function exerciseKeyboard(about: ReturnType<typeof createAboutExercise>) {
       () => inputs.join(""),
     );
   } finally {
-    keyboardInput = undefined;
+    release();
   }
 }
-function applyFixtureConfiguration(router: TerminalIpcRouter) {
-  return (state: ActiveUserConfiguration, committed: boolean) =>
-    applyActiveUserConfiguration(
-      state,
-      committed,
-      router,
-      windows,
-      application,
-      {
-        rebuildMenu() {},
-        nativeTitleInset: process.platform === "darwin" ? 30 : 0,
-        platform: process.platform,
-        applyBackgroundEffects: backgroundEffects.apply,
-      },
-    );
-}
-async function exerciseSettingsOnly(router: TerminalIpcRouter) {
-  const settings = createSettingsExercise(
-    root,
+const applyFixtureConfiguration = (router: TerminalIpcRouter) =>
+  fixtureConfigurationApplier(
     router,
-    () => windows[0]!,
-    applyFixtureConfiguration(router),
+    windows,
+    application,
+    backgroundEffects.apply,
   );
-  try {
-    return { settings: await settings.exercise() };
-  } finally {
-    settings.dispose();
-  }
-}
 async function exerciseScenario(
   about: ReturnType<typeof createAboutExercise>,
   router: TerminalIpcRouter,
@@ -194,7 +187,14 @@ async function exerciseScenario(
 ) {
   try {
     if (process.argv.includes("--fixture-settings-only"))
-      return await exerciseSettingsOnly(router);
+      return {
+        settings: await runSettingsExercise(
+          root,
+          router,
+          () => windows[0]!,
+          applyFixtureConfiguration(router),
+        ),
+      };
     if (process.argv.includes("--fixture-about-only")) {
       await exerciseMenu(about.show);
       // This independent scenario still owns only its initial selected session.
@@ -211,9 +211,9 @@ async function exerciseScenario(
         second: options.second,
         sizes,
         output: (index, data) => sessionOutputs[index]!(data),
-        captureInput: (listener) => {
-          keyboardInput = listener;
-        },
+        inputReady: (index) => sessionInputs[index]?.isReady() ?? false,
+        captureInput: (index, listener) =>
+          sessionInputs[index]!.capture(listener),
         clipboard: panelClipboard,
         showAbout: about.show,
         imagePending: () => finishPanelImage !== undefined,
@@ -431,6 +431,10 @@ app
       quit() {},
     });
     await application.newWindow();
+    if (process.platform === "darwin" && !app.isActive()) {
+      app.focus({ steal: true });
+      windows[0]!.focus();
+    }
     const result = await exerciseScenario(about, router, {
       ...(nativeExpectation !== undefined ? { nativeExpectation } : {}),
       window: windows[0]!,
@@ -481,18 +485,9 @@ app
             },
           },
         };
-        applyActiveUserConfiguration(
+        applyFixtureConfiguration(router)(
           { configuration, userFileErrors: [] },
           true,
-          router,
-          windows,
-          application,
-          {
-            rebuildMenu() {},
-            nativeTitleInset: process.platform === "darwin" ? 30 : 0,
-            platform: process.platform,
-            applyBackgroundEffects: backgroundEffects.apply,
-          },
         );
       },
       second: () => windows[1]!,
