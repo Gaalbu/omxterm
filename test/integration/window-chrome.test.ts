@@ -16,11 +16,19 @@ import {
   type ChromeNativeExpectation,
 } from "../fixtures/window-policy";
 
+import {
+  FEATURE_SMOKE_CASE,
+  FEATURE_SMOKE_FLAG,
+  FEATURE_SMOKE_PHASE_PREFIX,
+  FEATURE_SMOKE_PHASES,
+  FEATURE_SMOKE_RESULT,
+} from "../fixtures/feature-native-smoke-contract";
+
 const executable = createRequire(import.meta.url)("electron") as string;
 const prefix = "__OMXTERM_WINDOW_CHROME_RESULT__";
 async function runChrome(
   mode: string,
-  expectation: ChromeNativeExpectation,
+  expectation: ChromeNativeExpectation | undefined,
   testContext: NativeFixtureTestContext,
 ) {
   testContext.signal.throwIfAborted();
@@ -41,10 +49,13 @@ async function runChrome(
       args: [
         ...args,
         root,
-        `--fixture-native-maximize=${expectation}`,
+        ...(expectation === undefined
+          ? []
+          : [`--fixture-native-maximize=${expectation}`]),
         ...(mode === "fail-fast" ? ["--fixture-fail-fast"] : []),
         ...(mode === "about-only" ? ["--fixture-about-only"] : []),
         ...(mode === "settings-only" ? ["--fixture-settings-only"] : []),
+        ...(mode === "feature-smoke" ? [FEATURE_SMOKE_FLAG] : []),
       ],
       root,
       timeout: mode === "fail-fast" ? 10_000 : 100_000,
@@ -165,5 +176,33 @@ describe.skipIf(!["darwin", "linux", "win32"].includes(process.platform))(
         );
       },
     );
+    it(FEATURE_SMOKE_CASE, { timeout: 120_000 }, async (testContext) => {
+      // No native maximize discovery or unrelated continuity exercise is needed.
+      const execution = await runChrome(
+        "feature-smoke",
+        undefined,
+        testContext,
+      );
+      expect(
+        execution,
+        `Feature smoke failed.\n${execution.stdout}\n${execution.stderr}`,
+      ).toMatchObject({
+        exitCode: 0,
+        signal: null,
+        reason: "exit",
+        cleanupErrors: [],
+      });
+      const lines = execution.stdout.split("\n");
+      expect(
+        lines
+          .filter((line) => line.startsWith(FEATURE_SMOKE_PHASE_PREFIX))
+          .map((line) => line.slice(FEATURE_SMOKE_PHASE_PREFIX.length)),
+      ).toEqual(FEATURE_SMOKE_PHASES);
+      const results = lines.filter((line) => line.startsWith(prefix));
+      expect(results).toHaveLength(1);
+      expect(JSON.parse(results[0]!.slice(prefix.length)) as unknown).toEqual({
+        features: FEATURE_SMOKE_RESULT,
+      });
+    });
   },
 );

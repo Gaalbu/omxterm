@@ -147,6 +147,27 @@ browser, observes focus leaving OMXTerm, then returns focus to the dialog.
 PNG captures. These checks still require an idle unlocked desktop; they do not
 claim physical keyboard navigation or pixel parity across platforms.
 
+The independent Window Chrome feature smoke reuses the real renderer, host,
+Settings service/reloader, owned profiles and native PTY supervisor. Select its
+single literal case on an idle unlocked desktop:
+
+```sh
+node node_modules/vitest/vitest.mjs run test/integration/window-chrome.test.ts -t 'checks pane geometry and live language drafts without leaking a native dialog or process'
+```
+
+It checks a right split in one tab, DOM/command focus reaching main ownership,
+input acknowledged by each actual child, keyboard divider resize changing both
+pane bounds and PTY grids, and Close Pane terminating only its child while the
+survivor refits and accepts input. It then changes the genuine Settings language
+control through persistence/reload into two retained hosts while both dirty raw
+editors keep bytes, selection, scroll, DOM focus and identity. The language event
+is dispatched programmatically without moving focus; pane-close confirmation is
+fixture-approved. This does not automate OS widgets, physical input, every split
+axis/weight case, or preview target death. Headless preparation/control coverage:
+`node node_modules/vitest/vitest.mjs run test/unit/feature-native-smoke-fixture.test.ts`.
+Native behavior is established only by actually running the native case, not by
+its successful bundle build or collection.
+
 The `application-about` startup fixture stops before its first window. Its
 `published-failure` control publishes the real observation, requests normal Quit
 to latch production shutdown, then prevents the default `will-quit` exit and

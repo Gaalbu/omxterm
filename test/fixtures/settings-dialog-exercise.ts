@@ -58,6 +58,8 @@ export function createSettingsExercise(
   });
   const file = path.join(root, "settings-xdg", "omxterm", "config.json");
   return {
+    show: settings.show,
+    file,
     exercise: () =>
       exerciseSettingsDialog(getWindow(), settings.show, () =>
         readFile(file, "utf8"),

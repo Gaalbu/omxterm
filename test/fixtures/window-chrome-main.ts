@@ -31,6 +31,8 @@ import {
 } from "./restty-host-platform";
 import { terminalIpc } from "../../src/shared/terminal-ipc";
 import { createAboutExercise } from "./about-dialog-exercise";
+import { createFeatureSmoke } from "./feature-native-smoke";
+import { FEATURE_SMOKE_FLAG } from "./feature-native-smoke-contract";
 import { runSettingsExercise } from "./settings-dialog-exercise";
 import { fixtureConfigurationApplier } from "./window-chrome-configuration";
 import { exerciseAboutKeyboardWithInput } from "./about-keyboard-exercise";
@@ -46,8 +48,12 @@ import {
   type MenuOpening,
 } from "./application-menu-exercise";
 
+type ChromeOptions = Parameters<typeof exerciseWindowChrome>[0];
 const root = __dirname;
 const auxiliaryOnly = process.argv.includes("--fixture-auxiliary-only");
+const featureSmoke = createFeatureSmoke(
+  process.argv.includes(FEATURE_SMOKE_FLAG),
+);
 const panelClipboard = { text: "", writes: [] as string[], reads: 0 };
 const actionOrdinals = new WeakMap<
   BrowserWindow,
@@ -114,6 +120,7 @@ function createChromeSession(callbacks: SessionCallbacks) {
       applicationVersionProvider: app,
       ...callbacks,
       onOutput(data) {
+        featureSmoke.observeOutput(index, data);
         input.observeOutput(data);
         callbacks.onOutput(data);
       },
@@ -164,16 +171,16 @@ const applyFixtureConfiguration = (router: TerminalIpcRouter) =>
 async function exerciseScenario(
   about: ReturnType<typeof createAboutExercise>,
   router: TerminalIpcRouter,
-  options: Omit<
-    Parameters<typeof exerciseWindowChrome>[0],
-    "nativeExpectation"
-  > & {
-    readonly nativeExpectation?: Parameters<
-      typeof exerciseWindowChrome
-    >[0]["nativeExpectation"];
-  },
+  options: Omit<ChromeOptions, "nativeExpectation"> & Partial<ChromeOptions>,
 ) {
   try {
+    if (featureSmoke.enabled)
+      return await featureSmoke.run({
+        ...options,
+        root,
+        router,
+        apply: applyFixtureConfiguration(router),
+      });
     if (process.argv.includes("--fixture-settings-only"))
       return {
         settings: await runSettingsExercise(
@@ -281,9 +288,10 @@ app
       });
       return;
     }
-    const nativeExpectation = auxiliaryOnly
-      ? undefined
-      : chromeNativeExpectation(process.argv);
+    const nativeExpectation =
+      auxiliaryOnly || featureSmoke.enabled
+        ? undefined
+        : chromeNativeExpectation(process.argv);
     if (nativeExpectation !== undefined)
       process.stdout.write(
         `__OMXTERM_CHROME_NATIVE_EXPECTATION__${nativeExpectation}\n`,
@@ -301,11 +309,7 @@ app
         const window = new BrowserWindow({
           ...nativeOptions,
           webPreferences: {
-            ...terminalWindowOptions(
-              path.join(root, "preload.cjs"),
-              configuration,
-              process.platform,
-            ).webPreferences,
+            ...nativeOptions.webPreferences,
             backgroundThrottling: false,
           },
         });
@@ -348,7 +352,10 @@ app
           ),
           createSession: createChromeSession,
           onSessionStarted: title.sessionStarted,
-          onSessionSelected: title.selectSession,
+          onSessionSelected: featureSmoke.trackFocus(
+            window,
+            title.selectSession,
+          ),
           onSessionStartError: lifecycle.onSessionStartError,
           onSessionExit(exit, context) {
             ended += 1;
@@ -405,6 +412,7 @@ app
         return false;
       },
       showCloseTabConfirmation: async () => false,
+      showClosePaneConfirmation: featureSmoke.confirmClose,
       showSessionFailure: async () => {
         throw new Error("Unexpected fixture session failure");
       },
