@@ -1,3 +1,26 @@
+// Shared with the production-DOM regression, so it exercises the native oracle.
+export const FEATURE_SMOKE_SPLIT_SCRIPT = `(() => {
+  const tabs = [...document.querySelectorAll('#terminal-tabs > .terminal-tab')];
+  const visible = tabs.filter(tab => !tab.hidden);
+  const strip = document.querySelector('#tab-strip');
+  return {
+    tabContainers: tabs.length,
+    visibleTabs: visible.length,
+    paneContainers: visible.flatMap(tab => [...tab.querySelectorAll('.terminal-surface')]).length,
+    stripHidden: strip.hidden,
+    stripButtons: strip.querySelectorAll('[role=tab]').length,
+    stripChildren: strip.childElementCount
+  };
+})()`;
+export const FEATURE_SMOKE_SPLIT_EXPECTED = {
+  tabContainers: 1,
+  visibleTabs: 1,
+  paneContainers: 2,
+  stripHidden: true,
+  stripButtons: 0,
+  stripChildren: 0,
+} as const;
+
 // One maintained native case, selected literally during focused qualification.
 export const FEATURE_SMOKE_CASE =
   "checks pane geometry and live language drafts without leaking a native dialog or process";

@@ -11,6 +11,8 @@ import {
 import {
   FEATURE_SMOKE_PHASE_PREFIX,
   FEATURE_SMOKE_RESULT,
+  FEATURE_SMOKE_SPLIT_SCRIPT,
+  FEATURE_SMOKE_SPLIT_EXPECTED,
   type FEATURE_SMOKE_PHASES,
 } from "./feature-native-smoke-contract";
 
@@ -135,9 +137,9 @@ async function exerciseFeatureSmoke(options: FeatureSmokeOptions) {
     secondId && secondId !== firstId,
     "Split must select the new owned session",
   );
-  assert.equal(
-    await evaluate("document.querySelectorAll('#tab-strip [role=tab]').length"),
-    1,
+  assert.deepEqual(
+    await evaluate(FEATURE_SMOKE_SPLIT_SCRIPT),
+    FEATURE_SMOKE_SPLIT_EXPECTED,
   );
   const widths = await geometry(window);
   assert.ok(

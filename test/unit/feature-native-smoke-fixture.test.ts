@@ -35,6 +35,12 @@ it("builds the maintained feature smoke and real shared renderer without launchi
     expect(main).toContain("__EXPLICIT_INPUT__right-native-smoke");
     expect(main).toContain("__EXPLICIT_INPUT__left-native-smoke");
     expect(main).toContain("featureLanguageRetained");
+    const scenario = await readFile(
+      "test/fixtures/feature-native-smoke.ts",
+      "utf8",
+    );
+    expect(scenario).toContain("await evaluate(FEATURE_SMOKE_SPLIT_SCRIPT)");
+    expect(main).toContain("stripChildren");
     expect(main).toContain("settings-xdg");
     expect(main).toContain("registerTerminalIpcRouter");
     expect(main).toContain("Promise.all(sessionExits)");
