@@ -3,6 +3,7 @@ import type { AboutBridge } from "./about";
 import type {
   TerminalExit,
   TerminalClipboardAction,
+  TerminalContextMenuRequest,
   TerminalFontZoom,
   TerminalSessionId,
   TerminalSize,
@@ -65,7 +66,7 @@ export interface TerminalBridge {
   readClipboardText(): Promise<string>;
   droppedFilePathInsertion(files: readonly File[]): string;
   confirmPaste(text: string): Promise<boolean>;
-  requestClipboardContextMenu(): void;
+  requestClipboardContextMenu(request?: TerminalContextMenuRequest): void;
   onClipboardAction(
     listener: (action: TerminalClipboardAction) => void,
   ): () => void;

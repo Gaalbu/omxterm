@@ -30,6 +30,7 @@ export function createPaneMount(deps: {
   readonly removePane: (pane: TerminalPane, notify: boolean) => void;
   readonly notifyEmpty: (reason?: "rendering-failure") => void;
   readonly focus: (pane: TerminalPane, unchangedFocus: boolean) => void;
+  readonly focusClicked: (pane: TerminalPane) => void;
 }) {
   const { document, options } = deps;
   return async (pane: TerminalPane): Promise<void> => {
@@ -51,8 +52,27 @@ export function createPaneMount(deps: {
     // Title and BEL events carry the emitting pane's session id;
     // the Surface itself stays pane-unaware. Events can only follow session
     // output, so the id is always known by the time they fire.
+    const clipboard = deps.surfaceOptions().clipboard;
     const paneSurfaceOptions: TerminalSurfaceOptions = {
       ...deps.surfaceOptions(),
+      // The context menu acts on the focused pane, so a right-click focuses
+      // its own pane first; a split pane's menu also offers Close Pane.
+      ...(clipboard
+        ? {
+            clipboard: {
+              ...clipboard,
+              requestContextMenu() {
+                if (deps.disposed() || pane.removed) return;
+                deps.focusClicked(pane);
+                clipboard.requestContextMenu(
+                  tabPanes(pane.tab).length > 1
+                    ? { closePane: true }
+                    : undefined,
+                );
+              },
+            },
+          }
+        : {}),
       abortSignal: pane.mountAbort.signal,
       onFatalError(failure) {
         endPane(pane);

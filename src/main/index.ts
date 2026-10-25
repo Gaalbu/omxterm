@@ -297,7 +297,7 @@ app
                   currentTranslator(),
                 ),
               confirmPaste: () => nativeDialogs.confirmPaste(window),
-              showClipboardContextMenu() {
+              showClipboardContextMenu(request) {
                 const send = (action: "copy" | "paste" | "select-all") =>
                   window.webContents.send(terminalIpc.clipboardAction, action);
                 Menu.buildFromTemplate(
@@ -306,6 +306,19 @@ app
                       copy: () => send("copy"),
                       paste: () => send("paste"),
                       selectAll: () => send("select-all"),
+                      // The renderer focused the clicked pane first, so
+                      // View -> Pane -> Close Pane closes that pane.
+                      ...(request?.closePane
+                        ? {
+                            closePane: {
+                              click: () =>
+                                void terminalApplication!.closeSelectedPane(),
+                              accelerator:
+                                configurationReloader.current().configuration
+                                  .keybinds.closePane,
+                            },
+                          }
+                        : {}),
                     },
                     currentTranslator().t,
                   ),

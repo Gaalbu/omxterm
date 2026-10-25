@@ -507,3 +507,26 @@ it("wires the native context menu to explicit Terminal Surface actions", () => {
     expect.objectContaining({ label: "Select All", click: actions.selectAll }),
   ]);
 });
+
+it("offers Close Pane in a split pane's context menu with its current keybind", () => {
+  const actions = { copy: vi.fn(), paste: vi.fn(), selectAll: vi.fn() };
+  const click = vi.fn();
+  const template = terminalClipboardContextMenuTemplate({
+    ...actions,
+    closePane: { click, accelerator: "Control+Shift+K" },
+  });
+  expect(template.slice(-2)).toEqual([
+    expect.objectContaining({ type: "separator" }),
+    expect.objectContaining({
+      label: "Close Pane",
+      accelerator: "Control+Shift+K",
+      click,
+    }),
+  ]);
+  const unbound = terminalClipboardContextMenuTemplate({
+    ...actions,
+    closePane: { click, accelerator: null },
+  }).at(-1)!;
+  expect(unbound).toEqual(expect.objectContaining({ label: "Close Pane" }));
+  expect(unbound).not.toHaveProperty("accelerator");
+});

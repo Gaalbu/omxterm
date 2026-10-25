@@ -334,6 +334,11 @@ export function terminalClipboardContextMenuTemplate(
     readonly copy: () => void;
     readonly paste: () => void;
     readonly selectAll: () => void;
+    // Present only for a split pane; shows the current closePane keybind.
+    readonly closePane?: {
+      readonly click: () => void;
+      readonly accelerator: string | null;
+    };
   },
   t: Translator["t"] = translatorFor(DEFAULT_LANGUAGE).t,
 ): MenuItemConstructorOptions[] {
@@ -342,5 +347,15 @@ export function terminalClipboardContextMenuTemplate(
     { label: t("menu.paste"), click: actions.paste },
     { type: "separator" },
     { label: t("menu.selectAll"), click: actions.selectAll },
+    ...(actions.closePane
+      ? ([
+          { type: "separator" },
+          {
+            label: t("menu.closePane"),
+            ...accelerator(actions.closePane.accelerator),
+            click: actions.closePane.click,
+          },
+        ] satisfies MenuItemConstructorOptions[])
+      : []),
   ];
 }

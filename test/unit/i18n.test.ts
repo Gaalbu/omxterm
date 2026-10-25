@@ -190,7 +190,7 @@ describe("translated main-process text", () => {
       labels(
         terminalClipboardContextMenuTemplate(actions, translatorFor("pt-BR").t),
       ),
-    ).toEqual(["Copiar", "Colar", "Selecionar Tudo"]);
+    ).toEqual(["Copiar", "Colar", "Selecionar Tudo", "Fechar Painel"]);
   });
 
   it("translates failure dialogs without exposing raw causes", () => {
