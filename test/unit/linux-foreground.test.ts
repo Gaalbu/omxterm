@@ -8,6 +8,15 @@ import { expect, it, vi } from "vitest";
 import { prepareNodePtyRuntime } from "../../scripts/prepare-node-pty-runtime.mjs";
 import { createLocalTerminalSession } from "../../src/main/local-terminal-session";
 
+// Fail before any accidental default rebuild can replace the installed addon.
+vi.mock("../../scripts/prepare-node-pty-exec-status.mjs", () => ({
+  prepareNodePtyExecStatus: vi.fn(() => {
+    throw new Error(
+      "Foreground getter unit test must not rebuild the installed PTY addon",
+    );
+  }),
+}));
+
 const require = createRequire(import.meta.url);
 const runtimePath = path.join(
   path.dirname(require.resolve("node-pty")),
@@ -69,6 +78,8 @@ function sessionFor(readForeground: () => unknown, platform: string) {
 it("keeps unavailable Linux native foreground reads Busy through the pinned public getter", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "omxterm-foreground-"));
   const isolatedRuntime = path.join(root, "unixTerminal.js");
+  // This test exercises the JavaScript getter with a controlled native lookup.
+  const rebuild = vi.fn().mockResolvedValue(undefined);
   try {
     const installed = await readFile(runtimePath, "utf8");
     // Recover the reviewed pre-#484 input even after production postinstall.
@@ -88,6 +99,7 @@ it("keeps unavailable Linux native foreground reads Busy through the pinned publ
       platform: "linux",
       arch: "x64",
       unixRuntimePath: isolatedRuntime,
+      rebuild,
     });
     const corrected = await readFile(isolatedRuntime, "utf8");
     expect(
@@ -126,6 +138,7 @@ it("keeps unavailable Linux native foreground reads Busy through the pinned publ
       platform: "linux",
       arch: "x64",
       unixRuntimePath: isolatedRuntime,
+      rebuild,
     });
     expect(await readFile(isolatedRuntime, "utf8")).toBe(corrected);
     await writeFile(isolatedRuntime, corrected + "\n// drift\n");
@@ -134,11 +147,13 @@ it("keeps unavailable Linux native foreground reads Busy through the pinned publ
         platform: "linux",
         arch: "x64",
         unixRuntimePath: isolatedRuntime,
+        rebuild,
       }),
     ).rejects.toThrow("Unrecognized node-pty Unix runtime");
     expect(await readFile(isolatedRuntime, "utf8")).toBe(
       corrected + "\n// drift\n",
     );
+    expect(rebuild).toHaveBeenCalledTimes(2);
   } finally {
     await rm(root, { recursive: true, force: true });
   }
