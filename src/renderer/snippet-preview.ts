@@ -14,8 +14,6 @@ export function createSnippetPreview(
     readonly canOpen: () => boolean;
     readonly onActivityChange: (active: boolean) => void;
     readonly focusTerminal: () => void;
-    // Tab removal changes this subtree; the preview then rechecks its target.
-    readonly tabsContainer: HTMLElement;
   },
 ) {
   let dialog: HTMLDialogElement | undefined;
@@ -99,9 +97,7 @@ export function createSnippetPreview(
         closed.textContent =
           "This snippet's terminal closed. Nothing will be sent.";
       };
-      const observer = new MutationObserver(refresh);
-      observer.observe(options.tabsContainer, { childList: true });
-      stopWatching = () => observer.disconnect();
+      stopWatching = target.onUnavailable(refresh);
 
       cancel.addEventListener("click", cancelPreview);
       insert.addEventListener("click", () => accept(false));

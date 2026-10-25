@@ -348,7 +348,6 @@ export function mountTerminalWindowPage(
       const snippets = options.snippets;
       const mounted = mountSnippetsPanel(page.document, snippets, {
         tabs,
-        tabsContainer: elements.tabsContainer,
         clipboard: options.clipboard,
         blocked: previewActive,
         onPreviewActivity: () => {

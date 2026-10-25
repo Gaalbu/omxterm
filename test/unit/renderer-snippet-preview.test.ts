@@ -17,13 +17,16 @@ afterEach(() => {
 const BODY = "  printf '%s'  {name} $HOME\n\ngit status --short\n";
 
 function fixture(options: { canOpen?: () => boolean } = {}) {
-  const tabsContainer = document.createElement("div");
-  const tab = document.createElement("main");
-  tabsContainer.append(tab);
-  document.body.append(tabsContainer);
   let live = true;
+  const listeners = new Set<() => void>();
   const target = {
     live: () => live,
+    onUnavailable(listener: () => void) {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    },
     deliver: vi.fn(),
   };
   const focusTerminal = vi.fn();
@@ -32,7 +35,6 @@ function fixture(options: { canOpen?: () => boolean } = {}) {
     canOpen: options.canOpen ?? (() => true),
     focusTerminal,
     onActivityChange,
-    tabsContainer,
   });
   const returnFocus = vi.fn(() => true);
   const open = (execute: boolean) =>
@@ -53,7 +55,7 @@ function fixture(options: { canOpen?: () => boolean } = {}) {
     button,
     closeTab: () => {
       live = false;
-      tab.remove();
+      for (const listener of listeners) listener();
     },
   };
 }

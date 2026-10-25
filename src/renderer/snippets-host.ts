@@ -15,7 +15,6 @@ export function mountSnippetsPanel(
   },
   options: {
     readonly tabs: TerminalTabs;
-    readonly tabsContainer: HTMLElement;
     readonly clipboard?: TerminalClipboard | undefined;
     // Whether another overlay (About, Local Image Preview) owns input.
     readonly blocked: () => boolean;
@@ -26,7 +25,6 @@ export function mountSnippetsPanel(
   const preview = createSnippetPreview(document, {
     canOpen: () => !options.blocked(),
     focusTerminal: tabs.focusSelected,
-    tabsContainer: options.tabsContainer,
     onActivityChange: options.onPreviewActivity,
   });
   const panel = createAuxiliaryPanel(snippets.element, {
