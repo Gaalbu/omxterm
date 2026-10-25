@@ -79,7 +79,7 @@ export function createPaneOperations(deps: {
   };
 
   const focusPane = (tab: TerminalTab, pane: TerminalPane, move = false) => {
-    if (pane.removed || tab.removed) return;
+    if (pane.removed || tab.removed || !deps.canInteract()) return;
     const changed = tab.focused !== pane;
     tab.focused = pane;
     if (changed) {

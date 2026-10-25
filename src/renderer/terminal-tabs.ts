@@ -153,7 +153,8 @@ export function createTerminalTabs(
 
   const select = (index: number, passive = false) => {
     const tab = tabs[index];
-    if (!tab) return;
+    // Lifecycle selection stays deliverable; requested navigation is guarded.
+    if (!tab || (!passive && options.canFocus?.() === false)) return;
     selectedIndex = index;
     for (const [position, candidate] of tabs.entries()) {
       candidate.container.hidden = position !== index;
@@ -241,7 +242,7 @@ export function createTerminalTabs(
     tabs.push(pane.tab);
     panes.renderTab(pane.tab);
     panes.trackFocus(pane);
-    select(tabs.length - 1);
+    select(tabs.length - 1, tabs.length === 1);
     await mountPane(pane);
   };
 

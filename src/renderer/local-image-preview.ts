@@ -134,6 +134,7 @@ export function createLocalImagePreview(
         if (disposed) return;
         if (!selected) {
           opening = false;
+          options.onActivityChange?.();
           options.focusTerminal();
           return;
         }
@@ -157,8 +158,10 @@ export function createLocalImagePreview(
       } catch (failure) {
         if (!disposed) showError(failure);
       } finally {
-        opening = false;
-        options.onActivityChange?.();
+        if (opening) {
+          opening = false;
+          options.onActivityChange?.();
+        }
       }
     },
     dispose() {

@@ -241,8 +241,11 @@ export function mountTerminalWindowPage(
     : undefined;
 
   const onOverlayActivity = () => {
-    chrome?.setPreviewActive(previewActive());
-    auxiliaryPanel?.setBlocked(previewActive());
+    const active = previewActive();
+    elements.tabStrip.inert = active;
+    elements.tabsContainer.inert = active;
+    chrome?.setPreviewActive(active);
+    auxiliaryPanel?.setBlocked(active);
     for (const listener of hoverAvailabilityListeners) listener();
   };
   if (options.loadLocalImage) {
