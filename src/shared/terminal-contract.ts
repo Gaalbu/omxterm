@@ -287,6 +287,59 @@ export function isTerminalClipboardAction(
   return value === "copy" || value === "paste" || value === "select-all";
 }
 
+// Correlation for one popup, not authorization. Main must independently check
+// the source window and its live owned session before performing an action.
+export interface TerminalContextMenuTarget {
+  readonly sessionId: TerminalSessionId;
+  readonly menuId: number;
+}
+
+export function isTerminalContextMenuTarget(
+  value: unknown,
+): value is TerminalContextMenuTarget {
+  return (
+    isStrictRecord(value, ["sessionId", "menuId"]) &&
+    isTerminalSessionId(value.sessionId) &&
+    Number.isSafeInteger(value.menuId) &&
+    (value.menuId as number) > 0
+  );
+}
+
+export interface TerminalContextMenuClipboardAction {
+  readonly action: TerminalClipboardAction;
+  readonly target: TerminalContextMenuTarget;
+}
+
+export function isTerminalContextMenuClipboardAction(
+  value: unknown,
+): value is TerminalContextMenuClipboardAction {
+  return (
+    isStrictRecord(value, ["action", "target"]) &&
+    isTerminalClipboardAction(value.action) &&
+    isTerminalContextMenuTarget(value.target)
+  );
+}
+
+// Every live pane captures a popup target; only split panes offer Close Pane.
+// The Snippets field retains the no-argument request.
+export interface TerminalContextMenuRequest extends TerminalContextMenuTarget {
+  readonly closePane?: true;
+}
+
+export function isTerminalContextMenuRequest(
+  value: unknown,
+): value is TerminalContextMenuRequest {
+  return (
+    (isStrictRecord(value, ["sessionId", "menuId"]) ||
+      (isStrictRecord(value, ["sessionId", "menuId", "closePane"]) &&
+        value.closePane === true)) &&
+    isTerminalContextMenuTarget({
+      sessionId: value.sessionId,
+      menuId: value.menuId,
+    })
+  );
+}
+
 export function isClipboardText(value: unknown): value is string {
   return typeof value === "string";
 }

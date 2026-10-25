@@ -130,7 +130,16 @@ succeeds ([ADR 0025](adr/0025-use-restty-as-the-terminal-surface.md)).
   and gives its space and focus to the nearest sibling; an unexpected signal
   keeps the pane until its failure dialog is acknowledged; the last pane closes
   its tab. Close Pane confirms only a Busy focused pane, Close Tab counts every
-  pane of the tab, and Close Window and Quit count every pane. Hidden tabs hide
+  pane of the tab, and Close Window and Quit count every pane. Right-clicking a
+  pane focuses it before the native context menu opens, so its Copy, Paste and
+  Select All act on that pane; in a split tab the menu also offers Close Pane,
+  showing the current `closePane` keybind and following the same confirmation.
+  Each terminal popup captures its source window, pane and live Surface, not
+  a later selection. Pane exit, pane/tab removal, changed pane/tab selection,
+  a newer popup or owner disposal makes its retained actions inert; activation
+  in another selected window is ignored. An accepted Busy close decision keeps
+  the original pane even if selection changes while its dialog is pending.
+  A single pane and the Snippets field do not offer Close Pane. Hidden tabs hide
   their pane Surfaces and keep their layout.
 - A startup Launch Request uses `-e <program> [arguments...]`. The value after
   the first `-e` is required as the executable, and every remaining value —

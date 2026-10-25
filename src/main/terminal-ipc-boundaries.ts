@@ -4,6 +4,8 @@ import {
   isTerminalSessionOutputAck,
   isTerminalSessionReference,
   isTerminalSessionTitle,
+  isTerminalContextMenuRequest,
+  type TerminalContextMenuRequest,
   type TerminalSessionId,
 } from "../shared/terminal-contract";
 import { isValidExternalLink } from "./external-link";
@@ -95,7 +97,9 @@ export function clipboardRequests(
     readonly writeClipboardText: (text: string) => void;
     readonly readClipboardText: () => string;
     readonly confirmPaste: (text: string) => Promise<boolean>;
-    readonly showClipboardContextMenu: () => void;
+    readonly showClipboardContextMenu: (
+      request?: TerminalContextMenuRequest,
+    ) => void;
     readonly onClipboardError?: () => void;
   },
   reject: RejectBoundary,
@@ -127,6 +131,8 @@ export function clipboardRequests(
       confirmClipboardPaste(payload, options, reject),
     showClipboardContextMenu(payload?: unknown) {
       if (payload === undefined) options.showClipboardContextMenu();
+      else if (isTerminalContextMenuRequest(payload))
+        options.showClipboardContextMenu({ ...payload });
       else reject("clipboard", "invalid-payload");
     },
   };

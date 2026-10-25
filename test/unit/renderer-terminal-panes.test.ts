@@ -340,3 +340,87 @@ describe("Terminal Panes", () => {
     for (const share of shares()) expect(share).toBeCloseTo(1 / 3);
   });
 });
+
+describe("Terminal Pane context menu", () => {
+  it("does not borrow a sibling's target while the clicked pane is pending or dead", async () => {
+    let finish!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+    const clipboard = {
+      writeText: vi.fn(async () => {}),
+      readText: vi.fn(async () => ""),
+      confirmPaste: vi.fn(async () => false),
+      requestContextMenu: vi.fn(),
+    };
+    const harness = createTabsHarness({
+      surfaceOptions: { clipboard },
+      beforeStart: async (index) => {
+        if (index === 2) await gate;
+      },
+    });
+    await harness.tabs.ready;
+    harness.sessionAdapters[0]!.resize({ cols: 120, rows: 40 });
+    harness.tabs.handleCommand({ action: "split", direction: "right" });
+    harness.mountedSurfaceOptions[1]!.clipboard!.requestContextMenu();
+    expect(clipboard.requestContextMenu).not.toHaveBeenCalled();
+    finish();
+    await vi.waitFor(() => expect(harness.surfaces).toHaveLength(2));
+    harness.adapters[1]!.handlers!.onExit({ exitCode: 0, signal: 9 });
+    harness.mountedSurfaceOptions[1]!.clipboard!.requestContextMenu();
+    expect(clipboard.requestContextMenu).not.toHaveBeenCalled();
+    harness.tabs.dispose();
+  });
+
+  it("focuses a right-clicked pane and offers Close Pane only while split", async () => {
+    const clipboard = {
+      writeText: vi.fn(async () => {}),
+      readText: vi.fn(async () => ""),
+      confirmPaste: vi.fn(async () => false),
+      requestContextMenu: vi.fn(),
+    };
+    const harness = createTabsHarness({
+      tabSize: { width: 1200, height: 800 },
+      surfaceOptions: { clipboard },
+    });
+    await harness.tabs.ready;
+    harness.sessionAdapters[0]!.resize({ cols: 120, rows: 40 });
+    const menu = (index: number) =>
+      harness.mountedSurfaceOptions[index]!.clipboard!.requestContextMenu();
+
+    menu(0);
+    expect(clipboard.requestContextMenu).toHaveBeenLastCalledWith({
+      sessionId: "s1",
+      menuId: 1,
+    });
+
+    await split(harness, "right");
+    expect(harness.notifySelection.mock.calls.at(-1)?.[0]).toBe("s2");
+    harness.surfaces[0]!.focus.mockClear();
+    menu(0);
+    expect(clipboard.requestContextMenu).toHaveBeenLastCalledWith({
+      sessionId: "s1",
+      menuId: 2,
+      closePane: true,
+    });
+    expect(harness.notifySelection.mock.calls.at(-1)?.[0]).toBe("s1");
+    expect(harness.surfaces[0]!.focus).toHaveBeenCalled();
+
+    // Main echoes the popup's target, not a later focused pane.
+    harness.tabs.handleCommand({
+      action: "close-pane",
+      target: { sessionId: "s1", menuId: 2 },
+    });
+    expect(harness.surfaces[0]!.dispose).toHaveBeenCalledOnce();
+    expect(harness.surfaces[1]!.dispose).not.toHaveBeenCalled();
+    clipboard.requestContextMenu.mockClear();
+    menu(0);
+    expect(clipboard.requestContextMenu).not.toHaveBeenCalled();
+    menu(1);
+    expect(clipboard.requestContextMenu).toHaveBeenLastCalledWith({
+      sessionId: "s2",
+      menuId: 3,
+    });
+    harness.tabs.dispose();
+  });
+});

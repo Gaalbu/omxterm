@@ -10,6 +10,7 @@ import {
   isTerminalSessionResize,
 } from "../shared/terminal-contract";
 import { terminalIpc } from "../shared/terminal-ipc";
+import { createTerminalContextMenuTarget } from "./terminal-context-menu";
 import {
   LocalTerminalSessionStartError,
   type LocalTerminalSession,
@@ -434,6 +435,11 @@ function createTerminalIpcController(
     reject: () => reject("ipc", "invalid-payload"),
     onSessionSelected: options.onSessionSelected,
   });
+  const contextMenu = createTerminalContextMenuTarget({
+    isOwnerAlive: () => !disposed && !options.webContents.isDestroyed(),
+    isFocusedSession: selection.isFocusedSession,
+    show: options.showClipboardContextMenu,
+  });
   const workingDirectories = createWorkingDirectoryTracker();
 
   // A session-scoped payload is rejected before it is routed: an invalid shape
@@ -692,13 +698,23 @@ function createTerminalIpcController(
     resize,
     acknowledgeOutput,
     close,
-    tabSelected: selection.tabSelected,
+    tabSelected(payload) {
+      selection.tabSelected(payload);
+      contextMenu.selectionChanged();
+    },
     ...createTerminalTitleRequests(routedSession, options, reject),
     tabsEmpty: emptyTabsNotification(options, reject, () => disposed),
     hasBusySelectedSession: selection.hasBusySelectedSession,
+    claimContextMenuTarget: contextMenu.claim,
     hasBusyFocusedSession: selection.hasBusyFocusedSession,
     hasBusySession,
-    ...clipboardRequests(options, reject),
+    ...clipboardRequests(
+      {
+        ...options,
+        showClipboardContextMenu: contextMenu.show,
+      },
+      reject,
+    ),
     bell,
     openExternalLink,
     localImage: localImageBoundary.request,
@@ -711,6 +727,7 @@ function createTerminalIpcController(
     dispose() {
       if (disposed) return;
       disposed = true;
+      contextMenu.selectionChanged();
       surfaceFonts.dispose();
       localImageBoundary.dispose();
       unregister();

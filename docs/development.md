@@ -21,13 +21,13 @@ Install C++ build tools, Python 3, `patch`, `binutils`, `procps`, `fontconfig`, 
 
 ```sh
 # Ubuntu / Debian
-sudo apt install build-essential python3 patch binutils procps fontconfig file xwayland fonts-dejavu-core fonts-liberation
+sudo apt install build-essential python3 patch binutils procps fontconfig file xwayland xdotool fonts-dejavu-core fonts-liberation
 
 # Fedora
-sudo dnf install gcc-c++ make python3 patch binutils procps-ng fontconfig file xorg-x11-server-Xwayland dejavu-sans-fonts dejavu-sans-mono-fonts liberation-mono-fonts
+sudo dnf install gcc-c++ make python3 patch binutils procps-ng fontconfig file xorg-x11-server-Xwayland xdotool dejavu-sans-fonts dejavu-sans-mono-fonts liberation-mono-fonts
 
 # Arch / Omarchy
-sudo pacman -S --needed base-devel python patch binutils procps-ng fontconfig file xorg-xwayland ttf-dejavu ttf-liberation
+sudo pacman -S --needed base-devel python patch binutils procps-ng fontconfig file xorg-xwayland xdotool ttf-dejavu ttf-liberation
 ```
 
 `npm ci` rebuilds the source-digest-guarded exec-status PTY addon on native Linux
@@ -186,6 +186,23 @@ native repeats/releases rather than assuming both arrived. Run it alone with `np
 Its Electron `sendInputEvent` gestures are synthetic, not physical OS/layout or
 AltGr qualification; the native menu positive control calls its actual callback,
 not OS menu navigation. The ordinary fixture supervisor owns all windows/PTYs.
+
+The Linux `terminal-popup-native` suite builds the production popup callbacks,
+preload, renderer, Surfaces and real raw Python PTYs. It opens `Menu.popup` from
+an actual Surface context-menu request and uses X11 `xdotool` keyboard events to
+activate Paste, checking `BrowserWindow.getFocusedWindow()` inside that real
+native callback and the clicked child's received bytes. Retained installed
+callbacks additionally check ordinary child exit, selected-window changes with
+window-local session IDs, the real Busy decision/shared close slot, native
+clipboard selection, and effective translated/remapped/unbound menu state.
+Deliberate old Close Pane and clipboard routing controls must fail their distinct
+oracles; the existing fixture supervisor still requires actual child exits and
+clean ownership settlement. Run it alone with `npm test -- test/integration/terminal-popup-native.test.ts`.
+On KDE, `OMXTERM_POPUP_EVIDENCE_DIR` optionally uses Spectacle to capture and crop
+a synthetic-content-only native popup PNG (not `capturePage`, which omits OS
+menus). Busy answers are fixture-controlled, not native dialog-widget evidence;
+input is synthetic, not physical keyboard/layout or cross-platform qualification.
+Headless child-observation/build checks: `npm test -- test/unit/terminal-popup-native-fixture.test.ts`.
 
 The `window-chrome` suite includes an independent `about-only` scenario so an
 unrelated native geometry failure cannot skip About coverage. Run it alone with

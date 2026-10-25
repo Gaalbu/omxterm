@@ -1,5 +1,6 @@
 import type {
   TerminalClipboardAction,
+  TerminalContextMenuTarget,
   TerminalFontZoom,
   TerminalSessionId,
   TerminalTabCommand,
@@ -15,6 +16,7 @@ import { snippetTarget, type SnippetTarget } from "./snippet-target";
 import { englishLanguage, type RendererLanguage } from "./renderer-language";
 import { createPaneOperations } from "./terminal-pane-operations";
 import { createPaneMount } from "./terminal-pane-mount";
+import { createPaneContextMenu } from "./terminal-pane-context-menu";
 import {
   appendTab,
   disposePane,
@@ -71,7 +73,10 @@ export interface TerminalTabs {
   setSessionTitle(sessionId: TerminalSessionId, title: string): void;
   applyConfiguration(configuration: TerminalSurfaceConfiguration): void;
   zoom(command: TerminalFontZoom): void;
-  clipboardAction(action: TerminalClipboardAction): void;
+  clipboardAction(
+    action: TerminalClipboardAction,
+    target?: TerminalContextMenuTarget,
+  ): void;
   find(): void;
   injectText(text: string): void;
   // The selected live terminal, captured for one snippet action.
@@ -105,6 +110,11 @@ export function createTerminalTabs(
 
   const selectedTab = (): TerminalTab | undefined => tabs[selectedIndex];
   const focusedPane = () => selectedTab()?.focused;
+  const contextMenu = createPaneContextMenu({
+    focusedPane,
+    disposed: () => disposed,
+    canInteract: () => options.canFocus?.() !== false,
+  });
   const tabDragging = installTabDragging(elements.strip, (tab, clientX) => {
     const selected = selectedTab();
     if (!moveTabToHorizontalDrop(tabs, tab, elements.strip, clientX)) return;
@@ -145,6 +155,7 @@ export function createTerminalTabs(
   const notifyFocus = (tab: TerminalTab) => {
     if (disposed || tab !== selectedTab()) return;
     const focused = tab.focused;
+    contextMenu.selectionChanged();
     const sessionId = focused.ended
       ? null
       : (focused.adapter.sessionId() ?? null);
@@ -217,10 +228,13 @@ export function createTerminalTabs(
     removePane: (pane, notify) => panes.removePane(pane, notify),
     notifyEmpty,
     focus: (pane, unchanged) => focusPane(pane, options, true, unchanged),
+    focusClicked: (pane) => panes.focusPane(pane.tab, pane, true),
+    captureContextMenuTarget: contextMenu.capture,
   });
 
   const panes = createPaneOperations({
     selectedTab,
+    takeContextMenuPane: contextMenu.take,
     removeTab,
     createAdapter: options.createAdapter,
     mountPane,
@@ -312,17 +326,13 @@ export function createTerminalTabs(
       for (const tab of tabs)
         for (const pane of tabPanes(tab)) pane.surface?.zoom(command);
     },
-    clipboardAction(action) {
-      const surface = focusedPane()?.surface;
-      if (!surface) return;
-      if (action === "copy") void surface.copy();
-      else if (action === "paste") void surface.paste();
-      else surface.selectAll();
-    },
+    clipboardAction: (action, target) =>
+      applyClipboardAction(
+        target ? contextMenu.take(target) : focusedPane(),
+        action,
+      ),
     find: () => focusedPane()?.surface?.find(),
-    injectText(text) {
-      void focusedPane()?.surface?.inject(text);
-    },
+    injectText: (text) => void focusedPane()?.surface?.inject(text),
     captureSnippetTarget: () => snippetTarget(focusedPane()),
     toggleTabBar() {
       if (disposed) return;
@@ -330,13 +340,12 @@ export function createTerminalTabs(
       renderStrip();
       focusPane(focusedPane(), options, true);
     },
-    focusSelected() {
-      focusPane(focusedPane(), options);
-    },
+    focusSelected: () => focusPane(focusedPane(), options),
     dispose() {
       if (disposed) return;
       disposed = true;
       pendingClose = undefined;
+      contextMenu.dispose();
       removeLanguage();
       tabDragging.dispose();
       for (const tab of [...tabs]) {
@@ -349,6 +358,17 @@ export function createTerminalTabs(
       tabs.length = 0;
     },
   };
+}
+
+function applyClipboardAction(
+  pane: TerminalPane | undefined,
+  action: TerminalClipboardAction,
+): void {
+  const surface = pane?.surface;
+  if (!surface) return;
+  if (action === "copy") void surface.copy();
+  else if (action === "paste") void surface.paste();
+  else surface.selectAll();
 }
 
 function focusPane(

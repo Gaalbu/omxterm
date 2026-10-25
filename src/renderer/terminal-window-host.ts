@@ -20,6 +20,7 @@ import type {
   TerminalTabCommand,
 } from "../shared/terminal-contract";
 import type { TerminalRendererConfiguration } from "../shared/user-configuration";
+import type { TerminalBridge } from "../shared/terminal-bridge";
 import type { TerminalSnippetsResponse } from "../shared/terminal-snippets";
 import type { TerminalTheme } from "../shared/terminal-theme";
 import type { TerminalFontData } from "../shared/terminal-font-data";
@@ -80,9 +81,7 @@ interface TerminalWindowPageOptions {
   readonly userFileErrorBanner?: HTMLElement;
   readonly surfaceFailureBanner?: HTMLElement;
   readonly clipboard?: TerminalClipboard;
-  readonly subscribeToClipboardActions?: (
-    listener: (action: "copy" | "paste" | "select-all") => void,
-  ) => () => void;
+  readonly subscribeToClipboardActions?: TerminalBridge["onClipboardAction"];
   readonly droppedFilePathInsertion?: (files: readonly File[]) => string;
   readonly subscribeToTabCommands?: (
     listener: (command: TerminalTabCommand) => void,
@@ -410,8 +409,11 @@ function subscribeToGuardedActions(
     }),
     // While an overlay owns input, editing goes to its focused field, never
     // to the terminal.
-    options.subscribeToClipboardActions?.((action) => {
-      if (blocked()) editBlocked(action);
+    options.subscribeToClipboardActions?.((action, target) => {
+      // A terminal popup never migrates into panel or modal editing.
+      if (target) {
+        if (!blocked()) tabs.clipboardAction(action, target);
+      } else if (blocked()) editBlocked(action);
       else if (!panelClipboard(action)) tabs.clipboardAction(action);
     }),
     options.subscribeToTabBarToggle?.(() => {

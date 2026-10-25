@@ -1,5 +1,7 @@
 import {
   isTerminalSessionId,
+  isTerminalContextMenuTarget,
+  type TerminalContextMenuTarget,
   type TerminalSessionId,
 } from "./terminal-contract";
 
@@ -19,13 +21,21 @@ export type TerminalPaneFocusTarget =
 // Main-to-renderer pane instructions for the selected tab. "close-pane" closes
 // the focused pane when no confirmation is needed; "prepare-close-pane" retains
 // the focused pane before an asynchronous confirmation and
-// "resolve-close-pane" consumes that pane, never a later focus.
+// "resolve-close-pane" consumes that pane, never a later focus. Popup close
+// and prepare commands additionally echo their captured target; absent/stale
+// popup ownership is inert instead of falling back to current focus.
 export type TerminalPaneCommand =
   | { readonly action: "split"; readonly direction: TerminalSplitDirection }
   | { readonly action: "focus-pane"; readonly target: TerminalPaneFocusTarget }
   | { readonly action: "equalize-panes" }
-  | { readonly action: "close-pane" }
-  | { readonly action: "prepare-close-pane" }
+  | {
+      readonly action: "close-pane";
+      readonly target?: TerminalContextMenuTarget;
+    }
+  | {
+      readonly action: "prepare-close-pane";
+      readonly target?: TerminalContextMenuTarget;
+    }
   | { readonly action: "resolve-close-pane"; readonly confirmed: boolean };
 
 // The renderer reports the focused pane's session and every live session of
@@ -71,9 +81,12 @@ export function isTerminalPaneCommand(
     );
   if (hasExactKeys(value, ["action", "target"]))
     return (
-      value.action === "focus-pane" &&
-      typeof value.target === "string" &&
-      FOCUS_TARGETS.has(value.target)
+      ((value.action === "close-pane" ||
+        value.action === "prepare-close-pane") &&
+        isTerminalContextMenuTarget(value.target)) ||
+      (value.action === "focus-pane" &&
+        typeof value.target === "string" &&
+        FOCUS_TARGETS.has(value.target))
     );
   if (hasExactKeys(value, ["action", "confirmed"]))
     return (

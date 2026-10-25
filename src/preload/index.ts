@@ -11,6 +11,8 @@ import {
   isBoundedTerminalPayload,
   isNonemptyClipboardText,
   isTerminalClipboardAction,
+  isTerminalContextMenuClipboardAction,
+  isTerminalContextMenuRequest,
   isTerminalFontZoom,
   isTerminalSessionExit,
   isTerminalSessionId,
@@ -350,12 +352,20 @@ const terminal: TerminalBridge = {
       throw new TypeError("Invalid Protected Paste response");
     return confirmed;
   },
-  requestClipboardContextMenu() {
-    ipcRenderer.send(terminalIpc.clipboardContextMenu);
+  requestClipboardContextMenu(request) {
+    if (request === undefined) {
+      ipcRenderer.send(terminalIpc.clipboardContextMenu);
+      return;
+    }
+    if (!isTerminalContextMenuRequest(request))
+      throw new TypeError("Invalid context menu request");
+    ipcRenderer.send(terminalIpc.clipboardContextMenu, { ...request });
   },
   onClipboardAction(listener) {
     const handler = (_event: Electron.IpcRendererEvent, action: unknown) => {
       if (isTerminalClipboardAction(action)) listener(action);
+      else if (isTerminalContextMenuClipboardAction(action))
+        listener(action.action, action.target);
     };
     ipcRenderer.on(terminalIpc.clipboardAction, handler);
     return () =>

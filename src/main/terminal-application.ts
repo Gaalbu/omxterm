@@ -6,6 +6,7 @@ import type {
   TerminalExit,
   TerminalFontZoom,
   TerminalClipboardAction,
+  TerminalContextMenuTarget,
   TerminalTabCommand,
 } from "../shared/terminal-contract";
 import type {
@@ -57,6 +58,7 @@ export interface TerminalSessionActivity {
   hasBusySelectedSession(): boolean;
   // The selected tab's focused pane only, for Close Pane.
   hasBusyFocusedSession?(): boolean;
+  claimContextMenuTarget?(target: TerminalContextMenuTarget): boolean;
   hasBusySession(): boolean;
 }
 
@@ -96,6 +98,7 @@ interface TerminalApplicationOptions<Window extends NativeTerminalWindow> {
   readonly sendClipboardAction: (
     window: Window,
     action: TerminalClipboardAction,
+    target?: TerminalContextMenuTarget,
   ) => void;
   readonly sendSnippetsToggle: (window: Window) => void;
   readonly sendFind: (window: Window) => void;
@@ -123,6 +126,7 @@ export interface TerminalApplication<
   newTabInSelectedWindow(): void;
   closeSelectedTab(): Promise<void>;
   closeSelectedPane(): Promise<void>;
+  closePane(window: Window, target: TerminalContextMenuTarget): Promise<void>;
   splitSelectedPane(direction: TerminalSplitDirection): void;
   focusSelectedPane(target: TerminalPaneFocusTarget): void;
   equalizeSelectedPanes(): void;
@@ -134,6 +138,11 @@ export interface TerminalApplication<
   toggleSelectedDevTools(): void;
   zoomSelectedWindow(command: TerminalFontZoom): void;
   clipboardSelectedWindow(action: TerminalClipboardAction): void;
+  clipboardPane(
+    window: Window,
+    action: TerminalClipboardAction,
+    target: TerminalContextMenuTarget,
+  ): void;
   findInSelectedWindow(): void;
   toggleSelectedSnippets(): void;
   toggleSelectedTabBar(): void;
@@ -390,6 +399,15 @@ export function startTerminalApplication<Window extends NativeTerminalWindow>(
       const window = selectedWindow();
       if (window) options.sendClipboardAction(window, action);
     },
+    clipboardPane(window, action, target) {
+      const state = windows.get(window);
+      if (
+        window !== selectedWindow() ||
+        !state?.sessionActivity.claimContextMenuTarget?.(target)
+      )
+        return;
+      options.sendClipboardAction(window, action, target);
+    },
     findInSelectedWindow: selectedWindowAction(options.sendFind),
     toggleSelectedTabBar: selectedWindowAction(options.sendTabBarToggle),
     toggleSelectedTitleBar: selectedWindowAction(options.sendTitleBarToggle),
@@ -413,12 +431,16 @@ function confirmTabClose<Window extends NativeTerminalWindow>(
   >,
   isOwnerAlive: () => boolean,
   scope: "tab" | "pane" = "tab",
+  target?: TerminalContextMenuTarget,
 ): Promise<void> {
   // Capture in the tab owner before any asynchronous decision. Commands
   // share an ordered channel, including ordinary session-exit delivery.
-  options.sendTabCommand(window, {
-    action: scope === "tab" ? "prepare-close" : "prepare-close-pane",
-  });
+  options.sendTabCommand(
+    window,
+    scope === "tab"
+      ? { action: "prepare-close" }
+      : { action: "prepare-close-pane", ...(target ? { target } : {}) },
+  );
   const resolveClose = (confirmed: boolean) => {
     if (isOwnerAlive())
       options.sendTabCommand(
@@ -446,6 +468,7 @@ function paneActions<Window extends NativeTerminalWindow>(
 ): Pick<
   TerminalApplication<Window>,
   | "closeSelectedPane"
+  | "closePane"
   | "splitSelectedPane"
   | "focusSelectedPane"
   | "equalizeSelectedPanes"
@@ -454,34 +477,46 @@ function paneActions<Window extends NativeTerminalWindow>(
     const window = selectedWindow();
     if (window) options.sendTabCommand(window, command);
   };
-  return {
-    closeSelectedPane() {
-      const window = selectedWindow();
-      const state = window ? windows.get(window) : undefined;
-      if (!window || !state) return Promise.resolve();
-      if (state.tabCloseRequest) return state.tabCloseRequest;
-      const activity = state.sessionActivity;
-      const busy =
-        activity.hasBusyFocusedSession?.() ?? activity.hasBusySelectedSession();
-      if (!confirmClose() || !busy) {
-        options.sendTabCommand(window, { action: "close-pane" });
-        return Promise.resolve();
-      }
-      state.tabCloseRequest = confirmTabClose(
-        window,
-        {
-          sendTabCommand: options.sendTabCommand,
-          showCloseTabConfirmation:
-            options.showClosePaneConfirmation ??
-            options.showCloseTabConfirmation,
-        },
-        () => !window.isDestroyed() && windows.has(window),
-        "pane",
-      ).finally(() => {
-        state.tabCloseRequest = undefined;
+  const closePane = (
+    window: Window | undefined,
+    target?: TerminalContextMenuTarget,
+  ): Promise<void> => {
+    const state = window ? windows.get(window) : undefined;
+    if (!window || !state || window !== selectedWindow())
+      return Promise.resolve();
+    const activity = state.sessionActivity;
+    // Popup identity is correlation only. Validate the controller's actual
+    // live focused session before Busy inspection, even with confirmClose off.
+    if (target && !activity.claimContextMenuTarget?.(target))
+      return Promise.resolve();
+    if (state.tabCloseRequest) return state.tabCloseRequest;
+    const busy =
+      activity.hasBusyFocusedSession?.() ?? activity.hasBusySelectedSession();
+    if (!confirmClose() || !busy) {
+      options.sendTabCommand(window, {
+        action: "close-pane",
+        ...(target ? { target } : {}),
       });
-      return state.tabCloseRequest;
-    },
+      return Promise.resolve();
+    }
+    state.tabCloseRequest = confirmTabClose(
+      window,
+      {
+        sendTabCommand: options.sendTabCommand,
+        showCloseTabConfirmation:
+          options.showClosePaneConfirmation ?? options.showCloseTabConfirmation,
+      },
+      () => !window.isDestroyed() && windows.has(window),
+      "pane",
+      target,
+    ).finally(() => {
+      state.tabCloseRequest = undefined;
+    });
+    return state.tabCloseRequest;
+  };
+  return {
+    closeSelectedPane: () => closePane(selectedWindow()),
+    closePane,
     splitSelectedPane: (direction) => send({ action: "split", direction }),
     focusSelectedPane: (target) => send({ action: "focus-pane", target }),
     equalizeSelectedPanes: () => send({ action: "equalize-panes" }),

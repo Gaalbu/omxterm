@@ -1,4 +1,7 @@
-import type { TerminalSessionId } from "../shared/terminal-contract";
+import type {
+  TerminalContextMenuTarget,
+  TerminalSessionId,
+} from "../shared/terminal-contract";
 import type {
   TerminalSurface,
   TerminalSurfaceConfiguration,
@@ -30,6 +33,10 @@ export function createPaneMount(deps: {
   readonly removePane: (pane: TerminalPane, notify: boolean) => void;
   readonly notifyEmpty: (reason?: "rendering-failure") => void;
   readonly focus: (pane: TerminalPane, unchangedFocus: boolean) => void;
+  readonly focusClicked: (pane: TerminalPane) => void;
+  readonly captureContextMenuTarget: (
+    pane: TerminalPane,
+  ) => TerminalContextMenuTarget | undefined;
 }) {
   const { document, options } = deps;
   return async (pane: TerminalPane): Promise<void> => {
@@ -51,8 +58,28 @@ export function createPaneMount(deps: {
     // Title and BEL events carry the emitting pane's session id;
     // the Surface itself stays pane-unaware. Events can only follow session
     // output, so the id is always known by the time they fire.
+    const clipboard = deps.surfaceOptions().clipboard;
     const paneSurfaceOptions: TerminalSurfaceOptions = {
       ...deps.surfaceOptions(),
+      // Focus before capturing this pane and its live Surface for one popup;
+      // a split pane's menu also offers Close Pane.
+      ...(clipboard
+        ? {
+            clipboard: {
+              ...clipboard,
+              requestContextMenu() {
+                if (deps.disposed() || pane.removed || pane.ended) return;
+                deps.focusClicked(pane);
+                const target = deps.captureContextMenuTarget(pane);
+                if (!target) return;
+                clipboard.requestContextMenu({
+                  ...target,
+                  ...(tabPanes(pane.tab).length > 1 ? { closePane: true } : {}),
+                });
+              },
+            },
+          }
+        : {}),
       abortSignal: pane.mountAbort.signal,
       onFatalError(failure) {
         endPane(pane);

@@ -16,7 +16,12 @@ asks when any open session is Busy.
 
 Close Pane uses the same prepare/resolve ownership protocol as Close Tab,
 capturing the pane before the asynchronous dialog and consuming that target once.
-A removed target is inert; later focus never retargets the decision.
+A removed target is inert; later focus never retargets the decision. A native
+pane popup captures its window and pane/Surface before activation, using bounded
+correlation data rather than re-resolving selection. Main independently validates
+that window's current live ownership before the Busy decision, then reuses the
+same close slot and prepare/resolve path. Stale popup activation is inert; once
+accepted for confirmation, the existing captured-decision rule still applies.
 
 Confirmation protects running work without adding a dialog for an idle Unix
 shell. The name-only heuristic keeps that decision local and cheap rather than
