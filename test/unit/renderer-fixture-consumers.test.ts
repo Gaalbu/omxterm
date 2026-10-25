@@ -95,9 +95,11 @@ function fontControls(result: Renderer) {
   ).toBe(true);
 }
 function readReloadControls(result: Renderer) {
+  expect(result.code).toContain("sessionIds[index] = adapter.sessionId()");
   expect(result.globals.readReloadEvidence).toEqual({
     hostReady: false,
     mounts: [],
+    sessionIds: [],
   });
   expect(
     result.code.includes("record.fontName = lease.fonts[0]?.name"),

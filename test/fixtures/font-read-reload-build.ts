@@ -95,6 +95,22 @@ export async function buildFixture(
                 name: "observe-real-font-reload-surfaces",
                 setup(builder) {
                   builder.onResolve(
+                    { filter: /electron-terminal-adapter$/ },
+                    (args) =>
+                      args.importer ===
+                      path.join(
+                        projectRoot,
+                        "src/renderer/start-terminal-window.ts",
+                      )
+                        ? {
+                            path: path.join(
+                              projectRoot,
+                              "test/fixtures/font-read-reload-adapter.ts",
+                            ),
+                          }
+                        : undefined,
+                  );
+                  builder.onResolve(
                     { filter: /restty-terminal-surface$/ },
                     (args) =>
                       args.importer ===

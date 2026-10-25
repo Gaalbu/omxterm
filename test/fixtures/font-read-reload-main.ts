@@ -25,6 +25,7 @@ import type { LocalTerminalSession } from "../../src/main/local-terminal-session
 import { terminalIpc } from "../../src/shared/terminal-ipc";
 import type { TerminalFontData } from "../../src/shared/terminal-font-data";
 import { spawnFixturePty } from "./native-fixture-pty";
+import { receivedFontReloadInput } from "./font-read-reload-input";
 import { nativeFixturePlatform } from "./restty-host-platform";
 import { createResttyHostSessions } from "./restty-host-sessions";
 import {
@@ -150,6 +151,7 @@ async function createFixture() {
     userFileErrors: [],
   };
   let active: ActiveUserConfiguration = initial;
+  const nativeSessionIndexes = new Map<string, number>();
   function createWindow() {
     const window = new BrowserWindow({
       ...terminalWindowOptions(
@@ -160,6 +162,7 @@ async function createFixture() {
       show: false,
     });
     windows.push(window);
+    let createdIndex: number | undefined;
     const controller = router.registerController({
       webContents: window.webContents,
       configuration: terminalRendererConfiguration(active, 0),
@@ -181,6 +184,7 @@ async function createFixture() {
           onExit: callbacks.onExit,
         });
         sessions.push(terminal);
+        createdIndex = index;
         return {
           ...terminal,
           write(data) {
@@ -193,7 +197,10 @@ async function createFixture() {
         throw new Error("Unexpected PTY start failure");
       },
       onSessionExit() {},
-      onSessionStarted() {},
+      onSessionStarted(sessionId) {
+        assert.notEqual(createdIndex, undefined);
+        nativeSessionIndexes.set(`${window.id}:${sessionId}`, createdIndex!);
+      },
       onSessionSelected() {},
       onTitleRequest() {},
       onBell() {},
@@ -249,7 +256,25 @@ async function createFixture() {
   }
   const command = (action: "new" | "close") =>
     window.webContents.send(terminalIpc.tabCommand, { action });
-  async function usable(position: number, token: string) {
+  async function usable(
+    position: number,
+    token: string,
+    mountIndex = position - 1,
+  ) {
+    // Capture the independently observed start receipt for the expected Surface,
+    // not whichever child happens to receive Paste or report selection.
+    const sessionId: unknown = await evaluate(
+      `readReloadEvidence.sessionIds[${mountIndex}]`,
+    );
+    assert.equal(typeof sessionId, "string");
+    const expected = nativeSessionIndexes.get(
+      `${window.id}:${String(sessionId)}`,
+    );
+    assert.notEqual(
+      expected,
+      undefined,
+      "Expected Surface owns a known native child",
+    );
     window.webContents.send(terminalIpc.tabCommand, {
       action: "select",
       position,
@@ -262,19 +287,12 @@ async function createFixture() {
     paste = token;
     window.webContents.send(terminalIpc.clipboardAction, "paste");
     await owner.waitFor(
-      () =>
-        inputs.some(
-          (values, index) => values.slice(offsets[index]).join("") === token,
-        ),
-      "exact Surface/preload Paste reaches one native child",
+      () => receivedFontReloadInput(inputs, offsets, expected!, token),
+      "exact Surface/preload Paste reaches its expected child and no sibling",
     );
-    const targets = inputs.flatMap((values, index) =>
-      values.slice(offsets[index]).join("") === token ? [index] : [],
-    );
-    assert.equal(targets.length, 1);
-    sessions[targets[0]!]!.write("\r");
+    sessions[expected!]!.write("\r");
     await owner.waitFor(
-      () => outputs[targets[0]!]!.join("").includes(`RECEIVED:${token}`),
+      () => outputs[expected!]!.join("").includes(`RECEIVED:${token}`),
       "actual child acknowledges input, not terminal echo",
     );
   }
@@ -430,7 +448,7 @@ async function run() {
     [undefined, A, A, B, A, B],
   );
   await usable(5, "surviving-sibling");
-  await usable(6, "new-b-sibling");
+  await usable(6, "new-b-sibling", 6); // Cancelled mount 5 owns no tab/session.
 
   // Destroy a separate window at the same read boundary: production host disposal
   // invalidates its late IPC result, with no PTY or resurrected failure owner.

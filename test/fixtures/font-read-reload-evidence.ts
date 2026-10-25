@@ -1,5 +1,6 @@
 export const readReloadEvidence = {
   hostReady: false,
+  sessionIds: [] as Array<string | undefined>,
   mounts: [] as Array<{
     family: string | undefined;
     lineHeight: number | undefined;
