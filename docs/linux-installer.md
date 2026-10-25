@@ -6,7 +6,7 @@ Get the AppImage, `linux_install.sh`, and their `.sha256` files from the [latest
 
 ## Install to your application menu
 
-Download the files from the same release, replace `VERSION` with your downloaded version, and run as your normal user (no `sudo` needed):
+Download the files from the same release, replace `VERSION` with your downloaded version, and use `x64` instead of `arm64` on Intel/AMD. The helper is shared; x64 helper installation remains unverified ([coverage](installation.md#linux)). Run as your normal user (no `sudo` needed):
 
 ```sh
 appimage=./OMXTerm-VERSION-arm64.AppImage

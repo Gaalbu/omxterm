@@ -2,7 +2,8 @@
 
 OMXTerm is a fast, minimal, open-source desktop terminal you can make your own.
 Open a few tabs, customize your theme and shortcuts, and get to work. Available
-for **Apple Silicon macOS, Linux ARM64, and Windows ARM64 or x64**.
+for **Apple Silicon macOS, Linux ARM64 or x64, and Windows ARM64 or x64**
+(x64 downloads have build-only qualification; see below).
 
 ---
 
@@ -71,31 +72,38 @@ agents.
 ## Platforms and downloads
 
 **Latest release:
-[0.21.0 — downloads and release notes](https://github.com/luizomf/omxterm/releases/tag/v0.21.0)**
+[0.22.0 — downloads and release notes](https://github.com/luizomf/omxterm/releases/tag/v0.22.0)**
 
-Prebuilt packages target **Apple Silicon macOS, Linux ARM64, and Windows 11
-ARM64 or x64**. Windows x64 validation uses emulation on Windows ARM64; native
-Intel/AMD qualification remains pending. See the release notes for actual coverage.
+Prebuilt packages target **Apple Silicon macOS, Linux ARM64 or x64, and Windows 11
+ARM64 or x64**. Both x64 packages have **build-only qualification** from native
+hosted CI, not desktop, GPU, installer or ordinary-user integration qualification.
+See the release notes for actual platform coverage.
 
 | Platform                                 | Download                                                                                               | Checksum                                                                                                     |
 | ---------------------------------------- | ------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------ |
-| Apple Silicon macOS                      | [DMG](https://github.com/luizomf/omxterm/releases/download/v0.21.0/OMXTerm-0.21.0-arm64.dmg)           | [SHA-256](https://github.com/luizomf/omxterm/releases/download/v0.21.0/OMXTerm-0.21.0-arm64.dmg.sha256)      |
-| Linux ARM64                              | [AppImage](https://github.com/luizomf/omxterm/releases/download/v0.21.0/OMXTerm-0.21.0-arm64.AppImage) | [SHA-256](https://github.com/luizomf/omxterm/releases/download/v0.21.0/OMXTerm-0.21.0-arm64.AppImage.sha256) |
-| Linux application-menu helper (optional) | [linux_install.sh](https://github.com/luizomf/omxterm/releases/download/v0.21.0/linux_install.sh)      | [SHA-256](https://github.com/luizomf/omxterm/releases/download/v0.21.0/linux_install.sh.sha256)              |
-| Windows ARM64                            | [Installer](https://github.com/luizomf/omxterm/releases/download/v0.21.0/OMXTerm-0.21.0-arm64.exe)     | [SHA-256](https://github.com/luizomf/omxterm/releases/download/v0.21.0/OMXTerm-0.21.0-arm64.exe.sha256)      |
-| Windows x64                              | [Installer](https://github.com/luizomf/omxterm/releases/download/v0.21.0/OMXTerm-0.21.0-x64.exe)       | [SHA-256](https://github.com/luizomf/omxterm/releases/download/v0.21.0/OMXTerm-0.21.0-x64.exe.sha256)        |
+| Apple Silicon macOS                      | [DMG](https://github.com/luizomf/omxterm/releases/download/v0.22.0/OMXTerm-0.22.0-arm64.dmg)           | [SHA-256](https://github.com/luizomf/omxterm/releases/download/v0.22.0/OMXTerm-0.22.0-arm64.dmg.sha256)      |
+| Linux ARM64                              | [AppImage](https://github.com/luizomf/omxterm/releases/download/v0.22.0/OMXTerm-0.22.0-arm64.AppImage) | [SHA-256](https://github.com/luizomf/omxterm/releases/download/v0.22.0/OMXTerm-0.22.0-arm64.AppImage.sha256) |
+| Linux x64 (build-only)                   | [AppImage](https://github.com/luizomf/omxterm/releases/download/v0.22.0/OMXTerm-0.22.0-x64.AppImage)   | [SHA-256](https://github.com/luizomf/omxterm/releases/download/v0.22.0/OMXTerm-0.22.0-x64.AppImage.sha256)   |
+| Linux application-menu helper (optional) | [linux_install.sh](https://github.com/luizomf/omxterm/releases/download/v0.22.0/linux_install.sh)      | [SHA-256](https://github.com/luizomf/omxterm/releases/download/v0.22.0/linux_install.sh.sha256)              |
+| Windows ARM64                            | [Installer](https://github.com/luizomf/omxterm/releases/download/v0.22.0/OMXTerm-0.22.0-arm64.exe)     | [SHA-256](https://github.com/luizomf/omxterm/releases/download/v0.22.0/OMXTerm-0.22.0-arm64.exe.sha256)      |
+| Windows x64 (build-only)                 | [Installer](https://github.com/luizomf/omxterm/releases/download/v0.22.0/OMXTerm-0.22.0-x64.exe)       | [SHA-256](https://github.com/luizomf/omxterm/releases/download/v0.22.0/OMXTerm-0.22.0-x64.exe.sha256)        |
 
-Linux requires **glibc 2.42+** and X11/XWayland (for example Fedora 43+, Ubuntu
-25.10+, or Arch). First-launch notes for macOS Gatekeeper and Windows
-SmartScreen are in the [installation guide](docs/installation.md).
+Linux ARM64 requires **glibc 2.42+** and X11/XWayland (for example Fedora 43+,
+Ubuntu 25.10+, or Arch). Linux x64 headless checks ran on Ubuntu 22.04 with
+glibc 2.35; this is not a minimum-version or broad distro compatibility promise.
+First-launch notes for macOS Gatekeeper and Windows SmartScreen are in the
+[installation guide](docs/installation.md).
 
 <a id="exercised-desktops"></a>
 
-Linux and Windows x64 have manual native CI lanes for **downloadable build-only
-packages for the next release** ([artifact delivery](docs/release.md#hosted-x64-build-only-artifact-delivery)).
-Desktop/GPU, installer and ordinary-user integration remain unverified and are
-not release gates for those lanes. Linux x64 assets are not linked here until
-published; the table above describes the existing release.
+Linux and Windows x64 downloads come from manual native hosted CI lanes
+([artifact delivery](docs/release.md#hosted-x64-build-only-artifact-delivery)).
+Both load the packaged addon in the packaged Electron Run-as-Node runtime;
+Linux additionally checks real headless PTY output/exit/resize. Windows inspects
+the unpacked app, not NSIS execution or payload equivalence, and does not spawn
+ConPTY. Desktop/GPU, installer and ordinary-user integration remain unverified;
+Linux FUSE/helper installation and Windows 11/SmartScreen/UAC are also unverified.
+These are not release gates for the build-only lanes.
 
 ### Tested desktops
 
@@ -164,10 +172,10 @@ welcome!
   [Open an issue](https://github.com/luizomf/omxterm/issues/new?template=bug-report.md).
 - Want to build from source or contribute code? Read
   [CONTRIBUTING.md](CONTRIBUTING.md) and the
-  [documentation index](docs/README.md), including open efforts to add
-  [Linux x64](https://github.com/luizomf/omxterm/issues/223) packages.
-  Windows x64 testing and feedback are welcome in
-  [#224](https://github.com/luizomf/omxterm/issues/224).
+  [documentation index](docs/README.md). Native desktop testing and feedback for
+  the build-only x64 packages are welcome in
+  [Linux #223](https://github.com/luizomf/omxterm/issues/223) and
+  [Windows #224](https://github.com/luizomf/omxterm/issues/224).
 
 ## License
 
