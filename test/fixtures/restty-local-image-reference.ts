@@ -4,6 +4,7 @@ import type { LocalImageRequest } from "../../src/shared/local-image";
 import { clickTerminalCell } from "./restty-link-gestures";
 import { captureModifiedHoverEvidence } from "./restty-hover";
 import { readLocalImageCoreCells } from "./restty-local-image-core-probe";
+import { localImageReferenceCells } from "./restty-local-image-targets";
 
 export interface LocalImageLinkEvidence {
   control: string;
@@ -95,16 +96,12 @@ export async function verifyLocalImageReference(options: {
     beforeHover,
     "hover does not request a read",
   );
-  const cells = [
-    ...new Set([
-      prefixColumns + 2,
-      prefixColumns + reference.lastIndexOf(" ") + rootCellDelta,
-      prefixColumns + reference.lastIndexOf("photo") + rootCellDelta,
-      ...(prefixColumns + destinationColumns > size.cols
-        ? [size.cols + 2]
-        : []),
-    ]),
-  ];
+  const cells = localImageReferenceCells({
+    cols: size.cols,
+    reference,
+    prefixColumns,
+    rootCellDelta,
+  });
   for (const cell of cells) {
     const before = localImageRequests.length;
     await clickTerminalCell(
