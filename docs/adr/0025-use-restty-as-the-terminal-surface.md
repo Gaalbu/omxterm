@@ -133,16 +133,21 @@ superseded delivery identities after preceding Surface registrations. Surviving
 owners retain only their two creation-time values, avoiding unbounded reload
 history. This bookkeeping is separate from tab ownership and native shutdown.
 
-**Current acquisition limitation:** this retained identity does not authorize
-completion of a pending native font-data request after a family reload. Main
-increments its font-data generation and rejects an old-family completion as
-superseded, even if its initializing Surface survives with a renderer lease.
-That tab can fail initialization and close without starting a PTY. Already
-acquired font bytes survive through their leases; line-height-only reload does
-not invalidate the family-data generation. The integrated ownership fixture
-holds runtime initialization after font acquisition; reproducing this race
-requires a pending main font read
-([#569](https://github.com/luizomf/omxterm/issues/569)).
+Native font acquisition has its own lifetime: once a current-family read has
+started, its captured result may complete for surviving renderer consumers even
+if the family changes, including change-away-and-back. Only controller disposal
+invalidates a successful started read. Genuine read/validation errors still
+reject, and cancelling one consumer cannot revoke its live sibling's lease.
+
+Receipt-time admission still requires the active family. Different generations
+serialize behind the preceding bounded load; a queued generation superseded
+before starting is rejected without another read. Same-generation requests
+share pending work, and completion clears only its own pending identity. Retained
+Surface identities do not grant historical-family lookup. Line-height-only
+reload does not change the family-data generation. Headless read/reload tests
+hold a real FileHandle.read; the supervised native fixture uses the production
+host/preload/Surface/PTY and the same physical-read boundary, not a runtime-init
+delay after acquisition.
 
 Complete validation rejects invalid configured font inputs before application;
 application-time exceptions are not an atomic rollback guarantee. See

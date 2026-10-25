@@ -6,6 +6,7 @@ import { runInNewContext } from "node:vm";
 import { expect, it, vi } from "vitest";
 import { buildFixture as buildCancellation } from "../fixtures/initialization-cancellation-build";
 import { buildFixture as buildPendingTab } from "../fixtures/pending-tab-ownership-build";
+import { buildFixture as buildFontReadReload } from "../fixtures/font-read-reload-build";
 import { buildFixture as buildFontOwnership } from "../fixtures/surface-font-ownership-build";
 import { buildFixture as buildTabRemoval } from "../fixtures/tab-removal-build";
 
@@ -93,6 +94,20 @@ function fontControls(result: Renderer) {
     "missing geometry reply interception",
   ).toBe(true);
 }
+function readReloadControls(result: Renderer) {
+  expect(result.globals.readReloadEvidence).toEqual({
+    hostReady: false,
+    mounts: [],
+  });
+  expect(
+    result.code.includes("record.fontName = lease.fonts[0]?.name"),
+    "missing actual read/reload Surface lease observer",
+  ).toBe(true);
+  expect(
+    result.code.includes('record.status = "mounted"'),
+    "missing actual Surface settlement observer",
+  ).toBe(true);
+}
 function tabControls(result: Renderer) {
   const control = result.globals.__omxtermTabRemovalControl as {
     state(): { heldSurface: boolean; newCommands: number; hostReady: boolean };
@@ -146,7 +161,11 @@ it("executes the tab-removal control setup, command observer and held-renderer m
   tabControls(await renderer(buildTabRemoval));
 }, 30_000);
 
-it("rejects all four actual bundles when their importer comparison is deliberately stale", async () => {
+it("bundles the font-read/reload Surface observer without holding runtime initialization", async () => {
+  readReloadControls(await renderer(buildFontReadReload));
+}, 30_000);
+
+it("rejects all five actual bundles when their importer comparison is deliberately stale", async () => {
   const projectRoot = fileURLToPath(new URL("../..", import.meta.url));
   const join = path.join;
   let staleComparisons = 0;
@@ -169,6 +188,7 @@ it("rejects all four actual bundles when their importer comparison is deliberate
       [buildCancellation, cancellationControls],
       [buildPendingTab, pendingControls],
       [buildFontOwnership, fontControls],
+      [buildFontReadReload, readReloadControls],
       [buildTabRemoval, tabControls],
     ] as const;
     for (const [build, controls] of cases) {

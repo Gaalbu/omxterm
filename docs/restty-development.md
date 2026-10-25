@@ -15,12 +15,12 @@ The portable Terminal Surface (`src/terminal-surface/`) receives a session Adapt
 
 - **Live-safe settings:** Theme colors, font size, programming ligatures, padding, scrollback lines, and macOS Option Key Mode apply in place to existing panes and sessions; the latest labels also replay after a pending pane mount.
 - **Creation-time settings:** `font.family` and `font.lineHeight` are fixed when a Surface is created. New panes use the latest validated values; existing panes keep their creation-time values until OMXTerm restarts.
+- **Native font acquisition across reload:** A started read completes for its surviving creation-time consumers across family changes. Controller disposal still invalidates completion. Admission requires the current family, and obsolete queued generations are rejected before starting; there is no historical-family lookup.
 
 ### Current runtime limitations
 
 - **Cursor Position Reports (`CSI 6 n`):** The `OutputFilter` answers CPR queries using a retained UTF-16 cursor hint before core write. Wide/combining characters, pending wrap, and resize can cause the reply to differ from Ghostty's actual cursor ([#568](https://github.com/luizomf/omxterm/issues/568)).
 - **Reload application errors:** `user-configuration-reloader.ts` updates the active configuration snapshot before applying consumers sequentially. While validation errors cleanly retain the previous configuration, an unexpected runtime exception during consumer application has no automatic rollback.
-- **Pending font acquisition across reload:** Changing `font.family` while a tab is still reading native font bytes rejects the in-flight request as superseded ([#569](https://github.com/luizomf/omxterm/issues/569)).
 - **First-tab startup commands:** `terminal-window-host.ts` subscribes to tab-level actions after `tabs.ready`; an early `Close Tab` before the first tab finishes initializing can be dropped ([#571](https://github.com/luizomf/omxterm/issues/571)). `Close Window` and `Quit` remain active on separate main-process routes.
 
 ### Scrollback and viewport

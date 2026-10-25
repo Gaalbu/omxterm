@@ -49,11 +49,9 @@ export function createFontDataRequest(options: {
         )
           throw new Error("Terminal Font request was superseded");
         const loaded = await options.load(family);
-        if (
-          options.isDisposed() ||
-          options.family() !== family ||
-          options.generation() !== generation
-        )
+        // A started read belongs to its existing consumers across reloads.
+        // Controller disposal, unlike a family change, ends that lifetime.
+        if (options.isDisposed())
           throw new Error("Terminal Font request was superseded");
         return loaded;
       } finally {

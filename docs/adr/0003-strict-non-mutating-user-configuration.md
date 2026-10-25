@@ -25,8 +25,8 @@ applied native/renderer/menu effects remain. The failure notice can therefore
 incorrectly say that the previous configuration was retained. Restarting after
 fixing the cause establishes a fresh startup snapshot.
 
-Creation-time family and line-height behavior and the pending font-acquisition
-race are described in
+Creation-time family and line-height behavior and native font-acquisition
+lifetimes are described in
 [ADR 0025](0025-use-restty-as-the-terminal-surface.md).
 
 ## Explicit settings writes

@@ -15,6 +15,7 @@ import { build, type BuildOptions } from "esbuild";
 import { beforeEach, expect, it, vi } from "vitest";
 import { buildFixture as initialization } from "../fixtures/initialization-cancellation-build";
 import { buildFixture as pending } from "../fixtures/pending-tab-ownership-build";
+import { buildFixture as fontReadReload } from "../fixtures/font-read-reload-build";
 import { buildFixture as fonts } from "../fixtures/surface-font-ownership-build";
 import { buildFixture as titles } from "../fixtures/startup-tab-titles-build";
 import { buildFixture as removal } from "../fixtures/tab-removal-build";
@@ -94,6 +95,18 @@ const plainFiles = [
   "home",
 ];
 const recipes: readonly Recipe[] = [
+  {
+    name: "font-read-reload",
+    prepare: fontReadReload,
+    metadataName: "omxterm-font-read-reload-fixture",
+    builds: standardBuilds,
+    files: standardFiles,
+    failure: "symlink",
+    plugins: [
+      "hold-actual-native-font-read",
+      "observe-real-font-reload-surfaces",
+    ],
+  },
   {
     name: "initialization-cancellation",
     prepare: initialization,

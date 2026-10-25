@@ -404,7 +404,7 @@ succeeds ([ADR 0025](adr/0025-use-restty-as-the-terminal-surface.md)).
   their visibility choices, Always-on-Top state and Window Font Zoom delta;
   Actual Size returns to the latest baseline. Font family and line height remain
   creation-time settings. Reload is not transactional across consumers; failure
-  and pending-font limitations are described under
+  and font-acquisition limits are described under
   [configuration and local state](#configuration-and-local-state).
 - `View -> Toggle Tab Bar` (default `Cmd+Shift+B` on macOS and `Ctrl+Shift+B` on
   Linux and Windows, remappable as `toggleTabBar`) changes only the selected
@@ -540,7 +540,7 @@ failed session was the window's last one. Restty applies the selected Terminal
 Theme, configured font size, programming ligature setting, per-side padding and
 Window Font Zoom through its runtime and existing host geometry. It resolves an
 exact configured installed family through the Electron main process and gives
-Restty only bounded bytes for that validated active family, followed by the
+Restty only bounded bytes for that family validated at admission, followed by the
 licensed bundled FiraCode regular/bold, DejaVu Sans Mono regular/bold and
 JetBrainsMono Nerd Font Mono faces, then representative locally installed
 operating-system fallback faces. On Linux, those native candidates are, in order,
@@ -581,8 +581,8 @@ arbitrary filesystem access. A Restty Surface applies its configured family and
 line height when it is created; a surviving Restty Surface keeps both after User
 Configuration Reload, while theme, font size, programming ligatures and padding
 update it in place and refit the same PTY. New Surfaces use the latest values,
-so restarting applies them everywhere. Pending font acquisition has the reload
-limitation described under
+so restarting applies them everywhere. Started font reads survive reload for
+existing consumers, subject to the admission and queued-read limits under
 [configuration and local state](#configuration-and-local-state). Changing
 programming ligatures preserves source text, selection and copy results,
 terminal cells and cursor positions, and the existing Surface, font generation,
@@ -1263,9 +1263,14 @@ active in every existing Terminal Surface, including one still initializing
 before its PTY starts. Main retains that Surface's creation-time family and
 line-height values rather than inferring them from the configuration current at
 PTY startup. This bookkeeping is distinct from native font-byte acquisition:
-changing the active family invalidates outstanding old-generation reads,
-including an accepted request for a still-initializing Surface. It can fail that
-tab instead of letting it finish with its original family. Repeating a reload
+a native font read already started while its family was current may complete
+across a family reload, including change-away-and-back, for its surviving
+creation-time consumers. Controller disposal still rejects late completion;
+cancelling one consumer does not cancel its live siblings. Requests must match
+the current family when received; a queued generation superseded before its
+load starts is rejected without another read. This does not authorize arbitrary
+historical-family lookup. Loads remain serialized and bounded, and genuine
+read/validation failures still reject. Repeating a reload
 cannot erase a notice while an older Surface survives; removing that Surface
 releases its font bookkeeping. Theme, Interface Language, configured font-size
 baseline, padding and Window Font Zoom remain live and preserve the existing Surface and PTY. Invalid,
@@ -1433,8 +1438,9 @@ clipboard capabilities, external-link opening, and bounded Local Image Preview
 reads. The renderer runs with context isolation and without Node integration.
 Main validates IPC request senders and payloads; preload validates response and
 event payloads exposed by its minimal typed bridge. The font route accepts no
-path; it can return only bounded bytes for the active validated configured
-family and fixed local fallback candidates. Font paths, family names, and bytes
+path; requests must name the active validated configured family. A started read
+may return that captured family's bounded bytes across reload, together with
+fixed local fallback candidates. Font paths, family names, and bytes
 are excluded from Operational Events, but native read-error text is not
 consistently redacted from font IPC rejections, as noted above. Chromium
 sandboxing remains enabled on macOS and Windows and is disabled on Linux.

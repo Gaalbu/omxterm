@@ -436,6 +436,11 @@ Choose **View → Reload User Configuration** (`Cmd+Shift+,` / `Ctrl+Shift+,`) a
 | New tabs (or restart) | Font family, line height, Windows shell                       |
 | New windows           | Always-on-Top, title-bar, and tab-bar initial defaults        |
 
+A native font read already started for an initializing tab can finish with its
+creation-time family after reload; new tabs use the latest family. Requests must
+still match the current family when received. A queued read superseded before
+starting can fail initialization; reload does not enable historical-family lookup.
+
 If validation finds an error in your JSON, OMXTerm shows a banner naming the file and field to fix:
 
 - **On manual reload:** your previous valid configuration stays active until you fix the error and reload again.

@@ -1420,7 +1420,7 @@ describe("Terminal Font IPC", () => {
           finishChangedLoads.push(resolve);
         }),
     );
-    const stale = handler(trusted, "Exact Família");
+    const started = handler(trusted, "Exact Família");
     controller.applyConfiguration({
       ...clipboardOptions().configuration,
       fontFamily: "Other Family",
@@ -1432,7 +1432,7 @@ describe("Terminal Font IPC", () => {
     const current = handler(trusted, "Exact Família");
     expect(loadFontData).toHaveBeenCalledTimes(3);
     finishChangedLoads[0]!(sharedResult);
-    await expect(stale).rejects.toThrow("superseded");
+    await expect(started).resolves.toBe(sharedResult);
     await vi.waitFor(() => expect(loadFontData).toHaveBeenCalledTimes(4));
     finishChangedLoads[1]!(sharedResult);
     await expect(current).resolves.toBe(sharedResult);

@@ -100,7 +100,9 @@ operations. Initial-kit creation is the startup exception.
 followed by sequential application. Validation rejection keeps active settings;
 application-time exceptions can leave partial updates. Surfaces keep their
 creation-time font family and line height; new tabs use the latest values. A
-family change during pending font acquisition can fail an initializing tab.
+started native font read completes for surviving consumers across family changes;
+requests must still name the current family at admission, and obsolete queued
+reads are rejected before starting.
 
 **Interface Language** — The language of OMXTerm's own menus, dialogs and
 controls, chosen only by the User Configuration `language` key (`en-US` default

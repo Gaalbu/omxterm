@@ -201,7 +201,7 @@ Open a new tab after editing your shell profile to see the changes.
 Editing `config.json` does not apply changes until you press `Cmd+Shift+,` (macOS) or `Ctrl+Shift+,` (Linux/Windows), or choose **View → Reload User Configuration**:
 
 - If `config.json` has a syntax error or invalid value, OMXTerm displays an error banner explaining what to fix while keeping your previous valid settings active.
-- Changes to `font.family` and `font.lineHeight` apply to new panes/tabs and require restarting OMXTerm to update existing Surfaces.
+- Changes to `font.family` and `font.lineHeight` apply to new panes/tabs and require restarting OMXTerm to update existing Surfaces. A native font read already started for a pending Surface can finish with its original family. Requests must still match the current family at admission; obsolete queued reads that have not started can fail initialization.
 - Changes to `windowsShell` apply to new Default Shell sessions; changes to default bar visibility (`showTitleBar`, `showTabBar`, `alwaysOnTop`) apply to new windows.
 - Edits to `snippets.yaml` load automatically whenever you close and reopen the Snippets sidebar.
 

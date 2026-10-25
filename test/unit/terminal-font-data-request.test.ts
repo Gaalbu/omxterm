@@ -70,7 +70,31 @@ describe("Terminal Font data request lifetime", () => {
     expect(load).toHaveBeenCalledTimes(3);
   });
 
-  it("invalidates pending loads across change-away-and-back and disposal", async () => {
+  it("completes a started read with its captured family after reload", async () => {
+    let family = "Family A";
+    let finish!: (value: { fallbacks: never[] }) => void;
+    const snapshot = { fallbacks: [] as never[] };
+    const load = vi.fn(
+      () =>
+        new Promise<typeof snapshot>((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const request = createFontDataRequest({
+      family: () => family,
+      generation: () => (family === "Family A" ? 0 : 1),
+      isDisposed: () => false,
+      load,
+      reject: vi.fn(),
+    });
+    const accepted = request(family);
+    family = "Family B";
+    finish(snapshot);
+    await expect(accepted).resolves.toBe(snapshot);
+    expect(load.mock.calls).toEqual([["Family A"]]);
+  });
+
+  it("keeps a started generation distinct across change-away-and-back and still invalidates disposal", async () => {
     let family = "Family A";
     let generation = 0;
     let disposed = false;
@@ -97,7 +121,7 @@ describe("Terminal Font data request lifetime", () => {
     const current = request("Family A");
     expect(load).toHaveBeenCalledTimes(1);
     finishes[0]!({ fallbacks: [] });
-    await expect(stale).rejects.toThrow("superseded");
+    await expect(stale).resolves.toEqual({ fallbacks: [] });
     await vi.waitFor(() => expect(load).toHaveBeenCalledTimes(2));
     disposed = true;
     finishes[1]!({ fallbacks: [] });
