@@ -347,6 +347,21 @@ verification in direct/FUSE and extract-and-run modes.
 
 ## Fixture ownership and cleanup
 
+Linux packaged-wrapper outcome controls use a private acquire-before-release
+handoff. A finite Run-as-Node actor (or the stream-retention control worker)
+proposes its PID/start identity and waits for an exact acknowledgement before
+its native action or wrapper exit. The verifier acknowledges only an actually
+collected actor with a live retained parent chain to the immutable initial
+wrapper identity. Proposals never seed ownership or authorize signaling.
+Malformed, oversized, stale and foreign controls fail within the existing
+bounds; recovery cannot turn a timeout/native failure into success. This does
+not provide containment of arbitrary unobserved orphans. Headless regressions,
+including a deliberately bypassed handoff and forced procfs observation gaps:
+
+```sh
+node node_modules/vitest/vitest.mjs run test/unit/linux-packaged-process.test.ts test/unit/linux-wrapper-acquisition.test.ts
+```
+
 Graphical integration tests use [`runNativeFixture`](../test/fixtures/run-native-fixture.ts) and [`prepareFixture`](../test/fixtures/prepare-fixture.ts) to manage temporary user profiles, child Electron processes, and PTYs (`spawnFixturePty` / `spawnFixtureProcess`):
 
 - Fixture diagnostics and stdout/stderr logs are written under `.scratch/native-fixtures/`.

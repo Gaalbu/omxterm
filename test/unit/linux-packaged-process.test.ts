@@ -327,10 +327,21 @@ describe.skipIf(process.platform !== "linux")(
     );
 
     it.each(["control-hang", "control-streams"])(
-      "retains timeout diagnostics and native outcome after %s recovery",
+      "acquires the ready actor before wrapper release and retains timeout diagnostics after %s recovery",
       async (mode) => {
-        const { launcher } = await setup(true, mode);
+        const { root, launcher } = await setup(true, mode);
         const { error, directory } = await wrapperFailure(launcher);
+        const witness = JSON.parse(
+          await readFile(path.join(root, "control-ready.json"), "utf8"),
+        ) as { leader: ProcessIdentity; worker: ProcessIdentity };
+        const acquired = JSON.parse(
+          await readFile(path.join(directory, "zero.acquired.json"), "utf8"),
+        ) as { control: string; pid: number; start: string };
+        expect(acquired).toEqual({
+          control: "zero",
+          pid: witness.worker.pid,
+          start: witness.worker.start,
+        });
         expect(error.message).toContain("control did not settle");
         const result = JSON.parse(
           await readFile(path.join(directory, "zero.json"), "utf8"),

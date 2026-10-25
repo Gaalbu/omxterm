@@ -1,28 +1,65 @@
 // Finite, headless Linux verifier controls. No Electron or desktop access.
-import { spawn } from "node:child_process";
-import { appendFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
+import { spawn, spawnSync } from "node:child_process";
+import {
+  appendFileSync,
+  writeFileSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  symlinkSync,
+} from "node:fs";
 import path from "node:path";
 
 const role = process.argv[2];
 const root = process.env.OMXTERM_FIXTURE_ROOT;
 const mode = process.env.OMXTERM_FIXTURE_MODE;
 const note = (text) => appendFileSync(`${root}/ordering`, `${text}\n`);
+const identity = (pid) => {
+  const text = readFileSync(`/proc/${pid}/stat`, "utf8");
+  const fields = text
+    .slice(text.lastIndexOf(")") + 2)
+    .trim()
+    .split(/\s+/u);
+  return {
+    pid,
+    parent: Number(fields[1]),
+    group: Number(fields[2]),
+    start: fields[19],
+  };
+};
+const controlScript =
+  process.env.OMXTERM_WRAPPER_CONTROL_SCRIPT ?? process.env.BASH_ENV;
+const controlStem = controlScript?.replace(/\.sh$/u, "");
 // Bound even a deliberately broken implementation's test-only workloads.
 setTimeout(() => process.exit(98), 10_000).unref();
 appendFileSync(`${root}/launches`, `${role}\n`);
 
 if (role === "wrapper") {
   const control = Boolean(process.env.BASH_ENV);
+  if (control) writeFileSync(`${root}/control-path`, controlStem);
   if (control && mode.startsWith("control-")) {
     if (mode === "control-recording")
-      mkdirSync(path.join(path.dirname(process.env.BASH_ENV), "zero.json"));
+      mkdirSync(path.join(path.dirname(controlScript), "zero.json"));
     const worker = spawn(
       process.execPath,
       [import.meta.filename, "control-worker"],
       { stdio: ["ignore", "inherit", "inherit", "ipc"] },
     );
-    worker.on("message", () => {
-      if (mode === "control-streams") process.exit(7);
+    worker.on("message", (message) => {
+      if (message === "ready")
+        writeFileSync(
+          `${root}/control-ready.json`,
+          JSON.stringify({
+            leader: identity(process.pid),
+            worker: identity(worker.pid),
+          }),
+        );
+      if (
+        (message === "acquired" && mode === "control-streams") ||
+        (message === "ready" && mode === "control-early-release")
+      )
+        process.exit(7);
     });
     process.on("SIGTERM", () => undefined);
   } else {
@@ -54,9 +91,64 @@ if (role === "wrapper") {
 } else if (role === "control-worker") {
   process.stdout.write("control stdout retained\n");
   process.stderr.write("control stderr retained\n");
+  const proposal = {
+    control: path.basename(controlStem),
+    pid: process.pid,
+    start: identity(process.pid).start,
+  };
+  let proposed = proposal;
+  if (mode === "control-stale") proposed = { ...proposal, start: "0" };
+  if (mode === "control-wrong-control")
+    proposed = { ...proposal, control: "nonzero" };
+  if (mode === "control-wrong-actor") {
+    const parent = identity(process.ppid);
+    proposed = { ...proposal, pid: parent.pid, start: parent.start };
+  }
+  if (mode === "control-foreign")
+    proposed = {
+      ...proposal,
+      ...JSON.parse(process.env.OMXTERM_FIXTURE_FOREIGN),
+    };
+  if (mode !== "control-missing") {
+    writeFileSync(
+      `${controlStem}.proposal.tmp`,
+      mode === "control-malformed"
+        ? "{"
+        : mode === "control-oversized"
+          ? " ".repeat(1_025)
+          : JSON.stringify(proposed),
+    );
+    if (mode === "control-symlink")
+      symlinkSync(
+        `${controlStem}.proposal.tmp`,
+        `${controlStem}.proposal.json`,
+      );
+    else if (mode === "control-directory")
+      mkdirSync(`${controlStem}.proposal.json`);
+    else if (mode === "control-fifo") {
+      const result = spawnSync("mkfifo", [`${controlStem}.proposal.json`]);
+      if (result.status !== 0)
+        throw new Error("Could not create FIFO negative control");
+    } else
+      renameSync(`${controlStem}.proposal.tmp`, `${controlStem}.proposal.json`);
+  }
   process.send("ready");
   process.on("SIGTERM", () => undefined);
-  setInterval(() => undefined, 100);
+  const pending = setInterval(() => {
+    if (!existsSync(`${controlStem}.acquired.json`)) return;
+    const ack = JSON.parse(
+      readFileSync(`${controlStem}.acquired.json`, "utf8"),
+    );
+    if (
+      ack.control !== proposal.control ||
+      ack.pid !== proposal.pid ||
+      ack.start !== proposal.start
+    )
+      return;
+    clearInterval(pending);
+    process.send("acquired");
+    setInterval(() => undefined, 100);
+  }, 10);
 } else if (role === "probe" || role === "gpu") {
   process.send("ready");
   process.on("SIGTERM", () => {

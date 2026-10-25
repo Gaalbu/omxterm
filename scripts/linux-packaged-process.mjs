@@ -5,6 +5,10 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  readWrapperControl,
+  publishWrapperControl,
+} from "./linux-wrapper-control.mjs";
 
 const signalHelper = fileURLToPath(
   new URL("./linux-packaged-signal.py", import.meta.url),
@@ -12,7 +16,7 @@ const signalHelper = fileURLToPath(
 const delay = () => new Promise((resolve) => setTimeout(resolve, 50));
 const digest = (bytes) => createHash("sha256").update(bytes).digest("hex");
 
-function processes() {
+function processes(liveOnly = false) {
   return readdirSync("/proc")
     .filter((name) => /^\d+$/u.test(name))
     .flatMap((name) => {
@@ -22,6 +26,7 @@ function processes() {
           .slice(text.lastIndexOf(")") + 2)
           .trim()
           .split(/\s+/u);
+        if (liveOnly && ["Z", "X", "x"].includes(fields[0])) return [];
         return [
           {
             pid: Number(name),
@@ -88,17 +93,29 @@ export async function verifyLinuxWrapperPropagation(
       ["nonzero", "process.exit(3)", 3],
       ["signal", "process.kill(process.pid, 'SIGTERM')", null],
     ]) {
-      const script = path.join(root, `${name}.sh`);
+      const stem = path.join(root, name);
+      const script = `${stem}.sh`;
+      const entry = `${stem}.mjs`;
       const marker = `OMXTERM_WRAPPER_CONTROL_${name}`;
       await writeFile(
-        script,
-        `exec "$APPDIR/omxterm" -e ${JSON.stringify(`process.stdout.write('${marker}'); ${action}`)}\n`,
+        entry,
+        `import { acquireWrapperControl } from ${JSON.stringify(new URL("./linux-wrapper-control.mjs", import.meta.url).href)};\nawait acquireWrapperControl(${JSON.stringify(stem)}, ${JSON.stringify(name)}, Number(process.env.OMXTERM_WRAPPER_CONTROL_DEADLINE));\nprocess.stdout.write(${JSON.stringify(marker)}); ${action};\n`,
       );
+      await writeFile(
+        script,
+        'exec "$APPDIR/omxterm" "$OMXTERM_WRAPPER_CONTROL_ENTRY"\n',
+      );
+      const deadline = Date.now() + timeoutMs;
       const child = spawn(executable, ["--appimage-extract-and-run"], {
         detached: true,
         env: {
           ...process.env,
-          BASH_ENV: script,
+          // Bash expands BASH_ENV itself. Expand a fixed variable reference,
+          // never shell metacharacters in the caller's temporary directory.
+          BASH_ENV: "$OMXTERM_WRAPPER_CONTROL_SCRIPT",
+          OMXTERM_WRAPPER_CONTROL_SCRIPT: script,
+          OMXTERM_WRAPPER_CONTROL_ENTRY: entry,
+          OMXTERM_WRAPPER_CONTROL_DEADLINE: String(deadline),
           ELECTRON_RUN_AS_NODE: "1",
           DISPLAY: "",
           WAYLAND_DISPLAY: "",
@@ -111,10 +128,10 @@ export async function verifyLinuxWrapperPropagation(
       let outcome;
       let closed = false;
       const owned = new Map();
+      let initial;
+      let acquired;
       const collect = () => {
-        const rows = processes();
-        const leader = rows.find((row) => row.pid === child.pid);
-        if (!owned.size && leader) owned.set(leader.pid, leader);
+        const rows = processes(true);
         collectDescendants(rows, owned, child.pid);
         return rows.filter((row) => owned.get(row.pid)?.start === row.start);
       };
@@ -137,12 +154,65 @@ export async function verifyLinuxWrapperPropagation(
       let beforeCleanup;
       let remaining;
       try {
-        const deadline = Date.now() + timeoutMs;
+        // Capture the accepted launch root once. An observation gap must never
+        // authorize a later process that merely reuses the numeric leader PID.
+        initial = processes(true).find((row) => row.pid === child.pid);
+        if (initial) owned.set(initial.pid, initial);
         while (!closed && !error && Date.now() < deadline) {
-          collect();
+          const proposal = acquired
+            ? undefined
+            : readWrapperControl(`${stem}.proposal.json`);
+          const rows = collect();
+          if (proposal !== undefined) {
+            if (
+              !proposal ||
+              Object.keys(proposal).length !== 3 ||
+              proposal.control !== name ||
+              !Number.isSafeInteger(proposal.pid) ||
+              proposal.pid <= 0 ||
+              typeof proposal.start !== "string" ||
+              !/^\d+$/u.test(proposal.start)
+            )
+              throw new Error(
+                "Linux wrapper control acquisition proposal is invalid",
+              );
+            const actor = rows.find(
+              (row) => row.pid === proposal.pid && row.start === proposal.start,
+            );
+            // The proposal cannot seed ownership. Require the actual collected
+            // actor AND its still-live retained parent chain to the initial root.
+            let ancestor = actor;
+            const seen = new Set();
+            while (
+              ancestor &&
+              ancestor.pid !== initial?.pid &&
+              !seen.has(ancestor.pid)
+            ) {
+              seen.add(ancestor.pid);
+              ancestor = rows.find(
+                (row) =>
+                  row.pid === ancestor.parent &&
+                  BigInt(row.start) <= BigInt(ancestor.start),
+              );
+            }
+            if (
+              initial &&
+              actor &&
+              actor.pid !== initial.pid &&
+              ancestor?.pid === initial.pid &&
+              ancestor.start === initial.start
+            ) {
+              publishWrapperControl(`${stem}.acquired.json`, proposal);
+              acquired = actor;
+            }
+          }
           await delay();
         }
         remaining = collect();
+        if (!acquired)
+          failures.push(
+            new Error("Linux wrapper control acquisition did not complete"),
+          );
         beforeCleanup = { outcome, closed, remaining };
         if (!closed || remaining.length)
           failures.push(
@@ -193,7 +263,7 @@ export async function verifyLinuxWrapperPropagation(
       try {
         await writeFile(
           path.join(root, `${name}.json`),
-          `${JSON.stringify({ beforeCleanup, outcome, closed, stdout, stderr, remaining, launchError: error?.message, failures: failures.map((failure) => failure.message) })}\n`,
+          `${JSON.stringify({ beforeCleanup, acquired, outcome, closed, stdout, stderr, remaining, launchError: error?.message, failures: failures.map((failure) => failure.message) })}\n`,
         );
       } catch (recording) {
         failures.push(recording);
