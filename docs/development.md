@@ -175,6 +175,16 @@ bootstrap equivalence does not prove fixture interception equivalence. Run
 `npm test -- test/unit/renderer-fixture-consumers.test.ts` for actual headless
 bundle/control checks, including deliberately stale-importer negative controls.
 
+Session-selection notifications describe ownership, not Surface adoption or host
+command readiness: panes may report a started session before their mount returns.
+The tab-removal and startup-title fixture entries observe successful registration
+of the actual host tab-command callback through their supplied bridge; their
+independent arrival observers never establish readiness. Tab-removal retains its
+held-Surface, early-command and held-renderer controls and original deadlines.
+Headless emitted-entry/production-callback coverage:
+`node node_modules/vitest/vitest.mjs run test/unit/tab-removal-host-readiness.test.ts`.
+This fixture observation does not change the documented first-tab command loss.
+
 ### Opt-in native test suites
 
 Several specialized integration suites are skipped by default and enabled via environment variables:

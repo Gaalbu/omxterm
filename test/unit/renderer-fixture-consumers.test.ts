@@ -95,25 +95,42 @@ function fontControls(result: Renderer) {
 }
 function tabControls(result: Renderer) {
   const control = result.globals.__omxtermTabRemovalControl as {
-    state(): { heldSurface: boolean; newCommands: number };
+    state(): { heldSurface: boolean; newCommands: number; hostReady: boolean };
+    waitForHost(): Promise<void>;
     release(): void;
     holdRendererBoundary(): Promise<never>;
   };
   expect(control).toBeDefined();
-  expect(control.state()).toEqual({ heldSurface: false, newCommands: 0 });
+  expect(control.state()).toEqual({
+    heldSurface: false,
+    newCommands: 0,
+    hostReady: false,
+  });
+  expect(control.waitForHost).toBeTypeOf("function");
+  // The thin entry installs readiness even if its Surface importer regresses.
+  // Require the actual emitted hold wrapper, not its independent observer.
+  expect(
+    result.code.includes("actual-surface-held"),
+    "missing actual Surface hold",
+  ).toBe(true);
   expect(control.release).toBeTypeOf("function");
   expect(result.onTabCommand).toHaveBeenCalledOnce();
   result.onTabCommand.mock.calls[0]![0]({ action: "new" });
   expect(control.state().newCommands).toBe(1);
+  expect(control.state().hostReady).toBe(false);
   void control.holdRendererBoundary();
   expect(result.log).toHaveBeenCalledExactlyOnceWith(
     "__OMXTERM_TAB_REMOVAL_CONTROL__held-renderer-boundary",
   );
   expect(result.addEventListener).toHaveBeenCalledExactlyOnceWith(
     "pagehide",
-    result.remove,
+    expect.any(Function),
     { once: true },
   );
+  const pagehide = result.addEventListener.mock.calls[0]![1] as () => void;
+  pagehide();
+  expect(result.remove).toHaveBeenCalledOnce();
+  expect(control.state().hostReady).toBe(false);
 }
 
 it("bundles the real cancellation Surface lease and settlement hooks", async () => {
