@@ -1147,10 +1147,49 @@ whole reload. Runtime scrollback reduction, including zero, uses the selected
 Surface's in-memory core behavior described above; programming-ligature changes
 use the existing Restty runtime setter without reloading fonts, and Option Key
 Mode changes only subsequent keyboard events. OMXTerm never migrates, repairs,
-rewrites, or silently ignores User Configuration. The same surface also carries
+rewrites, or silently ignores User Configuration on its own; only an explicit
+change in Settings writes it (see below). The same surface also carries
 non-fatal warnings for a valid configuration that stays fully active — currently
 a keybind shadowing a PTY control key — which inform without activating any
 default.
+
+**Settings** (application menu, **Settings…**) is a modal editor of the same
+`config.json`. It covers `confirmClose`, `logLevel`, `windowsShell` (Windows),
+`font.family`, `font.size`, `font.lineHeight`, `font.ligatures`,
+`terminal.padding`, `scrollback.lines`, `keyboard.optionAsAlt` (macOS), the
+new-window defaults `window.showTitleBar`, `window.showTabBar` and
+`window.alwaysOnTop`, and `theme.path`; keybinds, transparency and blur stay
+file-only in this editor. Changing a control saves at once without a separate
+confirmation; a cleared text or number field removes the entry so its default
+applies. The **Config File** page shows the document with an explicit **Save**
+and **Reload File**. Writes follow ADR 0003: full startup validation before an
+atomic replacement, a field-scoped change that keeps every other entry, a raw
+save refused when the file changed since its draft was loaded, and a dirty draft
+never replaced by other changes or late Save/Reload File responses. A final
+revision/presence comparison after write preparation rejects detected external
+changes without retry; it is not a cross-process atomic compare-and-swap.
+Settings preserves configuration symlinks, including dangling links, by refusing
+writes and directing the user to manual editing and reload. Pending graphical
+responses retain newer or unrelated field drafts, and saving feedback remains
+pending until queued changes settle. Graphical requests go directly to main's
+serialized service, so a reopened view reads after already-requested writes
+rather than overtaking undispatched work in a removed view. Raw operations are
+single-flight while typing remains usable; newer edits retain the saved bytes'
+revision as their base and are explicitly reported as not saved. Snapshot text uses the same
+UTF-8 decoding as the loader (omitting a leading BOM), while revisions identify
+the exact persisted bytes; snapshot parsing happens before writing. Closed
+views ignore late results.
+The status line distinguishes saved and applied, saved but not applied (even
+when reload throws after persistence), new-window/session-only settings, and
+settings that need a restart for open tabs. Both save routes include returned
+notices and deferred lifetimes of changed effective values, not no-op spelling
+changes. While Settings is
+open it owns modal input like About, and the auxiliary panel stays visible
+but inert: terminal-directed actions and tab navigation are ignored,
+application Copy, Paste and Select All edit its focused field and never reach
+the terminal, and closing returns focus to the selected terminal. Settings has
+no default shortcut. Diagnostics shown in Settings never enter operational
+logs.
 
 Operational logs are JSONL under `$XDG_STATE_HOME/omxterm/logs`, falling back to
 `~/.local/state/omxterm/logs`. Levels are `error`, `info`, and `debug`. Only the

@@ -81,6 +81,10 @@ and the [configuration guide](docs/configuration.md).
 user's preferences. OMXTerm creates an initial kit when no configuration exists;
 subsequent edits belong to the user.
 
+**Settings** — The in-app editor of User Configuration. A deliberate change
+validates, writes and reloads `config.json`; opening OMXTerm or Settings never
+rewrites an existing document. Initial-kit creation is the startup exception.
+
 **User Configuration Reload** — A manual, serialized load and validation
 followed by sequential application. Validation rejection keeps active settings;
 application-time exceptions can leave partial updates. Surfaces keep their
