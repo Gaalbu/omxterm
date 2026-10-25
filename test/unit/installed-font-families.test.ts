@@ -242,25 +242,6 @@ describe("installed font-family command seams", () => {
     }
   });
 
-  it("keeps optional fallback bytes within the supplied aggregate budget", async () => {
-    const run = vi.fn(async (_file: string, arguments_: readonly string[]) => {
-      const requested = arguments_.at(-1)?.split(":", 1)[0] ?? "";
-      return {
-        stdout: `${requested}\u001f80\u001f0\u001f/${requested}.ttf\n`,
-      };
-    });
-
-    const fallbacks = await installedFallbackFontData(
-      run,
-      "linux",
-      10,
-      async () => new Uint8Array(6),
-    );
-
-    expect(fallbacks).toHaveLength(1);
-    expect(fallbacks[0]?.data).toHaveLength(6);
-  });
-
   it("uses fontconfig exact-family and regular-face output without a shell", async () => {
     const run = vi.fn(async (file: string, arguments_: readonly string[]) => {
       expect(file).toBe("/usr/bin/fc-match");
@@ -295,5 +276,161 @@ describe("installed font-family command seams", () => {
         readableFace,
       ),
     ).resolves.toBeUndefined();
+  });
+});
+
+describe("installed fallback font data", () => {
+  it("loads Source Han on Linux when the other fallback families only resolve to substitutes", async () => {
+    const data = new Uint8Array([1, 2, 3]);
+    const fallbacks = await installedFallbackFontData(
+      async (_file, args) => ({
+        stdout: `${args.at(-1) === "Source Han Sans CN:style=Regular" ? "Source Han Sans CN" : "Noto Sans"}\u001f80\u001f0\u001f/fallback.otf\n`,
+      }),
+      "linux",
+      10,
+      async () => data,
+    );
+
+    expect(fallbacks).toEqual([{ family: "Source Han Sans CN", data }]);
+  });
+
+  it.each([
+    {
+      platform: "linux",
+      families: [
+        "Noto Color Emoji",
+        "Noto Sans CJK SC",
+        "DejaVu Sans Mono",
+        "Source Han Sans CN",
+      ],
+    },
+    {
+      platform: "darwin",
+      families: ["Apple Color Emoji", "Hiragino Sans GB", "Apple Symbols"],
+    },
+    {
+      platform: "win32",
+      families: ["Segoe UI Emoji", "Microsoft YaHei UI", "Segoe UI Symbol"],
+    },
+  ])(
+    "preserves available fallback precedence on $platform",
+    async ({ platform, families }) => {
+      const fallbacks = await installedFallbackFontData(
+        async (_file, args, options) => {
+          const family =
+            platform === "linux"
+              ? args.at(-1)!.split(":", 1)[0]!
+              : platform === "darwin"
+                ? args.at(-2)!
+                : options!.environment!.OMXTERM_FONT_FAMILY!;
+          return {
+            stdout:
+              platform === "linux"
+                ? `${family}\u001f80\u001f0\u001f/fallback.ttf\n`
+                : JSON.stringify({
+                    status: "available",
+                    family,
+                    path: "/fallback.ttf",
+                    ...(platform === "darwin"
+                      ? { cellWidth: 8, cellHeight: 16 }
+                      : {}),
+                  }),
+          };
+        },
+        platform,
+        100,
+        readableFace,
+      );
+
+      expect(fallbacks.map((font) => font.family)).toEqual(families);
+    },
+  );
+
+  it.each([
+    { name: "missing", output: "Noto Sans\u001f80\u001f0\u001f/font.otf\n" },
+    {
+      name: "case-mismatched",
+      output: "source han sans cn\u001f80\u001f0\u001f/font.otf\n",
+    },
+    {
+      name: "bold-only",
+      output: "Source Han Sans CN\u001f200\u001f0\u001f/font.otf\n",
+    },
+    { name: "lookup failure", output: undefined },
+    {
+      name: "invalid font data",
+      output: "Source Han Sans CN\u001f80\u001f0\u001f/font.otf\n",
+    },
+  ])(
+    "keeps existing Linux fallbacks when Source Han has $name",
+    async ({ name, output }) => {
+      const fallbacks = await installedFallbackFontData(
+        async (_file, args) => {
+          const family = args.at(-1)!.split(":", 1)[0]!;
+          if (family === "Source Han Sans CN") {
+            if (output === undefined) throw new Error("lookup unavailable");
+            return { stdout: output };
+          }
+          return { stdout: `${family}\u001f80\u001f0\u001f/font.ttf\n` };
+        },
+        "linux",
+        100,
+        async (face) => {
+          if (
+            face.family === "Source Han Sans CN" &&
+            name === "invalid font data"
+          )
+            throw new Error("invalid font data");
+          return readableFace(face);
+        },
+      );
+
+      expect(fallbacks.map((font) => font.family)).toEqual([
+        "Noto Color Emoji",
+        "Noto Sans CJK SC",
+        "DejaVu Sans Mono",
+      ]);
+    },
+  );
+
+  it.each([12, 13])(
+    "admits Source Han only within the remaining %i-byte budget",
+    async (budget) => {
+      const fallbacks = await installedFallbackFontData(
+        async (_file, args) => ({
+          stdout: `${args.at(-1)!.split(":", 1)[0]}\u001f80\u001f0\u001f/font.ttf\n`,
+        }),
+        "linux",
+        budget,
+        async (face) =>
+          new Uint8Array(face.family === "Source Han Sans CN" ? 4 : 3),
+      );
+
+      expect(fallbacks.map((font) => font.family)).toEqual([
+        "Noto Color Emoji",
+        "Noto Sans CJK SC",
+        "DejaVu Sans Mono",
+        ...(budget === 13 ? ["Source Han Sans CN"] : []),
+      ]);
+    },
+  );
+
+  it("keeps optional fallback bytes within the supplied aggregate budget", async () => {
+    const run = vi.fn(async (_file: string, arguments_: readonly string[]) => {
+      const requested = arguments_.at(-1)?.split(":", 1)[0] ?? "";
+      return {
+        stdout: `${requested}\u001f80\u001f0\u001f/${requested}.ttf\n`,
+      };
+    });
+
+    const fallbacks = await installedFallbackFontData(
+      run,
+      "linux",
+      10,
+      async () => new Uint8Array(6),
+    );
+
+    expect(fallbacks).toHaveLength(1);
+    expect(fallbacks[0]?.data).toHaveLength(6);
   });
 });

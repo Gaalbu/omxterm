@@ -95,6 +95,7 @@ You can also adjust line height (`"lineHeight": 1.1`), disable programming ligat
 ```
 
 - **Font family:** by default, OMXTerm uses its bundled `FiraCode Nerd Font Mono`. To use an installed system font, set `font.family` to its exact, case-sensitive family name.
+- **Linux missing-glyph coverage:** after bundled fonts, OMXTerm tries installed `Noto Color Emoji`, `Noto Sans CJK SC`, `DejaVu Sans Mono`, and `Source Han Sans CN`, in that order. Each needs an exact regular-family match and must fit the fallback-byte budget. Source Han can provide CJK glyphs when Noto CJK is absent; coverage depends on the available fonts, not an automatic installation or a guarantee of every CJK character. You do not need to change `font.family` to use these fallbacks.
 - **Line height and font family:** apply immediately to new tabs; restart OMXTerm to apply them to already-open tabs.
 - **Temporary zoom:** use `Cmd++` / `Cmd+-` (`Ctrl++` / `Ctrl+-` on Linux/Windows) to zoom a window temporarily, and `Cmd+0` / `Ctrl+0` (**Actual Size**) to reset to your configured size.
 
