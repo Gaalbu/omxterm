@@ -1,4 +1,5 @@
 import type { BrowserWindow } from "electron";
+import { recordResttyHostPhase as phase } from "./restty-host-phases";
 import type { LaunchRequest } from "../../src/main/launch-request";
 import type { LocalTerminalSession } from "../../src/main/local-terminal-session";
 import { terminalIpc } from "../../src/shared/terminal-ipc";
@@ -81,6 +82,7 @@ export function outputStressLaunchRequest(
   };
 }
 
+// oxlint-disable-next-line max-lines-per-function -- Inline phase receipts preserve the existing oracle's ordering without a new orchestration abstraction.
 export function createOutputStressHarness({
   sessionIndex = 2,
   checkpoints = OUTPUT_CHECKPOINTS,
@@ -169,6 +171,7 @@ export function createOutputStressHarness({
       ) => Promise<void>;
     }): Promise<OutputStressEvidence> {
       const { window, waitFor } = options;
+      phase("output-session", "begin");
       if (!options.existingSession)
         window.webContents.send(terminalIpc.tabCommand, { action: "new" });
       await waitFor(
@@ -177,13 +180,18 @@ export function createOutputStressHarness({
           (options.resizes[sessionIndex]?.length ?? 0) > 0,
         "output-stress Restty tab",
       );
+      phase("output-session", "complete");
+      phase("output-producer-ready", "begin");
       await waitFor(source.ready, "output producer readiness");
+      phase("output-producer-ready", "complete");
       const terminal = options.terminals[sessionIndex]!;
+      phase("output-configuration", "begin");
       const scrollbackLines: unknown =
         await window.webContents.executeJavaScript(
           "window.omxterm.terminal.configuration().then((value) => value.scrollbackLines)",
           true,
         );
+      phase("output-configuration", "complete");
       if (scrollbackLines !== 10_000)
         throw new Error("Output fixture history configuration changed");
       const columns = options.resizes[sessionIndex]!.at(-1)!.cols;
@@ -209,11 +217,15 @@ export function createOutputStressHarness({
           >["prefixAcknowledgement"]
         | undefined;
       const resizesBefore = options.resizes[sessionIndex]!.length;
+      phase("output-renderer-stall", "begin");
       const rendererStall = window.webContents.executeJavaScript(
         "{ const end = performance.now() + 350; while (performance.now() < end) {} }",
         true,
       );
-      void rendererStall.catch(() => undefined);
+      void rendererStall.then(
+        () => phase("output-renderer-stall", "complete"),
+        () => undefined,
+      );
       await new Promise((resolve) => setTimeout(resolve, 25));
       holdAcknowledgements = true;
       terminal.write(refit ? `g${refit.prefixUnits};` : "g");
@@ -227,45 +239,59 @@ export function createOutputStressHarness({
             });
           }, 100);
       try {
+        phase("output-high-water", "begin");
         await new Promise((resolve) => setTimeout(resolve, 400));
         await waitFor(
           () => (terminal.outputFlowMetrics?.().pauseCount ?? 0) > 0,
           "native high-water pause while output acknowledgements are held",
         );
+        phase("output-high-water", "complete");
       } finally {
         clearTimeout(resizeTimer);
         releaseAcknowledgements();
       }
+      phase("output-resume", "begin");
       await waitFor(
         () => (terminal.outputFlowMetrics?.().resumeCount ?? 0) > 0,
         "output backpressure resume",
       );
+      phase("output-resume", "complete");
       try {
         if (refit) {
           prefixAcknowledgement = await refit.refit();
           terminal.write("r");
         }
         for (let batch = 0; batch < checkpoints; batch++) {
+          phase("checkpoint-source", "begin", batch);
           await waitFor(
             () => source.checkpoints() === batch + 1,
             `source checkpoint ${batch}`,
           );
+          phase("checkpoint-source", "complete", batch);
+          phase("checkpoint-ack", "begin", batch);
           await waitFor(
             () => terminal.outputFlowMetrics?.().pendingBytes === 0,
             `checkpoint ${batch} complete original output acknowledgement`,
           );
+          phase("checkpoint-ack", "complete", batch);
           copyPendingBytes = terminal.outputFlowMetrics!().pendingBytes;
           expectingCopy = batch;
+          phase("checkpoint-copy", "begin", batch);
           window.webContents.send(terminalIpc.clipboardAction, "select-all");
           window.webContents.send(terminalIpc.clipboardAction, "copy");
           await waitFor(() => {
             if (destinationError) throw destinationError;
             return destination.length === batch + 1;
           }, `actual copied destination checkpoint ${batch}`);
+          phase("checkpoint-copy", "complete", batch);
           if (batch + 1 < checkpoints) terminal.write("n");
         }
       } finally {
-        if (refit) await refit.restore();
+        if (refit) {
+          phase("refit-cleanup", "begin");
+          await refit.restore();
+          phase("refit-cleanup", "complete");
+        }
       }
       const flow = terminal.outputFlowMetrics?.();
       if (!flow) throw new Error("Output flow metadata is unavailable");
@@ -273,16 +299,20 @@ export function createOutputStressHarness({
         throw new Error(
           "Output ACK cumulative end differs from original source bytes",
         );
+      phase("output-memory", "begin");
       const rendererHeapUsedBytes = (await window.webContents.executeJavaScript(
         "performance.memory?.usedJSHeapSize ?? null",
         true,
       )) as number | null;
+      phase("output-memory", "complete");
       const memory = process.memoryUsage();
+      phase("output-producer-exit", "begin");
       terminal.write("x");
       await waitFor(
         () => producerExit?.exitCode === 0 && producerExit.signal === 0,
         "output producer clean exit",
       );
+      phase("output-producer-exit", "complete");
       return {
         source: source.evidence(),
         destination: {

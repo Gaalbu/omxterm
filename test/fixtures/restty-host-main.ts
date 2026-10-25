@@ -34,6 +34,7 @@ import * as resttyWindows from "./restty-host-window";
 import * as resttyCancellation from "./restty-host-cancellation";
 import * as resttyOracles from "./restty-host-oracle-scenarios";
 import { createHostOracleSourceControl } from "./restty-host-oracle-controls";
+import { recordResttyHostPhase as phase } from "./restty-host-phases";
 
 const prefix = "__OMXTERM_RESTTY_HOST_RESULT__";
 const root = __dirname;
@@ -273,9 +274,11 @@ async function completeFocusedScenario(
   return focusedCancellation || Boolean(oracle);
 }
 
+phase("app-ready", "begin");
 app
   .whenReady()
   .then(async () => {
+    phase("app-ready", "complete");
     session.defaultSession.setPermissionRequestHandler(
       (_contents, _permission, callback) => {
         permissionRequests += 1;
