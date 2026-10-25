@@ -158,7 +158,7 @@ it.each(["cancel", "about", "settings"] as const)(
           ).not.toBeNull(),
         );
         document
-          .querySelector<HTMLButtonElement>("#settings-tab-file")!
+          .querySelector<HTMLButtonElement>("#settings-tab-config-file")!
           .click();
         const field = document.querySelector<HTMLTextAreaElement>(
           ".settings-dialog textarea",
