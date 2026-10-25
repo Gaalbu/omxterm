@@ -1,5 +1,9 @@
 import { mountWindowChrome, type WindowChromeBridge } from "./window-chrome";
-import { mountAboutDialog } from "./about/about-dialog";
+import { mountWindowDialogs } from "./window-dialogs";
+import type { SettingsBridge } from "../shared/settings";
+import { surfaceLabels, windowLanguage } from "./renderer-language";
+import { DEFAULT_LANGUAGE } from "../shared/i18n";
+import { bindTerminalWindowLanguage } from "./terminal-window-language";
 import type { AboutBridge } from "../shared/about";
 import type { TerminalSessionAdapter } from "../terminal-surface/terminal-session-adapter";
 import {
@@ -10,6 +14,7 @@ import {
   type TerminalSurfaceOptions,
 } from "../terminal-surface/terminal-surface";
 import type {
+  TerminalClipboardAction,
   TerminalFontZoom,
   TerminalSessionId,
   TerminalTabCommand,
@@ -24,8 +29,9 @@ import {
   TERMINAL_TAB_DRAG_DATA_TYPE,
   type TerminalTabs,
 } from "./terminal-tabs";
-import { createSnippetsView } from "./snippets-sidebar";
-import { createAuxiliaryPanel, type AuxiliaryPanel } from "./auxiliary-panel";
+import { mountSnippetsPanel } from "./snippets-host";
+import type { SnippetPreview } from "./snippet-preview";
+import type { AuxiliaryPanel } from "./auxiliary-panel";
 import { renderUserFileErrorBanner } from "./user-file-error-banner";
 import {
   createLocalImagePreview,
@@ -50,6 +56,7 @@ export interface TerminalWindowPageElements {
 
 interface TerminalWindowPageOptions {
   readonly about?: AboutBridge;
+  readonly settings?: SettingsBridge;
   readonly createAdapter: (
     fontConfigurationId?: string,
   ) => ElectronTerminalAdapter;
@@ -69,6 +76,7 @@ interface TerminalWindowPageOptions {
     listener: (configuration: TerminalRendererConfiguration) => void,
   ) => () => void;
   readonly userFileErrorBanner?: HTMLElement;
+  readonly surfaceFailureBanner?: HTMLElement;
   readonly clipboard?: TerminalClipboard;
   readonly subscribeToClipboardActions?: (
     listener: (action: "copy" | "paste" | "select-all") => void,
@@ -122,9 +130,15 @@ export function mountTerminalWindowPage(
   let removeSnippetsToggleListener: (() => void) | undefined;
   let removeLocalImageOpenListener: (() => void) | undefined;
   let localImagePreview: LocalImagePreview | undefined;
-  let about: ReturnType<typeof mountAboutDialog>;
+  let dialogs: ReturnType<typeof mountWindowDialogs> | undefined;
+  // Buffered bridge opens replay inside construction, before `dialogs` is
+  // assigned. Activity must already own exclusion, chrome and hover then.
+  let dialogsActive = false;
+  let snippetPreview: SnippetPreview | undefined;
+  const modalActive = () =>
+    dialogsActive || (snippetPreview?.isActive() ?? false);
   const previewActive = () =>
-    (localImagePreview?.isActive() ?? false) || (about?.isActive() ?? false);
+    (localImagePreview?.isActive() ?? false) || modalActive();
   const hoverAvailabilityListeners = new Set<() => void>();
   let fontConfigurationId = options.configuration?.fontConfigurationId;
   let activeFontFamily = options.configuration?.fontFamily;
@@ -154,6 +168,13 @@ export function mountTerminalWindowPage(
     );
   }
 
+  const language = windowLanguage(options.configuration);
+  const pageLabels = bindTerminalWindowLanguage(
+    page.document,
+    elements.tabStrip,
+    language,
+    options,
+  );
   const surfaceOptions: TerminalSurfaceOptions = {
     ...activeSurfaceConfiguration,
     background: "host",
@@ -175,20 +196,18 @@ export function mountTerminalWindowPage(
             },
           },
           onLocalImageActivation: (source: LocalImageActivation) => {
-            if (!about?.isActive()) void localImagePreview?.open(source);
+            if (!modalActive()) void localImagePreview?.open(source);
           },
         }
       : {}),
-    ...(options.onSurfaceFailure
-      ? { onFatalError: options.onSurfaceFailure }
-      : {}),
+    ...pageLabels.surfaceOptions,
   };
 
   const tabs: TerminalTabs = createTerminalTabs(
     { strip: elements.tabStrip, container: elements.tabsContainer },
     {
       createAdapter: () => options.createAdapter(fontConfigurationId),
-      canFocus: () => !disposed && !about?.isActive(),
+      canFocus: () => !disposed && !modalActive(),
       canAutoFocus: (unchangedFocus) =>
         !previewActive() && (unchangedFocus || !auxiliaryPanel?.ownsFocus()),
       mount,
@@ -208,46 +227,43 @@ export function mountTerminalWindowPage(
     },
   );
 
-  const chrome = options.chrome
-    ? mountWindowChrome(page.document, options.chrome, () => {
-        if (!previewActive() && !auxiliaryPanel?.ownsFocus())
-          tabs.focusSelected();
-      })
-    : undefined;
-
-  if (options.loadLocalImage) {
-    localImagePreview = createLocalImagePreview(page.document, {
-      loadImage: options.loadLocalImage,
-      focusTerminal: () => tabs.focusSelected(),
-      onActivityChange: () => {
-        chrome?.setPreviewActive(previewActive());
-        auxiliaryPanel?.setBlocked(previewActive());
-        for (const listener of hoverAvailabilityListeners) listener();
-      },
-    });
-    removeLocalImageOpenListener = options.subscribeToLocalImageOpen?.(() => {
-      if (!about?.isActive()) void localImagePreview?.open();
-    });
-  }
-
-  about = mountAboutDialog(
-    page.document,
-    options.about,
-    () => !disposed && !localImagePreview?.isActive(),
-    {
-      focusTerminal: tabs.focusSelected,
-      onActivityChange: (active) => {
-        chrome?.setPreviewActive(
-          active || (localImagePreview?.isActive() ?? false),
-        );
-        auxiliaryPanel?.setBlocked(previewActive());
-        for (const listener of hoverAvailabilityListeners) listener();
-      },
-    },
-  );
   const onPageFocus = () => {
     if (!previewActive() && !auxiliaryPanel?.ownsFocus()) tabs.focusSelected();
   };
+  const chrome = options.chrome
+    ? mountWindowChrome(page.document, options.chrome, onPageFocus, language)
+    : undefined;
+
+  const onOverlayActivity = () => {
+    chrome?.setPreviewActive(previewActive());
+    auxiliaryPanel?.setBlocked(previewActive());
+    for (const listener of hoverAvailabilityListeners) listener();
+  };
+  if (options.loadLocalImage) {
+    localImagePreview = createLocalImagePreview(page.document, {
+      language,
+      loadImage: options.loadLocalImage,
+      focusTerminal: () => tabs.focusSelected(),
+      onActivityChange: onOverlayActivity,
+    });
+    removeLocalImageOpenListener = options.subscribeToLocalImageOpen?.(() => {
+      if (!modalActive()) void localImagePreview?.open();
+    });
+  }
+
+  dialogs = mountWindowDialogs(
+    page.document,
+    options,
+    () => !disposed && !previewActive(),
+    {
+      language,
+      focusTerminal: tabs.focusSelected,
+      onActivityChange(active) {
+        dialogsActive = active;
+        onOverlayActivity();
+      },
+    },
+  );
   const removeFileDrops = installFileDrops(
     page.document,
     previewActive,
@@ -262,15 +278,18 @@ export function mountTerminalWindowPage(
     removeFileDrops();
     removeGuardedActionListeners?.();
     removeConfigurationUpdateListener?.();
+    pageLabels.dispose();
     removeTabCommandListener?.();
     removeTabTitleListener?.();
     removeSnippetsToggleListener?.();
     removeLocalImageOpenListener?.();
-    about?.dispose();
-    about = undefined;
+    dialogs?.dispose();
+    dialogs = undefined;
     chrome?.dispose();
     localImagePreview?.dispose();
     localImagePreview = undefined;
+    snippetPreview?.dispose();
+    snippetPreview = undefined;
     auxiliaryPanel?.dispose();
     auxiliaryPanel = undefined;
     tabs.dispose();
@@ -284,6 +303,7 @@ export function mountTerminalWindowPage(
   removeConfigurationUpdateListener = options.subscribeToConfigurationUpdates?.(
     (configuration) => {
       if (disposed) return;
+      language.set(configuration.language);
       fontConfigurationId = configuration.fontConfigurationId;
       if (!chrome)
         page.document.documentElement.style.setProperty(
@@ -324,11 +344,12 @@ export function mountTerminalWindowPage(
       options,
       tabs,
       previewActive,
+      (action) => dialogs?.editClipboard(action, options.clipboard),
       (action) => auxiliaryPanel?.clipboardAction(action) ?? false,
     );
     removeTabCommandListener = options.subscribeToTabCommands?.((command) => {
       if (
-        about?.isActive() &&
+        modalActive() &&
         ["new", "next", "previous", "select"].includes(command.action)
       )
         return;
@@ -336,28 +357,16 @@ export function mountTerminalWindowPage(
     });
     if (options.snippets) {
       const snippets = options.snippets;
-      const panel = createAuxiliaryPanel(snippets.element, {
-        content: snippets.element.parentElement!,
-        focusTerminal: tabs.focusSelected,
-        ...(options.clipboard ? { clipboard: options.clipboard } : {}),
-        views: [
-          {
-            id: "snippets",
-            label: "Snippets",
-            create: (isInteractive) =>
-              createSnippetsView(page.document, {
-                loadSnippets: snippets.load,
-                isInteractive,
-                inject: (snippet) => {
-                  if (previewActive()) return;
-                  tabs.injectSnippet(snippet.body, { submit: snippet.execute });
-                  tabs.focusSelected();
-                },
-              }),
-          },
-        ],
+      const mounted = mountSnippetsPanel(page.document, snippets, {
+        tabs,
+        language,
+        clipboard: options.clipboard,
+        blocked: previewActive,
+        onPreviewActivity: onOverlayActivity,
       });
+      const panel = mounted.panel;
       auxiliaryPanel = panel;
+      snippetPreview = mounted.preview;
       panel.setBlocked(previewActive());
       removeSnippetsToggleListener = snippets.subscribeToToggle(() =>
         panel.toggle("snippets"),
@@ -373,14 +382,18 @@ function subscribeToGuardedActions(
   options: TerminalWindowPageOptions,
   tabs: TerminalTabs,
   blocked: () => boolean,
-  panelClipboard: (action: "copy" | "paste" | "select-all") => boolean,
+  editBlocked: (action: TerminalClipboardAction) => void,
+  panelClipboard: (action: TerminalClipboardAction) => boolean,
 ): () => void {
   const removals = [
     options.subscribeToFontZoom?.((command) => {
       if (!blocked()) tabs.zoom(command);
     }),
+    // While an overlay owns input, editing goes to its focused field, never
+    // to the terminal.
     options.subscribeToClipboardActions?.((action) => {
-      if (!blocked() && !panelClipboard(action)) tabs.clipboardAction(action);
+      if (blocked()) editBlocked(action);
+      else if (!panelClipboard(action)) tabs.clipboardAction(action);
     }),
     options.subscribeToTabBarToggle?.(() => {
       if (!blocked()) tabs.toggleTabBar();
@@ -460,6 +473,7 @@ function sameSurfaceConfiguration(
   const firstSystemFont = first.appearance.systemFont;
   const secondSystemFont = second.appearance.systemFont;
   return (
+    first.labels === second.labels &&
     first.appearance.fontSize === second.appearance.fontSize &&
     first.appearance.lineHeight === second.appearance.lineHeight &&
     first.appearance.ligatures === second.appearance.ligatures &&
@@ -483,6 +497,7 @@ function surfaceConfiguration(
   configuration: TerminalRendererConfiguration,
 ): TerminalSurfaceConfiguration {
   return {
+    labels: surfaceLabels(configuration.language ?? DEFAULT_LANGUAGE),
     appearance: {
       fontSize: configuration.fontSize,
       lineHeight: configuration.fontLineHeight,

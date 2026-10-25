@@ -1,6 +1,7 @@
 import "./terminal-window.css";
 import "./window-chrome.css";
 import "./about/about-dialog.css";
+import "./settings/settings-dialog.css";
 import { createElectronTerminalAdapter } from "./electron-terminal-adapter";
 import { mountTerminalWindowPage } from "./terminal-window-host";
 import { renderUserFileErrorBanner } from "./user-file-error-banner";
@@ -33,13 +34,11 @@ export function startTerminalWindow(bridge: Window["omxterm"]): void {
       {
         configuration,
         about: bridge.about,
+        settings: bridge.settings,
         chrome: bridge.terminal,
         mount: mountResttyTerminalSurface,
         loadFontData: bridge.terminal.fontData,
-        onSurfaceFailure(message) {
-          surfaceFailure.textContent = message;
-          surfaceFailure.hidden = false;
-        },
+        surfaceFailureBanner: surfaceFailure,
         createAdapter: (configurationId) =>
           createElectronTerminalAdapter(bridge.terminal, configurationId),
         subscribeToFontZoom: bridge.terminal.onFontZoom,
@@ -73,8 +72,12 @@ export function startTerminalWindow(bridge: Window["omxterm"]): void {
       },
     );
     void host.ready.catch((error: unknown) => {
-      host.dispose();
-      throw new Error("Failed to mount the Terminal Surface", { cause: error });
+      // Reported Surface failures keep live notice translation until teardown.
+      // Unreported host-setup failures still dispose and propagate.
+      if (surfaceFailure.hidden) {
+        host.dispose();
+        throw new Error("Failed to mount the Terminal Surface", { cause: error });
+      }
     });
   });
 }

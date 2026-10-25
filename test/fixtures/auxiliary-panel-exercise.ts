@@ -94,6 +94,7 @@ function createScenario(options: PanelOptions) {
     reloadUserConfiguration: options.reload,
     openLocalImage: () => application.openLocalImageInSelectedWindow(),
     showAbout: options.showAbout,
+    showSettings: unexpected,
   };
   const invocations = terminalActionInvocations(actions);
   deliverKeybindsFromKeyEvents(
@@ -184,7 +185,9 @@ export async function exerciseAuxiliaryPanel(options: PanelOptions) {
     const originalColumns = sizes[1]!.at(-1)!.cols;
     clickMenu("Toggle Snippets");
     await until(`${shown} && ${searchFocused}`);
-    await until("!!document.querySelector('#snippets-sidebar li button')");
+    await until(
+      "!!document.querySelector('#snippets-sidebar li .snippet-activate')",
+    );
     assert.equal(await width(), 280);
     await wait(
       () => sizes[1]!.at(-1)!.cols < originalColumns,
@@ -389,7 +392,7 @@ async function exerciseOverlays(s: Scene) {
   clickMenu("Paste");
   await consumed(expected(["toggle", "clipboard"]));
   await evaluate(
-    "document.querySelector('#snippets-sidebar li button').click(); document.querySelector('.auxiliary-header button').click()",
+    "document.querySelector('#snippets-sidebar li .snippet-activate').click(); document.querySelector('.auxiliary-header button').click()",
   );
   assert.equal(await evaluate(shown), true);
   assert.equal(input.join(""), "");

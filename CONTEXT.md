@@ -81,11 +81,21 @@ and the [configuration guide](docs/configuration.md).
 user's preferences. OMXTerm creates an initial kit when no configuration exists;
 subsequent edits belong to the user.
 
+**Settings** — The in-app editor of User Configuration. A deliberate change
+validates, writes and reloads `config.json`; opening OMXTerm or Settings never
+rewrites an existing document. Its language selector and editor text share the
+Interface Language, relabeling in place while retaining drafts and pending
+operations. Initial-kit creation is the startup exception.
+
 **User Configuration Reload** — A manual, serialized load and validation
 followed by sequential application. Validation rejection keeps active settings;
 application-time exceptions can leave partial updates. Surfaces keep their
 creation-time font family and line height; new tabs use the latest values. A
 family change during pending font acquisition can fail an initializing tab.
+
+**Interface Language** — The language of OMXTerm's own menus, dialogs and
+controls, chosen only by the User Configuration `language` key (`en-US` default
+or `pt-BR`). Diagnostics, logs and Terminal Payload stay untranslated.
 
 **Terminal Theme** — The terminal palette: foreground, background, cursor,
 selection and ANSI colors. The bundled default is `omtheme`.
@@ -109,8 +119,11 @@ change native minimum-window bounds or guarantee terminal columns.
 user's `snippets.yaml` (single bounded YAML 1.2 core document with version-1
 snippet fields). Search/loading appears immediately on activation; each
 activation rereads the file, retaining query/scroll but invalidating old actions
-and late reads. Activating a current snippet sends its exact body through
-Protected Paste to the selected tab; `execute` controls whether Enter is appended.
+and late reads. Each row shows its default Insert or Run intent; activating it
+sends the exact body through Protected Paste to the tab selected at that moment,
+and `execute` controls whether Enter is appended. A read-only preview shows the
+exact body and its final Insert/Run choice wins, delivered only to the tab
+captured when it opened.
 
 ## Terminal data and interaction
 

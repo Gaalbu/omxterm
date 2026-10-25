@@ -128,6 +128,7 @@ describe("Snippets Sidebar theme contrast", () => {
           ],
         })),
         inject: vi.fn(),
+        preview: vi.fn(),
         isInteractive: () => true,
       });
       root.append(sidebar.element);

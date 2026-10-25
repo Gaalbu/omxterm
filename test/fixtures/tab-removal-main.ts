@@ -302,11 +302,13 @@ async function exerciseRemoval(window: BrowserWindow) {
   window.webContents.send(terminalIpc.snippetsToggle);
   await waitFor("snippet-loaded", () =>
     evaluate<boolean>(
-      "!!document.querySelector('#snippets-sidebar li button')",
+      "!!document.querySelector('#snippets-sidebar li .snippet-activate')",
     ),
   );
   await step("snippet-click", () =>
-    evaluate("document.querySelector('#snippets-sidebar li button').click()"),
+    evaluate(
+      "document.querySelector('#snippets-sidebar li .snippet-activate').click()",
+    ),
   );
   await waitFor("snippet-delivered", () =>
     outputs[0]!.join("").includes("RECEIVED:snippet"),

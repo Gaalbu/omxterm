@@ -4,10 +4,13 @@ import type {
   TerminalSessionId,
   TerminalTabCommand,
 } from "../shared/terminal-contract";
-import type {
-  TerminalSessionAdapter,
-  TerminalSessionHandlers,
-} from "../terminal-surface/terminal-session-adapter";
+import type { TerminalSessionAdapter } from "../terminal-surface/terminal-session-adapter";
+import {
+  closePendingTab,
+  endTab,
+  tabSessionAdapter,
+  type TerminalTab,
+} from "./terminal-tab-lifetime";
 import type {
   TerminalSurface,
   TerminalSurfaceConfiguration,
@@ -15,6 +18,7 @@ import type {
 } from "../terminal-surface/terminal-surface";
 import { DEFAULT_TERMINAL_FONT_SIZE } from "../shared/user-configuration";
 import type { ElectronTerminalAdapter } from "./electron-terminal-adapter";
+import { snippetTarget, type SnippetTarget } from "./snippet-target";
 
 export const TERMINAL_TAB_DRAG_DATA_TYPE = "application/x-omxterm-tab";
 
@@ -57,25 +61,11 @@ export interface TerminalTabs {
   clipboardAction(action: TerminalClipboardAction): void;
   find(): void;
   injectText(text: string): void;
-  injectSnippet(body: string, options: { readonly submit: boolean }): void;
+  // The selected live terminal, captured for one snippet action.
+  captureSnippetTarget(): SnippetTarget | undefined;
   toggleTabBar(): void;
   focusSelected(): void;
   dispose(): void;
-}
-
-interface TerminalTab {
-  readonly container: HTMLElement;
-  readonly adapter: ElectronTerminalAdapter;
-  readonly mountAbort: AbortController;
-  surface: TerminalSurface | undefined;
-  label: string;
-  removed: boolean;
-  startRequested: boolean;
-}
-
-function closePendingTab(tab: TerminalTab): void {
-  tab.mountAbort.abort();
-  tab.adapter.close();
 }
 
 export function createTerminalTabs(
@@ -154,6 +144,7 @@ export function createTerminalTabs(
     const index = tabs.indexOf(tab);
     if (tab.removed || index < 0) return;
     tab.removed = true;
+    endTab(tab);
     tabs.splice(index, 1);
     tab.container.remove();
     if (tabs.length === 0) {
@@ -164,16 +155,6 @@ export function createTerminalTabs(
     }
     if (index < selectedIndex) selectedIndex -= 1;
     select(Math.min(selectedIndex, tabs.length - 1), true);
-  };
-
-  const onSessionEnd = (
-    tab: TerminalTab,
-    exit: { signal: number; startupFailed?: true },
-  ) => {
-    if (disposed || tab.removed) return;
-    // An ordinary end removes the tab; an unexpected signal keeps the dead
-    // tab visible until main acknowledges the failure and orders removal.
-    if (exit.signal === 0 && !exit.startupFailed) removeTab(tab);
   };
 
   const replayZoom = (surface: TerminalSurface) => {
@@ -187,7 +168,7 @@ export function createTerminalTabs(
     tabs.push(tab);
     select(tabs.length - 1);
 
-    const sessionAdapter = tabSessionAdapter(tab, onSessionEnd, () => {
+    const sessionAdapter = tabSessionAdapter(tab, removeTab, () => {
       if (disposed || tab.removed) return;
       const sessionId = adapter.sessionId();
       if (sessionId !== undefined) options.syncTitle?.(sessionId);
@@ -198,6 +179,10 @@ export function createTerminalTabs(
     const tabSurfaceOptions: TerminalSurfaceOptions = {
       ...activeSurfaceOptions,
       abortSignal: tab.mountAbort.signal,
+      onFatalError(message) {
+        endTab(tab);
+        activeSurfaceOptions.onFatalError?.(message);
+      },
 
       ...(options.notifyTitle
         ? {
@@ -328,9 +313,7 @@ export function createTerminalTabs(
     injectText(text) {
       void selectedTab()?.surface?.inject(text);
     },
-    injectSnippet(body, injectOptions) {
-      void selectedTab()?.surface?.inject(body, injectOptions);
-    },
+    captureSnippetTarget: () => snippetTarget(selectedTab()),
     toggleTabBar() {
       if (disposed) return;
       tabBarEnabled = !tabBarEnabled;
@@ -347,6 +330,7 @@ export function createTerminalTabs(
       tabDragging.dispose();
       for (const tab of [...tabs]) {
         tab.removed = true;
+        endTab(tab);
         if (tab.surface) tab.surface.dispose();
         else closePendingTab(tab);
       }
@@ -395,6 +379,8 @@ function appendTab(
     surface: undefined,
     label: "",
     removed: false,
+    ended: false,
+    snippetTargetListeners: new Set(),
     startRequested: false,
   };
 }
@@ -409,33 +395,6 @@ function closeTab(
   removeTab(tab);
   if (tab.surface) tab.surface.dispose();
   else closePendingTab(tab);
-}
-
-function tabSessionAdapter(
-  tab: TerminalTab,
-  onSessionEnd: (
-    tab: TerminalTab,
-    exit: { signal: number; startupFailed?: true },
-  ) => void,
-  onStarted: () => void,
-): TerminalSessionAdapter {
-  const { adapter } = tab;
-  return {
-    start: async (handlers: TerminalSessionHandlers) => {
-      tab.startRequested = true;
-      await adapter.start({
-        onOutput: handlers.onOutput,
-        onExit(exit) {
-          handlers.onExit(exit);
-          onSessionEnd(tab, exit);
-        },
-      });
-      onStarted();
-    },
-    write: (data) => adapter.write(data),
-    resize: (size) => adapter.resize(size),
-    close: (reason) => adapter.close(reason),
-  };
 }
 
 function installTabDragging(
@@ -521,6 +480,7 @@ function completeConfiguration(
   )
     return undefined;
   return {
+    ...(options.labels ? { labels: options.labels } : {}),
     appearance: {
       fontSize: options.appearance.fontSize,
       lineHeight: options.appearance.lineHeight,

@@ -192,13 +192,19 @@ Editing `config.json` does not apply changes until you press `Cmd+Shift+,` (macO
 
 See [reloading user configuration](configuration.md#reloading-user-configuration) and [theme troubleshooting](configuration.md#theme-troubleshooting) for details.
 
+### Insert, run or preview a snippet
+
+Each snippet row shows what clicking it does: **Insert** types the snippet without pressing Enter, and **Run · adds Enter** types it and presses Enter (`execute: true` in `snippets.yaml`). Click **Preview** to see the exact text first, then choose **Insert — no added Enter** or **Run — adds Enter**; that choice wins over the snippet's default. The snippet goes to the tab that was selected when you opened the preview. If that terminal ends or fails, the actions are disabled and nothing is sent, even if its tab remains visible for failure acknowledgement. Insert only skips the final Enter: a snippet with several lines can still run each line, and multiline text may still ask for paste confirmation.
+
+Change the interface language in **Settings → General → Language**. Row and preview controls update in place, including an unavailable-terminal notice; your snippet text, captured target, focus and disabled actions are retained. Settings, About, local-image and snippet previews do not stack.
+
 ### Resize or close Snippets
 
 Drag the left separator to resize the right-side Snippets panel. You can also focus the separator with Tab: Left/Right grow/shrink by 10 px, and Home/End choose the current minimum/maximum. The default width is 280 px, bounded to 220–560 px and the available window space. The header's Close button, Escape inside the panel, or `Cmd+Shift+S` / `Ctrl+Shift+S` (**View → Toggle Snippets**) hides it and returns terminal focus.
 
 The panel shrinks automatically in narrow windows and closes below 406 px of content width. Widen the window and open it again; it does not reopen automatically. Your preferred width, search and scroll survive hiding and configuration/theme changes in that window only, not restart. The remaining terminal allowance does not guarantee columns with extreme padding.
 
-Snippets is nonmodal: clicking the terminal keeps normal terminal input. Copy/Paste/Select All edit the search field while it holds focus; unsupported panel controls suppress terminal clipboard delivery instead. About and Local Image Preview temporarily make the retained panel inert.
+Snippets is nonmodal: clicking the terminal keeps normal terminal input. Copy/Paste/Select All edit the search field while it holds focus; unsupported panel controls suppress terminal clipboard delivery instead. Settings, About, snippet preview and Local Image Preview temporarily make the retained panel inert.
 
 ### A program draws text in the wrong place
 

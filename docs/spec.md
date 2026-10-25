@@ -65,8 +65,8 @@ OMXTerm:
   operating-system emoji/CJK/symbol faces for missing-glyph coverage;
 - uses the black-and-blue OMXTerm application icon in development and on the
   packaged macOS Dock, Finder, application-switcher, and DMG surfaces;
-- reads strict, versioned JSON configuration and writes bounded local JSONL
-  operational logs;
+- reads strict, versioned JSON configuration, including an explicit en-US or
+  pt-BR Interface Language, and writes bounded local JSONL operational logs;
 - packages ready-to-run artifacts from an accepted version: ARM64 DMG for macOS,
   ARM64 AppImage for Linux, and ARM64/x64 NSIS for Windows. Linux releases additionally provide
   an optional versioned per-user AppImage desktop installer and its checksum;
@@ -301,8 +301,8 @@ succeeds ([ADR 0025](adr/0025-use-restty-as-the-terminal-surface.md)).
   including during metadata loading, focuses the same dialog. Returning from
   the browser does not steal its focus. Owner disposal removes it without
   restoring terminal focus; late metadata and link errors cannot reopen it.
-  About and Local Image Preview do not stack: opening either while the other
-  is choosing/loading/showing is ignored. While About is active, terminal
+  About, Local Image Preview and a Snippets preview do not stack: opening one
+  while another is choosing/loading/showing is ignored. While About is active, terminal
   clipboard, file-drop, zoom, snippet, tab/title-bar and tab-navigation/new-tab
   actions are suppressed; output, configuration updates and approved tab/session/
   window closure or Quit remain active. About does not add a configurable
@@ -380,9 +380,31 @@ succeeds ([ADR 0025](adr/0025-use-restty-as-the-terminal-surface.md)).
   internal views deactivates the old view and focuses the new one directly, with
   no intermediate terminal focus. There is no backdrop, focus trap or global
   Escape interception. Returning to the page preserves focused panel controls;
-  deliberate terminal/tab actions still focus the terminal. Clicking a current
-  snippet injects its exact body/`execute` intent through the selected Surface's
-  existing Protected Paste path and returns focus immediately. Enter activation
+  deliberate terminal/tab actions still focus the terminal. Each row shows its
+  default action before activation: **Insert** (`execute` false or omitted) or
+  **Run · adds Enter** (`execute: true`). Clicking a current row captures the
+  selected live Surface at that moment, injects its exact body with that intent
+  through the existing Protected Paste path and returns focus immediately. A
+  separate **Preview** control opens a temporary read-only dialog that shows the
+  stored body exactly, without trimming or normalization, and captures the
+  selected live Surface before anything else happens; with no live Surface it
+  does not open. Its final **Insert — no added Enter** or **Run — adds Enter**
+  choice is authoritative regardless of `execute`, is accepted once, closes the
+  preview and returns focus to the terminal. Cancel or Escape sends nothing and
+  restores the Preview control when it is still connected, enabled and
+  interactive in the visible view, otherwise panel search, otherwise the live
+  selected terminal; it never reopens a hidden panel. If the captured Surface
+  ends or fails while the preview is open, its actions are disabled even when
+  the tab remains visible for failure acknowledgement. Nothing is sent to any
+  other tab, and that unavailable Surface cannot be captured for a new preview.
+  Language switching relabels current row/preview controls and the unavailable
+  notice without replacing their DOM, changing focus, rereading YAML, recapturing
+  the target, mutating user text or re-enabling a dead target's actions.
+  Insert only omits the added Enter: embedded line breaks or control characters
+  can still execute, and Protected Paste may still ask for
+  confirmation after acceptance. The preview, Settings, About and Local Image
+  Preview never stack; while the preview is open, terminal-directed actions, tab navigation and
+  new tabs are suppressed as they are under About. Enter activation
   of a row retains that gesture's held repeats and release, so they cannot append
   terminal Enter independently of the snippet's `execute` choice. A fresh
   terminal key remains ordinary input. Hiding does not
@@ -868,6 +890,7 @@ installation or manual reload. The copied theme belongs to the user and does not
 track subsequent bundled palette changes. A present file must contain
 `"version": 1` and only supported keys:
 
+- `language`: `en-US` or `pt-BR`;
 - `confirmClose`;
 - `logLevel`;
 - `windowsShell`;
@@ -898,6 +921,26 @@ and Windows. Hiding the title area or entering fullscreen removes only the
 app-owned title space, without changing configured padding or the macOS system
 safe area. `logLevel` defaults to `info`, `keyboard.optionAsAlt` to `none`, and
 `window.alwaysOnTop` to `false`.
+
+`language` selects the Interface Language from the exact tags `en-US` and
+`pt-BR`, defaults to `en-US`, and is never inferred from the operating-system
+locale ([ADR 0035](adr/0035-select-the-interface-language-explicitly.md)). It
+covers native menus, OMXTerm's native dialogs, Window Chrome, the Auxiliary
+Panel and Snippets Sidebar/preview, Settings, Local Image Preview, About, and
+the Scrollback Search controls. Main resolves it from the active configuration whenever it
+builds a menu or opens a dialog; renderers relabel existing elements in place,
+so a User Configuration Reload changes it without recreating tabs, Surfaces or
+sessions, including when a Surface is still mounting. The document's accessibility
+language, application-owned accessible names and resize value text follow the same
+choice. Visible generic Snippets errors, narrow-window notices and renderer
+Surface failure notices relabel without rereading data or resetting their lifetime.
+A Surface reports failure identity and separate technical cause detail to its host;
+the host retains and translates the notice until window teardown, even after
+initial mount rejection. The validator's diagnostic detail inside a reload notice,
+technical cause detail inside a translated Surface failure notice, failures
+reported before configuration loads, Operational Events, `snippets.yaml`
+diagnostics, and operating-system, Electron or Restty text that OMXTerm does not
+set remain English. Terminal Payload is never translated.
 
 `window.showTitleBar` and `window.showTabBar` accept only booleans and default
 to `true`. They choose initial visibility for newly created windows. A
@@ -1055,9 +1098,12 @@ multiline or control-character body requires Protected Paste approval; after
 approval, the body is delivered unchanged and may execute through its embedded
 line breaks or control characters. With bracketed paste enabled, paste-aware
 delivery bypasses the Protected Paste confirmation and sends the body as one
-bracketed paste. `execute` controls only whether OMXTerm appends Enter after
-body delivery: `false` appends nothing, while `true` sends Enter after the body
-and any closing bracketed-paste marker — per-snippet opt-in only. An invalid
+bracketed paste. For default row activation, `execute` controls only whether
+OMXTerm appends Enter after body delivery: `false` appends nothing, while `true`
+sends Enter after the body and any closing bracketed-paste marker. In the
+read-only preview, the final Insert/Run choice overrides this default in either
+direction, as described under
+[window and session behavior](#window-and-session-behavior). An invalid
 `snippets.yaml` never blocks startup and is never silent: the sidebar shows the
 actionable problem, including the resolved path and schema field location or
 syntax line/column coordinates, in place of the list, and the terminal is
@@ -1143,17 +1189,66 @@ changing the active family invalidates outstanding old-generation reads,
 including an accepted request for a still-initializing Surface. It can fail that
 tab instead of letting it finish with its original family. Repeating a reload
 cannot erase a notice while an older Surface survives; removing that Surface
-releases its font bookkeeping. Theme, configured font-size baseline, padding and
-Window Font Zoom remain live and preserve the existing Surface and PTY. Invalid,
+releases its font bookkeeping. Theme, Interface Language, configured font-size
+baseline, padding and Window Font Zoom remain live and preserve the existing Surface and PTY. Invalid,
 missing, unreadable, unsupported or corrupt configured font input rejects the
 whole reload. Runtime scrollback reduction, including zero, uses the selected
 Surface's in-memory core behavior described above; programming-ligature changes
 use the existing Restty runtime setter without reloading fonts, and Option Key
 Mode changes only subsequent keyboard events. OMXTerm never migrates, repairs,
-rewrites, or silently ignores User Configuration. The same surface also carries
+rewrites, or silently ignores User Configuration on its own; only an explicit
+change in Settings writes it (see below). The same surface also carries
 non-fatal warnings for a valid configuration that stays fully active — currently
 a keybind shadowing a PTY control key — which inform without activating any
 default.
+
+**Settings** (application menu, **Settings…**) is a modal editor of the same
+`config.json`. It covers `language`, `confirmClose`, `logLevel`, `windowsShell` (Windows),
+`font.family`, `font.size`, `font.lineHeight`, `font.ligatures`,
+`terminal.padding`, `scrollback.lines`, `keyboard.optionAsAlt` (macOS), the
+new-window defaults `window.showTitleBar`, `window.showTabBar` and
+`window.alwaysOnTop`, and `theme.path`; keybinds, transparency and blur stay
+file-only in this editor. Changing a control saves at once without a separate
+confirmation; a cleared text or number field removes the entry so its default
+applies. The **Config File** page shows the document with an explicit **Save**
+and **Reload File**. Writes follow ADR 0003: full startup validation before an
+atomic replacement, a field-scoped change that keeps every other entry, a raw
+save refused when the file changed since its draft was loaded, and a dirty draft
+never replaced by other changes or late Save/Reload File responses. A final
+revision/presence comparison after write preparation rejects detected external
+changes without retry; it is not a cross-process atomic compare-and-swap.
+Settings preserves configuration symlinks, including dangling links, by refusing
+writes and directing the user to manual editing and reload. Pending graphical
+responses retain newer or unrelated field drafts, and saving feedback remains
+pending until queued changes settle. Graphical requests go directly to main's
+serialized service, so a reopened view reads after already-requested writes
+rather than overtaking undispatched work in a removed view. Raw operations are
+single-flight while typing remains usable; newer edits retain the saved bytes'
+revision as their base and are explicitly reported as not saved. Snapshot text uses the same
+UTF-8 decoding as the loader (omitting a leading BOM), while revisions identify
+the exact persisted bytes; snapshot parsing happens before writing. Closed
+views ignore late results.
+The status line distinguishes saved and applied, saved but not applied (even
+when reload throws after persistence), new-window/session-only settings, and
+settings that need a restart for open tabs. Both save routes include returned
+notices and deferred lifetimes of changed effective values, not no-op spelling
+changes. While Settings is
+open it owns modal input like About, and the auxiliary panel stays visible
+but inert: terminal-directed actions and tab navigation are ignored,
+application Copy, Paste and Select All edit its focused field and never reach
+the terminal, and closing returns focus to the selected terminal. Settings has
+no default shortcut. Its General-page language selector uses exact en-US/pt-BR
+values and the same validated save/reload route as other live controls. Its
+options keep the self-names **English (United States)** and **Português (Brasil)**
+regardless of the current interface language. All Settings text, options,
+placeholders, accessibility labels and visible statuses relabel in place,
+preserving draft bytes/revisions, focused control, caret,
+selection, scroll, selected page and pending operations. Relabeling performs no
+read/save or value adoption/synchronization. Bounded app-owned Settings/reload
+message identities cross IPC separately from literal validator/warning detail,
+so late and already-visible results use the current language without matching
+English sentences. The existing main user-file banner keeps its rendered-text
+contract. Diagnostics shown in Settings never enter operational logs.
 
 Operational logs are JSONL under `$XDG_STATE_HOME/omxterm/logs`, falling back to
 `~/.local/state/omxterm/logs`. Levels are `error`, `info`, and `debug`. Only the
