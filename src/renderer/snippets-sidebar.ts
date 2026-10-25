@@ -11,6 +11,11 @@ export function createSnippetsView(
   options: {
     readonly loadSnippets: () => Promise<TerminalSnippetsResponse>;
     readonly inject: (snippet: TerminalSnippet) => void;
+    // returnFocus reports whether the view could take focus back on cancel.
+    readonly preview: (
+      snippet: TerminalSnippet,
+      returnFocus: () => boolean,
+    ) => void;
     readonly isInteractive: () => boolean;
   },
 ): AuxiliaryView {
@@ -48,11 +53,18 @@ export function createSnippetsView(
         .toLowerCase()
         .includes(query),
     );
+    const usable = () =>
+      active &&
+      !disposed &&
+      !loading &&
+      rendering === renderGeneration &&
+      options.isInteractive();
     list.replaceChildren(
       ...visible.map((snippet) => {
         const item = document.createElement("li");
         const button = document.createElement("button");
         button.type = "button";
+        button.className = "snippet-activate";
         const name = document.createElement("span");
         name.className = "snippet-name";
         name.textContent = snippet.name;
@@ -63,18 +75,30 @@ export function createSnippetsView(
           description.textContent = snippet.description;
           button.append(description);
         }
+        // The default action is visible before activation: Run adds Enter.
+        const intent = document.createElement("span");
+        intent.className = "snippet-intent";
+        intent.textContent = snippet.execute ? "Run · adds Enter" : "Insert";
+        button.append(intent);
         button.addEventListener("click", () => {
-          if (
-            !active ||
-            disposed ||
-            loading ||
-            rendering !== renderGeneration ||
-            !options.isInteractive()
-          )
-            return;
-          options.inject(snippet);
+          if (usable()) options.inject(snippet);
         });
-        item.append(button);
+        const preview = document.createElement("button");
+        preview.type = "button";
+        preview.className = "snippet-preview-open";
+        preview.textContent = "Preview";
+        preview.setAttribute("aria-label", `Preview ${snippet.name}`);
+        const returnFocus = () => {
+          if (!active || disposed || !options.isInteractive()) return false;
+          const control =
+            preview.isConnected && !preview.disabled ? preview : search;
+          control.focus();
+          return document.activeElement === control;
+        };
+        preview.addEventListener("click", () => {
+          if (usable()) options.preview(snippet, returnFocus);
+        });
+        item.append(button, preview);
         return item;
       }),
     );

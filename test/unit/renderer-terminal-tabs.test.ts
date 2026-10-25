@@ -344,7 +344,7 @@ describe("renderer Terminal Tabs", () => {
     harness.tabs.clipboardAction("copy");
     harness.tabs.clipboardAction("paste");
     harness.tabs.clipboardAction("select-all");
-    harness.tabs.injectSnippet("printf hi", { submit: true });
+    harness.tabs.captureSnippetTarget()!.deliver("printf hi", true);
 
     expect(harness.surfaces[1]!.copy).toHaveBeenCalledOnce();
     expect(harness.surfaces[1]!.paste).toHaveBeenCalledOnce();

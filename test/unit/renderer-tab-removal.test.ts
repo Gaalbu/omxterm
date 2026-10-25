@@ -30,7 +30,7 @@ function expectRouting(
   selected: number,
 ) {
   harness.tabs.clipboardAction("paste");
-  harness.tabs.injectSnippet("synthetic snippet", { submit: true });
+  harness.tabs.captureSnippetTarget()!.deliver("synthetic snippet", true);
   harness.tabs.focusSelected();
   for (const [index, surface] of harness.surfaces.entries()) {
     expect(surface.paste).toHaveBeenCalledTimes(index === selected ? 1 : 0);

@@ -301,8 +301,8 @@ succeeds ([ADR 0025](adr/0025-use-restty-as-the-terminal-surface.md)).
   including during metadata loading, focuses the same dialog. Returning from
   the browser does not steal its focus. Owner disposal removes it without
   restoring terminal focus; late metadata and link errors cannot reopen it.
-  About and Local Image Preview do not stack: opening either while the other
-  is choosing/loading/showing is ignored. While About is active, terminal
+  About, Local Image Preview and a Snippets preview do not stack: opening one
+  while another is choosing/loading/showing is ignored. While About is active, terminal
   clipboard, file-drop, zoom, snippet, tab/title-bar and tab-navigation/new-tab
   actions are suppressed; output, configuration updates and approved tab/session/
   window closure or Quit remain active. About does not add a configurable
@@ -380,9 +380,28 @@ succeeds ([ADR 0025](adr/0025-use-restty-as-the-terminal-surface.md)).
   internal views deactivates the old view and focuses the new one directly, with
   no intermediate terminal focus. There is no backdrop, focus trap or global
   Escape interception. Returning to the page preserves focused panel controls;
-  deliberate terminal/tab actions still focus the terminal. Clicking a current
-  snippet injects its exact body/`execute` intent through the selected Surface's
-  existing Protected Paste path and returns focus immediately. Enter activation
+  deliberate terminal/tab actions still focus the terminal. Each row shows its
+  default action before activation: **Insert** (`execute` false or omitted) or
+  **Run · adds Enter** (`execute: true`). Clicking a current row captures the
+  selected live Surface at that moment, injects its exact body with that intent
+  through the existing Protected Paste path and returns focus immediately. A
+  separate **Preview** control opens a temporary read-only dialog that shows the
+  stored body exactly, without trimming or normalization, and captures the
+  selected live Surface before anything else happens; with no live Surface it
+  does not open. Its final **Insert — no added Enter** or **Run — adds Enter**
+  choice is authoritative regardless of `execute`, is accepted once, closes the
+  preview and returns focus to the terminal. Cancel or Escape sends nothing and
+  restores the Preview control when it is still connected, enabled and
+  interactive in the visible view, otherwise panel search, otherwise the live
+  selected terminal; it never reopens a hidden panel. If the captured Surface
+  ends or fails while the preview is open, its actions are disabled even when
+  the tab remains visible for failure acknowledgement. Nothing is sent to any
+  other tab, and that unavailable Surface cannot be captured for a new preview.
+  Insert only omits the added Enter: embedded line breaks or control characters
+  can still execute, and Protected Paste may still ask for
+  confirmation after acceptance. The preview, About and Local Image Preview never
+  stack; while the preview is open, terminal-directed actions, tab navigation and
+  new tabs are suppressed as they are under About. Enter activation
   of a row retains that gesture's held repeats and release, so they cannot append
   terminal Enter independently of the snippet's `execute` choice. A fresh
   terminal key remains ordinary input. Hiding does not
@@ -1052,9 +1071,12 @@ multiline or control-character body requires Protected Paste approval; after
 approval, the body is delivered unchanged and may execute through its embedded
 line breaks or control characters. With bracketed paste enabled, paste-aware
 delivery bypasses the Protected Paste confirmation and sends the body as one
-bracketed paste. `execute` controls only whether OMXTerm appends Enter after
-body delivery: `false` appends nothing, while `true` sends Enter after the body
-and any closing bracketed-paste marker — per-snippet opt-in only. An invalid
+bracketed paste. For default row activation, `execute` controls only whether
+OMXTerm appends Enter after body delivery: `false` appends nothing, while `true`
+sends Enter after the body and any closing bracketed-paste marker. In the
+read-only preview, the final Insert/Run choice overrides this default in either
+direction, as described under
+[window and session behavior](#window-and-session-behavior). An invalid
 `snippets.yaml` never blocks startup and is never silent: the sidebar shows the
 actionable problem, including the resolved path and schema field location or
 syntax line/column coordinates, in place of the list, and the terminal is

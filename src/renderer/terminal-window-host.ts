@@ -26,8 +26,9 @@ import {
   TERMINAL_TAB_DRAG_DATA_TYPE,
   type TerminalTabs,
 } from "./terminal-tabs";
-import { createSnippetsView } from "./snippets-sidebar";
-import { createAuxiliaryPanel, type AuxiliaryPanel } from "./auxiliary-panel";
+import { mountSnippetsPanel } from "./snippets-host";
+import type { SnippetPreview } from "./snippet-preview";
+import type { AuxiliaryPanel } from "./auxiliary-panel";
 import { renderUserFileErrorBanner } from "./user-file-error-banner";
 import {
   createLocalImagePreview,
@@ -126,9 +127,11 @@ export function mountTerminalWindowPage(
   let removeLocalImageOpenListener: (() => void) | undefined;
   let localImagePreview: LocalImagePreview | undefined;
   let dialogs: ReturnType<typeof mountWindowDialogs> | undefined;
-  const dialogActive = () => dialogs?.isActive() ?? false;
+  let snippetPreview: SnippetPreview | undefined;
+  const modalActive = () =>
+    (dialogs?.isActive() ?? false) || (snippetPreview?.isActive() ?? false);
   const previewActive = () =>
-    (localImagePreview?.isActive() ?? false) || dialogActive();
+    (localImagePreview?.isActive() ?? false) || modalActive();
   const hoverAvailabilityListeners = new Set<() => void>();
   let fontConfigurationId = options.configuration?.fontConfigurationId;
   let activeFontFamily = options.configuration?.fontFamily;
@@ -179,7 +182,7 @@ export function mountTerminalWindowPage(
             },
           },
           onLocalImageActivation: (source: LocalImageActivation) => {
-            if (!dialogActive()) void localImagePreview?.open(source);
+            if (!modalActive()) void localImagePreview?.open(source);
           },
         }
       : {}),
@@ -192,7 +195,7 @@ export function mountTerminalWindowPage(
     { strip: elements.tabStrip, container: elements.tabsContainer },
     {
       createAdapter: () => options.createAdapter(fontConfigurationId),
-      canFocus: () => !disposed && !dialogActive(),
+      canFocus: () => !disposed && !modalActive(),
       canAutoFocus: (unchangedFocus) =>
         !previewActive() && (unchangedFocus || !auxiliaryPanel?.ownsFocus()),
       mount,
@@ -231,7 +234,7 @@ export function mountTerminalWindowPage(
       onActivityChange: onOverlayActivity,
     });
     removeLocalImageOpenListener = options.subscribeToLocalImageOpen?.(() => {
-      if (!dialogActive()) void localImagePreview?.open();
+      if (!modalActive()) void localImagePreview?.open();
     });
   }
 
@@ -267,6 +270,8 @@ export function mountTerminalWindowPage(
     chrome?.dispose();
     localImagePreview?.dispose();
     localImagePreview = undefined;
+    snippetPreview?.dispose();
+    snippetPreview = undefined;
     auxiliaryPanel?.dispose();
     auxiliaryPanel = undefined;
     tabs.dispose();
@@ -325,7 +330,7 @@ export function mountTerminalWindowPage(
     );
     removeTabCommandListener = options.subscribeToTabCommands?.((command) => {
       if (
-        dialogActive() &&
+        modalActive() &&
         ["new", "next", "previous", "select"].includes(command.action)
       )
         return;
@@ -333,28 +338,19 @@ export function mountTerminalWindowPage(
     });
     if (options.snippets) {
       const snippets = options.snippets;
-      const panel = createAuxiliaryPanel(snippets.element, {
-        content: snippets.element.parentElement!,
-        focusTerminal: tabs.focusSelected,
-        ...(options.clipboard ? { clipboard: options.clipboard } : {}),
-        views: [
-          {
-            id: "snippets",
-            label: "Snippets",
-            create: (isInteractive) =>
-              createSnippetsView(page.document, {
-                loadSnippets: snippets.load,
-                isInteractive,
-                inject: (snippet) => {
-                  if (previewActive()) return;
-                  tabs.injectSnippet(snippet.body, { submit: snippet.execute });
-                  tabs.focusSelected();
-                },
-              }),
-          },
-        ],
+      const mounted = mountSnippetsPanel(page.document, snippets, {
+        tabs,
+        clipboard: options.clipboard,
+        blocked: previewActive,
+        onPreviewActivity: () => {
+          chrome?.setPreviewActive(previewActive());
+          panel.setBlocked(previewActive());
+          for (const listener of hoverAvailabilityListeners) listener();
+        },
       });
+      const panel = mounted.panel;
       auxiliaryPanel = panel;
+      snippetPreview = mounted.preview;
       panel.setBlocked(previewActive());
       removeSnippetsToggleListener = snippets.subscribeToToggle(() =>
         panel.toggle("snippets"),

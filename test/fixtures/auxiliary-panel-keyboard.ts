@@ -59,9 +59,11 @@ export async function exercisePanelKeyboard(s: AuxiliaryPanelScenario) {
     ] as const) {
       key("S", ["control", "alt"]);
       await until(searchFocused);
-      await until("!!document.querySelector('#snippets-sidebar li button')");
+      await until(
+        "!!document.querySelector('#snippets-sidebar li .snippet-activate')",
+      );
       await evaluate(
-        `document.querySelectorAll('#snippets-sidebar li button')[${index}].focus()`,
+        `document.querySelectorAll('#snippets-sidebar li .snippet-activate')[${index}].focus()`,
       );
       const before = input.join("").length;
       contents.sendInputEvent({ type: "keyDown", keyCode: "Enter" });
@@ -93,11 +95,11 @@ export async function exercisePanelKeyboard(s: AuxiliaryPanelScenario) {
     key("S", ["control", "alt"]);
     await until(searchFocused);
     await until(
-      "document.querySelectorAll('#snippets-sidebar li button').length > 1",
+      "document.querySelectorAll('#snippets-sidebar li .snippet-activate').length > 1",
     );
     const beforeSnippet = input.join("").length;
     await evaluate(
-      "document.querySelectorAll('#snippets-sidebar li button')[1].click(); document.querySelector('.auxiliary-header button').click()",
+      "document.querySelectorAll('#snippets-sidebar li .snippet-activate')[1].click(); document.querySelector('.auxiliary-header button').click()",
     );
     await wait(
       () => input.join("").slice(beforeSnippet).endsWith("\r"),
