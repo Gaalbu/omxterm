@@ -243,8 +243,11 @@ describe.skipIf(process.platform !== "linux")(
         closed: false,
       });
       expect(receipt.beforeCleanup.remaining).toEqual([
-        { ...witness.worker, parent: 1 },
+        { ...witness.worker, parent: expect.any(Number) },
       ]);
+      expect(receipt.beforeCleanup.remaining[0]!.parent).not.toBe(
+        witness.worker.parent,
+      );
       expect(receipt.outcome).toEqual({ code: 7, signal: null });
       expect(receipt.remaining).toEqual([]);
       expect(receipt.closed).toBe(true);
