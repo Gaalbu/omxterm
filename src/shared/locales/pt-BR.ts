@@ -248,5 +248,5 @@ export const brazilianPortugueseMessages: Readonly<
   "settings.writeError":
     "Não foi possível gravar config.json. Nada foi alterado.",
   "settings.applicationError":
-    "Falha inesperada ao aplicar. Algumas configurações podem já estar ativas; escolha Ver -> Recarregar Configuração do Usuário novamente.",
+    "Falha inesperada ao aplicar. Algumas configurações podem já estar ativas; escolha Exibir -> Recarregar Configuração novamente.",
 };

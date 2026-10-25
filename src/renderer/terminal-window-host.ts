@@ -131,9 +131,12 @@ export function mountTerminalWindowPage(
   let removeLocalImageOpenListener: (() => void) | undefined;
   let localImagePreview: LocalImagePreview | undefined;
   let dialogs: ReturnType<typeof mountWindowDialogs> | undefined;
+  // Buffered bridge opens replay inside construction, before `dialogs` is
+  // assigned. Activity must already own exclusion, chrome and hover then.
+  let dialogsActive = false;
   let snippetPreview: SnippetPreview | undefined;
   const modalActive = () =>
-    (dialogs?.isActive() ?? false) || (snippetPreview?.isActive() ?? false);
+    dialogsActive || (snippetPreview?.isActive() ?? false);
   const previewActive = () =>
     (localImagePreview?.isActive() ?? false) || modalActive();
   const hoverAvailabilityListeners = new Set<() => void>();
@@ -224,16 +227,11 @@ export function mountTerminalWindowPage(
     },
   );
 
+  const onPageFocus = () => {
+    if (!previewActive() && !auxiliaryPanel?.ownsFocus()) tabs.focusSelected();
+  };
   const chrome = options.chrome
-    ? mountWindowChrome(
-        page.document,
-        options.chrome,
-        () => {
-          if (!previewActive() && !auxiliaryPanel?.ownsFocus())
-            tabs.focusSelected();
-        },
-        language,
-      )
+    ? mountWindowChrome(page.document, options.chrome, onPageFocus, language)
     : undefined;
 
   const onOverlayActivity = () => {
@@ -260,12 +258,12 @@ export function mountTerminalWindowPage(
     {
       language,
       focusTerminal: tabs.focusSelected,
-      onActivityChange: onOverlayActivity,
+      onActivityChange(active) {
+        dialogsActive = active;
+        onOverlayActivity();
+      },
     },
   );
-  const onPageFocus = () => {
-    if (!previewActive() && !auxiliaryPanel?.ownsFocus()) tabs.focusSelected();
-  };
   const removeFileDrops = installFileDrops(
     page.document,
     previewActive,
