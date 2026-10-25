@@ -39,6 +39,10 @@ function menuActions() {
     openLocalImage: vi.fn(),
     showAbout: vi.fn(),
     showSettings: vi.fn(),
+    splitSelectedPane: vi.fn(),
+    closeSelectedPane: vi.fn(),
+    focusSelectedPane: vi.fn(),
+    equalizeSelectedPanes: vi.fn(),
   };
 }
 
@@ -77,6 +81,55 @@ it("names the actual Portuguese menu path in Settings application-failure guidan
     `${view!.label} -> ${reload!.label}`,
   );
 });
+
+it.each(["en-US", "pt-BR"] as const)(
+  "composes translated Settings and all pane actions with remapping in %s",
+  (language) => {
+    const { t } = translatorFor(language);
+    const actions = menuActions();
+    const menu = terminalApplicationMenuTemplate(
+      "OMXTerm",
+      actions,
+      {
+        ...terminalDefaultKeybinds("linux"),
+        splitRight: "Control+Alt+R",
+        closePane: null,
+      },
+      t,
+    );
+    const items = flattenMenuItems(menu);
+    expect(items.find((item) => item.label === t("menu.settings"))?.click).toBe(
+      actions.showSettings,
+    );
+    const pane = items.find((item) => item.label === t("menu.pane"))!
+      .submenu as MenuTemplate;
+    const labels = [
+      "menu.splitRight",
+      "menu.splitDown",
+      "menu.focusNextPane",
+      "menu.focusPreviousPane",
+      "menu.focusPaneLeft",
+      "menu.focusPaneRight",
+      "menu.focusPaneAbove",
+      "menu.focusPaneBelow",
+      "menu.equalizePanes",
+      "menu.closePane",
+    ] as const;
+    expect(
+      pane
+        .filter((item) => item.type !== "separator")
+        .map((item) => item.label),
+    ).toEqual(labels.map((key) => t(key)));
+    const split = pane.find((item) => item.label === t("menu.splitRight"))!;
+    expect(split.accelerator).toBe("Control+Alt+R");
+    (split.click as () => void)();
+    expect(actions.splitSelectedPane).toHaveBeenCalledExactlyOnceWith("right");
+    const close = pane.find((item) => item.label === t("menu.closePane"))!;
+    expect(close).not.toHaveProperty("accelerator");
+    (close.click as () => void)();
+    expect(actions.closeSelectedPane).toHaveBeenCalledOnce();
+  },
+);
 
 describe("native application menu", () => {
   it.each(["OMXTerm", "Electron"])(

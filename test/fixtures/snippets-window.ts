@@ -57,9 +57,9 @@ export async function snippetsWindow() {
     requestContextMenu: vi.fn(),
   };
   const surfaces: ReturnType<typeof surface>[] = [];
-  function surface(adapter: TerminalSessionAdapter) {
+  function surface(container: HTMLElement, adapter: TerminalSessionAdapter) {
     const input = document.createElement("textarea");
-    tabsContainer.append(input);
+    container.append(input);
     const delivery = createSemanticInputDelivery({
       isLive: () => true,
       isBracketedPasteEnabled: () => false,
@@ -67,6 +67,12 @@ export async function snippetsWindow() {
       write: adapter.write,
     });
     return {
+      geometry: () => ({
+        cellWidth: 10,
+        cellHeight: 20,
+        insetWidth: 0,
+        insetHeight: 0,
+      }),
       dispose: vi.fn(() => delivery.dispose()),
       focus: vi.fn(() => input.focus()),
       applyTheme: vi.fn(),
@@ -129,11 +135,16 @@ export async function snippetsWindow() {
         },
       },
       createAdapter: adapters,
-      mount: async (_container, adapter, options) => {
-        const value = surface(adapter);
+      mount: async (container, adapter, options) => {
+        vi.spyOn(
+          container.closest<HTMLElement>(".terminal-tab")!,
+          "getBoundingClientRect",
+        ).mockReturnValue({ width: 1200, height: 800 } as DOMRect);
+        const value = surface(container, adapter);
         surfaces.push(value);
         surfaceOptions.push(options);
         await adapter.start({ onOutput() {}, onExit: () => value.dispose() });
+        adapter.resize({ cols: 120, rows: 40 });
         return value;
       },
       onSurfaceFailure: failure,

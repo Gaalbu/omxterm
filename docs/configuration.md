@@ -35,7 +35,7 @@ You can find them in:
 
 ## Settings
 
-Choose **Settings…** in the OMXTerm application menu. **General → Language** selects **English (United States)** (`en-US`) or **Português (Brasil)** (`pt-BR`), always listed by their own names; it defaults to en-US and is never inferred from the system. A successful save/reload updates the menu and all open windows immediately, including Settings and snippet preview labels. Open editors keep their drafts, selected page, focus, selection/caret, scroll and pending saves; an open preview keeps its captured terminal and disabled state if that terminal ended. JSON, paths, snippet contents and diagnostic detail remain literal.
+Choose **Settings…** in the OMXTerm application menu. **General → Language** selects **English (United States)** (`en-US`) or **Português (Brasil)** (`pt-BR`), always listed by their own names; it defaults to en-US and is never inferred from the system. A successful save/reload updates the menu and all open windows immediately, including Settings and snippet preview labels. Open editors keep their drafts, selected page, focus, selection/caret, scroll and pending saves; an open preview keeps its captured pane/Surface and disabled state if that terminal ended. Pane menus, close dialogs and existing Surface/separator accessible labels also update; panes completing initialization replay the latest labels. JSON, paths, snippet contents and diagnostic detail remain literal.
 
 Each change you make to a control is checked and saved to `config.json` right away, then applied; the status line tells you what happened (examples below use English):
 
@@ -266,28 +266,38 @@ Reload your configuration and open a new tab to start the new shell. Only the ex
 
 Customize application shortcuts under `keybinds` using [Electron accelerator](https://www.electronjs.org/docs/latest/tutorial/keyboard-shortcuts#accelerators) syntax (or edit them with conflict checking in [OMXTerm Studio](#edit-visually-with-omxterm-studio)):
 
-| Action                      | macOS default              | Linux/Windows default |
-| --------------------------- | -------------------------- | --------------------- |
-| `quit`                      | `CommandOrControl+Q`       | `Control+Alt+Shift+Q` |
-| `copy`                      | `CommandOrControl+C`       | `Control+Shift+C`     |
-| `paste`                     | `CommandOrControl+V`       | `Control+Shift+V`     |
-| `selectAll`                 | `CommandOrControl+A`       | `Control+Shift+A`     |
-| `find`                      | `CommandOrControl+F`       | `Control+Shift+F`     |
-| `newWindow`                 | `CommandOrControl+N`       | `Control+Shift+N`     |
-| `newTab`                    | `CommandOrControl+T`       | `Control+Shift+T`     |
-| `closeTab`                  | `CommandOrControl+W`       | `Control+Shift+W`     |
-| `closeWindow`               | `CommandOrControl+Shift+W` | `Control+Shift+Q`     |
-| `nextTab`                   | `Control+Tab`              | `Control+PageDown`    |
-| `previousTab`               | `Control+Shift+Tab`        | `Control+PageUp`      |
-| `selectTab1` … `selectTab9` | `CommandOrControl+1` … `9` | `Alt+1` … `9`         |
-| `zoomIn`                    | `CommandOrControl+Plus`    | `Control+Plus`        |
-| `zoomOut`                   | `CommandOrControl+-`       | `Control+-`           |
-| `actualSize`                | `CommandOrControl+0`       | `Control+0`           |
-| `toggleFullScreen`          | `Control+Command+F`        | `F11`                 |
-| `toggleSnippets`            | `CommandOrControl+Shift+S` | `Control+Shift+S`     |
-| `toggleTabBar`              | `CommandOrControl+Shift+B` | `Control+Shift+B`     |
-| `toggleTitleBar`            | `CommandOrControl+Shift+D` | `Control+Shift+D`     |
-| `reloadConfig`              | `CommandOrControl+Shift+,` | `Control+Shift+,`     |
+| Action                      | macOS default                | Linux/Windows default |
+| --------------------------- | ---------------------------- | --------------------- |
+| `quit`                      | `CommandOrControl+Q`         | `Control+Alt+Shift+Q` |
+| `copy`                      | `CommandOrControl+C`         | `Control+Shift+C`     |
+| `paste`                     | `CommandOrControl+V`         | `Control+Shift+V`     |
+| `selectAll`                 | `CommandOrControl+A`         | `Control+Shift+A`     |
+| `find`                      | `CommandOrControl+F`         | `Control+Shift+F`     |
+| `newWindow`                 | `CommandOrControl+N`         | `Control+Shift+N`     |
+| `newTab`                    | `CommandOrControl+T`         | `Control+Shift+T`     |
+| `closeTab`                  | `CommandOrControl+W`         | `Control+Shift+W`     |
+| `closeWindow`               | `CommandOrControl+Shift+W`   | `Control+Shift+Q`     |
+| `nextTab`                   | `Control+Tab`                | `Control+PageDown`    |
+| `previousTab`               | `Control+Shift+Tab`          | `Control+PageUp`      |
+| `selectTab1` … `selectTab9` | `CommandOrControl+1` … `9`   | `Alt+1` … `9`         |
+| `splitRight`                | `CommandOrControl+D`         | `Control+Shift+O`     |
+| `splitDown`                 | `CommandOrControl+Shift+E`   | `Control+Shift+E`     |
+| `closePane`                 | `CommandOrControl+Alt+W`     | `Control+Shift+K`     |
+| `focusNextPane`             | `CommandOrControl+]`         | `Control+Shift+]`     |
+| `focusPreviousPane`         | `CommandOrControl+[`         | `Control+Shift+[`     |
+| `focusPaneLeft`             | `CommandOrControl+Alt+Left`  | `Alt+Shift+Left`      |
+| `focusPaneRight`            | `CommandOrControl+Alt+Right` | `Alt+Shift+Right`     |
+| `focusPaneUp`               | `CommandOrControl+Alt+Up`    | `Alt+Shift+Up`        |
+| `focusPaneDown`             | `CommandOrControl+Alt+Down`  | `Alt+Shift+Down`      |
+| `equalizePanes`             | `Command+Control+=`          | `Control+Shift+0`     |
+| `zoomIn`                    | `CommandOrControl+Plus`      | `Control+Plus`        |
+| `zoomOut`                   | `CommandOrControl+-`         | `Control+-`           |
+| `actualSize`                | `CommandOrControl+0`         | `Control+0`           |
+| `toggleFullScreen`          | `Control+Command+F`          | `F11`                 |
+| `toggleSnippets`            | `CommandOrControl+Shift+S`   | `Control+Shift+S`     |
+| `toggleTabBar`              | `CommandOrControl+Shift+B`   | `Control+Shift+B`     |
+| `toggleTitleBar`            | `CommandOrControl+Shift+D`   | `Control+Shift+D`     |
+| `reloadConfig`              | `CommandOrControl+Shift+,`   | `Control+Shift+,`     |
 
 Example overriding a single shortcut:
 
@@ -340,7 +350,7 @@ snippets:
 - Up to 512 snippets are supported: `name` is 1–128 characters, `body` is 1–65,536, and optional `description` is at most 512 (UTF-16 code units). `execute` must be a boolean. Unknown fields are rejected.
 - The file must be one UTF-8 YAML 1.2 core document, at most 1 MiB. Collection nesting is limited to 16 levels (root collection is level 1), with at most 4,096 total mapping pairs and sequence entries. Duplicate keys, aliases, custom/non-core tags, and multiple documents are rejected. Quote scalar values that must be text, such as `"true"` or `"123"`.
 - Opening reveals search/loading immediately and rereads the catalog. Close and reopen to reload edits; query and scroll are retained in window memory. Old rows cannot run during loading, and empty/error results replace them. Invalid files show a path and safe diagnostic instead of the list; syntax errors include line/column coordinates, not command excerpts.
-- The [resizable panel](usage.md#resize-or-close-snippets) keeps its preferred width only for that window's lifetime. There are no panel configuration fields or persistent width/visibility settings. Close/Escape in the panel returns terminal focus; About and Local Image Preview keep it visible but inert.
+- The [resizable panel](usage.md#resize-or-close-snippets) keeps its preferred width only for that window's lifetime. There are no panel configuration fields or persistent width/visibility settings. Close/Escape in the panel returns terminal focus; Settings, About, snippet preview and Local Image Preview keep it visible but inert.
 - Existing `snippets.json` files are not read, rewritten, or migrated. Move your entries into `snippets.yaml` yourself; JSON-formatted content is also valid YAML, subject to the same limits.
 
 ## Terminal themes

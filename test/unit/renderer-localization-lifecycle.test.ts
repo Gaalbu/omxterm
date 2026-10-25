@@ -55,11 +55,39 @@ function fixture(initial = configuration) {
         adapters.push(adapter);
         return adapter;
       },
-      mount(container, adapter, options) {
+      async mount(container, adapter, options) {
+        vi.spyOn(
+          container.closest<HTMLElement>(".terminal-tab")!,
+          "getBoundingClientRect",
+        ).mockReturnValue({ width: 1200, height: 800 } as DOMRect);
+        vi.spyOn(container, "getBoundingClientRect").mockReturnValue({
+          width: 1200,
+          height: 800,
+        } as DOMRect);
         // Model Restty's owned search DOM, while exercising the production
         // Surface's label application and the production host/tab lifecycle.
         container.innerHTML = '<div role="search"><input></div>';
-        return mountResttyTerminalSurface(container, adapter, options);
+        const surface = await mountResttyTerminalSurface(
+          container,
+          adapter,
+          options,
+        );
+        const runtime = harness.instances.find(
+          (instance) => instance.options.root === container,
+        )!;
+        runtime.canvas.width = 1200;
+        runtime.canvas.height = 800;
+        vi.spyOn(runtime.canvas, "getBoundingClientRect").mockReturnValue({
+          width: 1200,
+          height: 800,
+        } as DOMRect);
+        runtime.options.services.ptyTransport.resize(120, 40, {
+          widthPx: 1200,
+          heightPx: 800,
+          cellW: 10,
+          cellH: 20,
+        });
+        return surface;
       },
       subscribeToConfigurationUpdates(listener) {
         update = listener;
@@ -195,7 +223,7 @@ describe("window localization lifecycle", () => {
     expect(f.adapters[0]!.close).toHaveBeenCalledOnce();
   });
 
-  it.each(["first", "new"])(
+  it.each(["first", "new", "split"])(
     "keeps the latest language when the %s tab finishes mounting",
     async (tab) => {
       let finish!: () => void;
@@ -204,16 +232,22 @@ describe("window localization lifecycle", () => {
       });
       if (tab === "first") harness.setInitGate(gate);
       const f = fixture();
-      if (tab === "new") {
+      if (tab !== "first") {
         await f.host.ready;
         harness.setInitGate(gate);
-        f.command({ action: "new" });
+        f.command(
+          tab === "new"
+            ? { action: "new" }
+            : { action: "split", direction: "right" },
+        );
       }
       const index = tab === "first" ? 0 : 1;
       await vi.waitFor(() =>
         expect(harness.instances[index]?.state).toBe("initializing"),
       );
-      const container = f.tabsContainer.children[index]!;
+      const container = f.tabsContainer.querySelectorAll(
+        "main.terminal-surface",
+      )[index]!;
       const search = container.querySelector("input")!;
       search.value = "retained query";
       expect(search.placeholder).toBe("Find in scrollback");
@@ -226,12 +260,25 @@ describe("window localization lifecycle", () => {
       expect(container.getAttribute("aria-label")).toBe(
         "Superfície do terminal",
       );
-      expect(search.placeholder).toBe("Buscar no histórico");
+      await vi.waitFor(() =>
+        expect(search.placeholder).toBe("Buscar no histórico"),
+      );
       expect(search.value).toBe("retained query");
+      const divider = f.tabsContainer.querySelector(".terminal-pane-divider");
+      if (tab === "split")
+        expect(divider!.getAttribute("aria-label")).toBe(
+          "Redimensionar painéis",
+        );
       f.update({ ...configuration, language: "pt-BR" });
       expect(search.placeholder).toBe("Buscar no histórico");
       f.update(configuration);
       expect(search.placeholder).toBe("Find in scrollback");
+      if (tab === "split") {
+        expect(f.tabsContainer.querySelector(".terminal-pane-divider")).toBe(
+          divider,
+        );
+        expect(divider!.getAttribute("aria-label")).toBe("Resize panes");
+      }
       expect(harness.instances).toHaveLength(index + 1);
       for (const adapter of f.adapters) {
         expect(adapter.start).toHaveBeenCalledOnce();

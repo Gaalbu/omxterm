@@ -24,7 +24,7 @@ source/test boundaries and known limitations.
 | 0013 | [Do not inject shell integration](0013-do-not-inject-shell-integration.md)                                                     |
 | 0014 | [Release under the MIT License](0014-release-under-the-mit-license.md)                                                         |
 | 0015 | [Publish tested releases without verified publisher identities](0015-publish-tested-unsigned-arm64-releases.md)                |
-| 0016 | [Adopt tabs with one live session per tab](0016-adopt-tabs-with-one-live-session-per-tab.md)                                   |
+| 0016 | [Adopt tabs with one live session per pane](0016-adopt-tabs-with-one-live-session-per-tab.md)                                  |
 | 0017 | [Confirm close only for Busy Sessions](0017-confirm-close-only-for-busy-sessions.md)                                           |
 | 0018 | [Deliver menu-refused accelerators in main](0018-deliver-menu-refused-accelerators-in-main.md)                                 |
 | 0019 | [Support native ARM64 releases with risk-based evidence](0019-support-native-arm64-releases-on-macos-linux-and-windows.md)     |

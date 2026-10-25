@@ -36,6 +36,7 @@ it("owns input while open: blocks terminal actions and edits its own field", asy
     close: vi.fn(),
   }));
   const surface = {
+    geometry: () => undefined,
     dispose: vi.fn(),
     focus: vi.fn(),
     applyTheme: vi.fn(),

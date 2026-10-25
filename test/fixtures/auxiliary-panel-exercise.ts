@@ -95,6 +95,10 @@ function createScenario(options: PanelOptions) {
     openLocalImage: () => application.openLocalImageInSelectedWindow(),
     showAbout: options.showAbout,
     showSettings: unexpected,
+    splitSelectedPane: unexpected,
+    closeSelectedPane: unexpected,
+    focusSelectedPane: unexpected,
+    equalizeSelectedPanes: unexpected,
   };
   const invocations = terminalActionInvocations(actions);
   deliverKeybindsFromKeyEvents(

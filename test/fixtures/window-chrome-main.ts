@@ -33,11 +33,8 @@ import { terminalIpc } from "../../src/shared/terminal-ipc";
 import { createAboutExercise } from "./about-dialog-exercise";
 import { runSettingsExercise } from "./settings-dialog-exercise";
 import { fixtureConfigurationApplier } from "./window-chrome-configuration";
-import { exerciseAboutKeyboard } from "./about-keyboard-exercise";
-import {
-  exerciseWindowChrome,
-  waitFor as waitForChrome,
-} from "./window-chrome-exercise";
+import { exerciseAboutKeyboardWithInput } from "./about-keyboard-exercise";
+import { exerciseWindowChrome } from "./window-chrome-exercise";
 import { createFixtureSessionInput } from "./fixture-session-input";
 import { exerciseAuxiliaryPanel } from "./auxiliary-panel-exercise";
 import type { LocalImageData } from "../../src/shared/local-image";
@@ -157,24 +154,6 @@ function exerciseMenu(showAbout: () => void) {
     showAbout,
   );
 }
-async function exerciseKeyboard(about: ReturnType<typeof createAboutExercise>) {
-  const inputs: string[] = [];
-  await waitForChrome(
-    () => sessionInputs[0]!.isReady(),
-    "About native child ready",
-  );
-  const release = sessionInputs[0]!.capture((data) => inputs.push(data));
-  try {
-    await exerciseAboutKeyboard(
-      windows[0]!,
-      about.show,
-      sessionOutputs[0]!,
-      () => inputs.join(""),
-    );
-  } finally {
-    release();
-  }
-}
 const applyFixtureConfiguration = (router: TerminalIpcRouter) =>
   fixtureConfigurationApplier(
     router,
@@ -209,7 +188,12 @@ async function exerciseScenario(
       // This independent scenario still owns only its initial selected session.
       // Continuity deliberately changes selection; do not negotiate on its
       // now-hidden initial session or repeat this oracle there.
-      await exerciseKeyboard(about);
+      await exerciseAboutKeyboardWithInput(
+        windows[0]!,
+        about.show,
+        sessionOutputs[0]!,
+        sessionInputs[0]!,
+      );
       await about.exercise();
       return { about: "menu-keyboard-focus-layout-verified" };
     }

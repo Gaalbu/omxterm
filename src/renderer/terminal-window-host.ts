@@ -59,6 +59,7 @@ interface TerminalWindowPageOptions {
   readonly settings?: SettingsBridge;
   readonly createAdapter: (
     fontConfigurationId?: string,
+    workingDirectoryOf?: TerminalSessionId,
   ) => ElectronTerminalAdapter;
   readonly configuration?: TerminalRendererConfiguration;
   readonly chrome?: WindowChromeBridge;
@@ -90,7 +91,10 @@ interface TerminalWindowPageOptions {
   readonly subscribeToTabTitles?: (
     listener: (sessionId: TerminalSessionId, title: string) => void,
   ) => () => void;
-  readonly notifyTabSelection?: (sessionId: TerminalSessionId) => void;
+  readonly notifyTabSelection?: (
+    sessionId: TerminalSessionId | null,
+    tabSessionIds?: readonly TerminalSessionId[],
+  ) => void;
   readonly syncTabTitle?: (sessionId: TerminalSessionId) => void;
   readonly notifyTabsEmpty?: (reason?: "rendering-failure") => void;
   readonly onTitleRequest?: (
@@ -206,8 +210,10 @@ export function mountTerminalWindowPage(
   const tabs: TerminalTabs = createTerminalTabs(
     { strip: elements.tabStrip, container: elements.tabsContainer },
     {
-      createAdapter: () => options.createAdapter(fontConfigurationId),
-      canFocus: () => !disposed && !modalActive(),
+      language,
+      createAdapter: (workingDirectoryOf) =>
+        options.createAdapter(fontConfigurationId, workingDirectoryOf),
+      canFocus: () => !disposed && !previewActive(),
       canAutoFocus: (unchangedFocus) =>
         !previewActive() && (unchangedFocus || !auxiliaryPanel?.ownsFocus()),
       mount,
@@ -348,10 +354,7 @@ export function mountTerminalWindowPage(
       (action) => auxiliaryPanel?.clipboardAction(action) ?? false,
     );
     removeTabCommandListener = options.subscribeToTabCommands?.((command) => {
-      if (
-        modalActive() &&
-        ["new", "next", "previous", "select"].includes(command.action)
-      )
+      if (previewActive() && MODAL_COMPETING_TAB_ACTIONS.has(command.action))
         return;
       tabs.handleCommand(command);
     });
@@ -376,6 +379,18 @@ export function mountTerminalWindowPage(
 
   return { ready, dispose };
 }
+
+// Closure preparation/resolution and failure acknowledgement are deliberately
+// absent: modal ownership suppresses competing navigation, not lifecycle delivery.
+const MODAL_COMPETING_TAB_ACTIONS = new Set<TerminalTabCommand["action"]>([
+  "new",
+  "next",
+  "previous",
+  "select",
+  "split",
+  "focus-pane",
+  "equalize-panes",
+]);
 
 // Terminal-directed actions are ignored while a preview or About owns input.
 function subscribeToGuardedActions(
@@ -450,18 +465,10 @@ function applyWindowTheme(
   transparency: number,
 ): void {
   const { background, foreground } = theme.colors;
-  document.documentElement.style.setProperty(
-    "--terminal-background-opacity",
-    String(1 - transparency),
-  );
-  document.documentElement.style.setProperty(
-    "--terminal-background",
-    background,
-  );
-  document.documentElement.style.setProperty(
-    "--terminal-foreground",
-    foreground,
-  );
+  const style = document.documentElement.style;
+  style.setProperty("--terminal-background-opacity", String(1 - transparency));
+  style.setProperty("--terminal-background", background);
+  style.setProperty("--terminal-foreground", foreground);
   document.body.style.setProperty("--terminal-background", background);
   tabs.style.setProperty("--terminal-background", background);
 }

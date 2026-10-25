@@ -39,8 +39,12 @@ export function startTerminalWindow(bridge: Window["omxterm"]): void {
         mount: mountResttyTerminalSurface,
         loadFontData: bridge.terminal.fontData,
         surfaceFailureBanner: surfaceFailure,
-        createAdapter: (configurationId) =>
-          createElectronTerminalAdapter(bridge.terminal, configurationId),
+        createAdapter: (configurationId, workingDirectoryOf) =>
+          createElectronTerminalAdapter(
+            bridge.terminal,
+            configurationId,
+            workingDirectoryOf,
+          ),
         subscribeToFontZoom: bridge.terminal.onFontZoom,
         subscribeToConfigurationUpdates: bridge.terminal.onConfigurationUpdate,
         userFileErrorBanner: errorBanner,
@@ -76,7 +80,9 @@ export function startTerminalWindow(bridge: Window["omxterm"]): void {
       // Unreported host-setup failures still dispose and propagate.
       if (surfaceFailure.hidden) {
         host.dispose();
-        throw new Error("Failed to mount the Terminal Surface", { cause: error });
+        throw new Error("Failed to mount the Terminal Surface", {
+          cause: error,
+        });
       }
     });
   });

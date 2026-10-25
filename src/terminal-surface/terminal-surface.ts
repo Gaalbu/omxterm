@@ -8,7 +8,18 @@ import type {
 export type { OptionKeyMode } from "../shared/user-configuration";
 import type { TerminalTheme } from "../shared/terminal-theme";
 
+// Current CSS-pixel cell metrics and space unavailable to the terminal grid
+// (padding, borders, scrollbar, etc.). Unmeasurable/hidden/dead Surfaces return
+// undefined; hosts must not infer cell size by dividing an outer box by a grid.
+export interface TerminalSurfaceGeometry {
+  readonly cellWidth: number;
+  readonly cellHeight: number;
+  readonly insetWidth: number;
+  readonly insetHeight: number;
+}
+
 export interface TerminalSurface {
+  geometry(): TerminalSurfaceGeometry | undefined;
   focus(): void;
   applyConfiguration(configuration: TerminalSurfaceConfiguration): void;
   applyTheme(theme: TerminalTheme): void;

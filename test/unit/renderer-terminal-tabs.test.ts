@@ -164,20 +164,22 @@ describe("renderer Terminal Tabs", () => {
     expect(selectedStates(harness.strip)).toEqual(["1:true", "2:false"]);
     expect(visibleContainers(harness.container)).toEqual([0, -1]);
     expect(harness.surfaces[0]!.focus).toHaveBeenCalledOnce();
-    expect(harness.notifySelection).toHaveBeenCalledExactlyOnceWith("s1");
+    expect(harness.notifySelection).toHaveBeenCalledExactlyOnceWith("s1", [
+      "s1",
+    ]);
   });
 
   it("reports the selected session to main across creation, switching, and closing", async () => {
     const harness = createTabsHarness();
     await harness.tabs.ready;
-    expect(harness.notifySelection).toHaveBeenLastCalledWith("s1");
+    expect(harness.notifySelection).toHaveBeenLastCalledWith("s1", ["s1"]);
 
     harness.tabs.handleCommand({ action: "new" });
     await vi.waitFor(() => expect(harness.surfaces).toHaveLength(2));
-    expect(harness.notifySelection).toHaveBeenLastCalledWith("s2");
+    expect(harness.notifySelection).toHaveBeenLastCalledWith("s2", ["s2"]);
 
     harness.tabs.handleCommand({ action: "close" });
-    expect(harness.notifySelection).toHaveBeenLastCalledWith("s1");
+    expect(harness.notifySelection).toHaveBeenLastCalledWith("s1", ["s1"]);
   });
 
   it("cycles the selection with wraparound in both directions", async () => {

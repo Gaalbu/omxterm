@@ -21,7 +21,9 @@ import {
   type TerminalRendererConfiguration,
 } from "../../src/shared/user-configuration";
 import { mountTerminalWindowPage } from "../../src/renderer/terminal-window-host";
-import type { TerminalSurface } from "../../src/terminal-surface/terminal-surface";
+import { createFakeSurface } from "../fixtures/terminal-tabs-harness";
+import type { ElectronTerminalAdapter } from "../../src/renderer/electron-terminal-adapter";
+import type { TerminalTabCommand } from "../../src/shared/terminal-contract";
 import {
   createIpcHarness,
   clipboardOptions,
@@ -69,6 +71,10 @@ it("saves the selector through validated IPC, reloader, menu and two retained wi
       "openLocalImage",
       "showAbout",
       "showSettings",
+      "splitSelectedPane",
+      "closeSelectedPane",
+      "focusSelectedPane",
+      "equalizeSelectedPanes",
     ].map((key) => [key, vi.fn()]),
   ) as unknown as Actions;
   const reloader = createUserConfigurationReloader({
@@ -112,6 +118,7 @@ it("saves the selector through validated IPC, reloader, menu and two retained wi
   try {
     for (let index = 0; index < 2; index += 1) {
       const doc = document.implementation.createHTMLDocument(`window ${index}`);
+      Object.defineProperty(doc, "defaultView", { value: window });
       const callbacks = new Map<
         string,
         (event: unknown, payload: unknown) => void
@@ -164,25 +171,21 @@ it("saves the selector through validated IPC, reloader, menu and two retained wi
       const tabs = doc.createElement("nav");
       const container = doc.createElement("main");
       doc.body.append(tabs, container);
-      const adapter = {
-        sessionId: () => `s${index}`,
-        start: vi.fn(async () => {}),
-        write: vi.fn(),
-        resize: vi.fn(),
-        close: vi.fn(),
-      };
-      const surface = {
-        focus: vi.fn(),
-        dispose: vi.fn(),
-        applyTheme: vi.fn(),
-        applyConfiguration: vi.fn(),
-        zoom: vi.fn(),
-        inject: vi.fn(async () => {}),
-        copy: vi.fn(),
-        paste: vi.fn(),
-        selectAll: vi.fn(),
-        find: vi.fn(),
-      } as unknown as TerminalSurface;
+      const adapters: ReturnType<typeof createAdapter>[] = [];
+      const surfaces: ReturnType<typeof createFakeSurface>[] = [];
+      function createAdapter(): ElectronTerminalAdapter {
+        const id = `s${index}-${adapters.length}`;
+        const adapter = {
+          sessionId: () => id,
+          start: vi.fn(async () => {}),
+          write: vi.fn(),
+          resize: vi.fn(),
+          close: vi.fn(),
+        };
+        adapters.push(adapter);
+        return adapter;
+      }
+      let command!: (command: TerminalTabCommand) => void;
       const pageEvents = new EventTarget();
       const host = mountTerminalWindowPage(
         { tabStrip: tabs, tabsContainer: container },
@@ -195,12 +198,23 @@ it("saves the selector through validated IPC, reloader, menu and two retained wi
           },
           configuration,
           settings: bridge,
-          createAdapter: () => adapter,
-          mount: async (_container, mountedAdapter) => {
+          createAdapter,
+          subscribeToTabCommands(listener) {
+            command = listener;
+            return () => {};
+          },
+          mount: async (pane, mountedAdapter) => {
+            vi.spyOn(
+              pane.closest<HTMLElement>(".terminal-tab")!,
+              "getBoundingClientRect",
+            ).mockReturnValue({ width: 1200, height: 800 } as DOMRect);
             await mountedAdapter.start({
               onOutput: () => {},
               onExit: () => {},
             });
+            mountedAdapter.resize({ cols: 120, rows: 40 });
+            const surface = createFakeSurface();
+            surfaces.push(surface);
             return surface;
           },
           subscribeToConfigurationUpdates: (listener) => {
@@ -212,12 +226,14 @@ it("saves the selector through validated IPC, reloader, menu and two retained wi
         },
       );
       await host.ready;
+      command({ action: "split", direction: "right" });
+      await vi.waitFor(() => expect(surfaces).toHaveLength(2));
       selected = index;
       settings.show();
       await vi.waitFor(() =>
         expect(doc.querySelector("textarea")).not.toBeNull(),
       );
-      windows.push({ doc, host, bridge, published, adapter, surface });
+      windows.push({ doc, host, bridge, published, adapters, surfaces });
     }
     const first = windows[0]!;
     const second = windows[1]!;
@@ -238,9 +254,23 @@ it("saves the selector through validated IPC, reloader, menu and two retained wi
       expect(view.doc.documentElement.lang).toBe("pt-BR");
       expect(view.doc.querySelector("h2")!.textContent).toBe("Configurações");
       expect(view.published.at(-1)!.language).toBe("pt-BR");
-      expect(view.adapter.start).toHaveBeenCalledOnce();
-      expect(view.adapter.close).not.toHaveBeenCalled();
-      expect(view.surface.dispose).not.toHaveBeenCalled();
+      expect(view.adapters).toHaveLength(2);
+      for (const adapter of view.adapters) {
+        expect(adapter.start).toHaveBeenCalledOnce();
+        expect(adapter.close).not.toHaveBeenCalled();
+      }
+      for (const surface of view.surfaces) {
+        expect(surface.dispose).not.toHaveBeenCalled();
+        expect(
+          surface.applyConfiguration.mock.calls.at(-1)?.[0].labels
+            ?.searchPlaceholder,
+        ).toBe("Buscar no histórico");
+      }
+      expect(
+        view.doc
+          .querySelector(".terminal-pane-divider")!
+          .getAttribute("aria-label"),
+      ).toBe("Redimensionar painéis");
     }
     expect(secondDraft.value).toBe("other window dirty draft");
     const appMenu = menu[0]!.submenu;

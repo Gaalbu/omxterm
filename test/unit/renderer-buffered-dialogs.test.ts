@@ -87,6 +87,7 @@ it.each([
     const focus = vi.fn();
     const surface: TerminalSurface = {
       focus,
+      geometry: () => undefined,
       dispose: vi.fn(() => removeHover?.()),
       applyConfiguration: vi.fn(),
       applyTheme: vi.fn(),

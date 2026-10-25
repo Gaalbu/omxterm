@@ -8,6 +8,10 @@ import type {
   TerminalActionName,
   TerminalKeybinds,
 } from "../shared/terminal-keybinds";
+import type {
+  TerminalPaneFocusTarget,
+  TerminalSplitDirection,
+} from "../shared/terminal-panes";
 
 interface TerminalApplicationMenuActions {
   readonly newWindow: () => void;
@@ -35,6 +39,10 @@ interface TerminalApplicationMenuActions {
   readonly openLocalImage: () => void;
   readonly showAbout: () => void;
   readonly showSettings: () => void;
+  readonly splitSelectedPane: (direction: TerminalSplitDirection) => void;
+  readonly closeSelectedPane: () => void;
+  readonly focusSelectedPane: (target: TerminalPaneFocusTarget) => void;
+  readonly equalizeSelectedPanes: () => void;
 }
 
 export function terminalApplicationMenuTemplate(
@@ -157,6 +165,9 @@ export function terminalApplicationMenuTemplate(
           ...accelerator(keybinds.toggleTitleBar),
           click: actions.toggleSelectedTitleBar,
         },
+        { type: "separator" },
+        { label: t("menu.pane"), submenu: paneMenu(actions, keybinds, t) },
+        { type: "separator" },
         {
           label: t("menu.reloadConfiguration"),
           ...accelerator(keybinds.reloadConfig),
@@ -213,6 +224,56 @@ export function terminalApplicationMenuTemplate(
 
 type SelectTabAction = keyof TerminalKeybinds & `selectTab${number}`;
 
+const PANE_FOCUS_ITEMS = [
+  ["menu.focusNextPane", "focusNextPane", "next"],
+  ["menu.focusPreviousPane", "focusPreviousPane", "previous"],
+  ["menu.focusPaneLeft", "focusPaneLeft", "left"],
+  ["menu.focusPaneRight", "focusPaneRight", "right"],
+  ["menu.focusPaneAbove", "focusPaneUp", "up"],
+  ["menu.focusPaneBelow", "focusPaneDown", "down"],
+] as const satisfies readonly (readonly [
+  string,
+  TerminalActionName,
+  TerminalPaneFocusTarget,
+])[];
+
+// View -> Pane: splits and pane focus act on the selected tab's focused pane.
+function paneMenu(
+  actions: TerminalApplicationMenuActions,
+  keybinds: TerminalKeybinds,
+  t: Translator["t"],
+): MenuItemConstructorOptions[] {
+  return [
+    {
+      label: t("menu.splitRight"),
+      ...accelerator(keybinds.splitRight),
+      click: () => actions.splitSelectedPane("right"),
+    },
+    {
+      label: t("menu.splitDown"),
+      ...accelerator(keybinds.splitDown),
+      click: () => actions.splitSelectedPane("down"),
+    },
+    { type: "separator" },
+    ...PANE_FOCUS_ITEMS.map(([label, action, target]) => ({
+      label: t(label),
+      ...accelerator(keybinds[action]),
+      click: () => actions.focusSelectedPane(target),
+    })),
+    { type: "separator" },
+    {
+      label: t("menu.equalizePanes"),
+      ...accelerator(keybinds.equalizePanes),
+      click: actions.equalizeSelectedPanes,
+    },
+    {
+      label: t("menu.closePane"),
+      ...accelerator(keybinds.closePane),
+      click: actions.closeSelectedPane,
+    },
+  ];
+}
+
 // A null keybind leaves the item without a shortcut; the action stays usable.
 function accelerator(value: string | null): { accelerator?: string } {
   return value === null ? {} : { accelerator: value };
@@ -255,6 +316,16 @@ export function terminalActionInvocations(
     toggleTabBar: actions.toggleSelectedTabBar,
     toggleTitleBar: actions.toggleSelectedTitleBar,
     reloadConfig: actions.reloadUserConfiguration,
+    splitRight: () => actions.splitSelectedPane("right"),
+    splitDown: () => actions.splitSelectedPane("down"),
+    closePane: actions.closeSelectedPane,
+    ...(Object.fromEntries(
+      PANE_FOCUS_ITEMS.map(([, action, target]) => [
+        action,
+        () => actions.focusSelectedPane(target),
+      ]),
+    ) as Record<(typeof PANE_FOCUS_ITEMS)[number][1], () => void>),
+    equalizePanes: actions.equalizeSelectedPanes,
   });
 }
 

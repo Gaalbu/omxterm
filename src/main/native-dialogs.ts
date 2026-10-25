@@ -11,7 +11,7 @@ import { terminalSessionFailureDialog } from "./terminal-session-failure";
 export function createNativeDialogs(translator: () => Translator) {
   const confirm = async (
     window: BrowserWindow | undefined,
-    kind: "quit" | "closeWindow" | "closeTab",
+    kind: "quit" | "closeWindow" | "closeTab" | "closePane",
     action: string,
   ) => {
     const { t } = translator();
@@ -66,6 +66,8 @@ export function createNativeDialogs(translator: () => Translator) {
       confirm(window, "closeWindow", translator().t("common.close")),
     confirmCloseTab: (window: BrowserWindow) =>
       confirm(window, "closeTab", translator().t("common.close")),
+    confirmClosePane: (window: BrowserWindow) =>
+      confirm(window, "closePane", translator().t("common.close")),
     async sessionFailure(
       window: BrowserWindow,
       failure: TerminalSessionFailure,

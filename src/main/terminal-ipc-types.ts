@@ -63,7 +63,11 @@ export interface TerminalIpcControllerOptions {
   readonly webContents: TrustedWebContents;
   readonly initialFullScreen?: boolean;
   readonly backgroundTransparency?: () => number;
-  readonly createSession: (callbacks: SessionCallbacks) => LocalTerminalSession;
+  // workingDirectory is an inherited, already validated local directory.
+  readonly createSession: (
+    callbacks: SessionCallbacks,
+    workingDirectory?: string,
+  ) => LocalTerminalSession;
   readonly onSessionStartError: (
     context: TerminalSessionStartErrorContext,
   ) => void;
@@ -102,6 +106,7 @@ export interface TerminalIpcController {
   applyConfiguration(configuration: TerminalRendererConfiguration): void;
   applyFullScreen(fullScreen: boolean): void;
   hasBusySelectedSession(): boolean;
+  hasBusyFocusedSession(): boolean;
   hasBusySession(): boolean;
   dispose(): void;
 }

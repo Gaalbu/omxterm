@@ -27,6 +27,20 @@ export function focusedSearchField(
     : undefined;
 }
 
+// A passive return to this Surface must keep its actual focused query control.
+export function focusSurfacePreservingSearch(
+  restty: PatchedRestty | undefined,
+  container: HTMLElement,
+  refit: () => void,
+): void {
+  if (focusedSearchField(restty, container)) return;
+  refit();
+  const pane = restty?.getActivePane();
+  pane?.runtime.interaction.focus();
+  // Tab selection refits and redraws in the switching task, before presentation.
+  pane?.runtime.render.refresh();
+}
+
 // While the query field holds focus, application Copy, Paste and Select All
 // (menu, keybind or context menu) edit the query: nothing reaches the terminal
 // selection, Protected Paste or the PTY.

@@ -252,12 +252,13 @@ app
                 active.configuration,
               ),
               webContents: window.webContents,
-              createSession(callbacks) {
+              createSession(callbacks, workingDirectory) {
                 return shutdown.createSession(nodePty.spawn, {
                   shell: resolveCurrentDefaultShell(),
                   launchRequest: consumeLaunch(),
                   platform: process.platform,
                   homeDirectory: account.homedir,
+                  ...(workingDirectory ? { workingDirectory } : {}),
                   applicationVersionProvider: app,
                   environment: process.env,
                   ...callbacks,
@@ -342,6 +343,7 @@ app
           showQuitConfirmation: nativeDialogs.confirmQuit,
           showCloseWindowConfirmation: nativeDialogs.confirmCloseWindow,
           showCloseTabConfirmation: nativeDialogs.confirmCloseTab,
+          showClosePaneConfirmation: nativeDialogs.confirmClosePane,
           showSessionFailure: nativeDialogs.sessionFailure,
           sendFontZoom: (window, command) =>
             window.webContents.send(terminalIpc.fontZoom, command),
@@ -374,6 +376,11 @@ app
             void terminalApplication!.closeSelectedWindow(),
           newTabInSelectedWindow: terminalApplication.newTabInSelectedWindow,
           closeSelectedTab: () => void terminalApplication!.closeSelectedTab(),
+          closeSelectedPane: () =>
+            void terminalApplication!.closeSelectedPane(),
+          splitSelectedPane: terminalApplication.splitSelectedPane,
+          focusSelectedPane: terminalApplication.focusSelectedPane,
+          equalizeSelectedPanes: terminalApplication.equalizeSelectedPanes,
           selectNextTab: terminalApplication.selectNextTab,
           selectPreviousTab: terminalApplication.selectPreviousTab,
           selectTabInSelectedWindow:

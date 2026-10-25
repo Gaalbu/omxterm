@@ -26,7 +26,9 @@ menu or opens a native dialog. Renderers receive it in the renderer
 configuration and relabel existing elements in place, so a User Configuration
 Reload changes the language without recreating tabs, Surfaces or sessions. The
 Terminal Surface receives its labels through its configuration, including replay
-after a pending mount, and imports no catalog. It reports structured failure
+after a pending pane mount, and imports no catalog. Pane menus, singular Close
+Pane/plural Close Tab dialogs, Surface regions and separators use that same
+language; existing controls relabel without rebuilding the split layout. It reports structured failure
 identity and separate diagnostic detail; the window host translates and retains
 the visible notice until teardown, including after initial mount rejection.
 Document language, accessible names, resize value text and already-visible
@@ -52,7 +54,7 @@ system is involved. Validator and warning detail is interpolated literally.
 
 Snippet row labels update on retained controls instead of rebuilding rows. An
 open preview relabels controls and its unavailable notice without recapturing a
-target, replacing its body, resetting disabled actions, resubscribing or moving
+pane/Surface target, replacing its body, resetting disabled actions, resubscribing or moving
 focus. User-owned names/descriptions/bodies are never translated. Settings,
 About, local-image and snippet previews do not stack; all use the window's same
 language owner, and each removes its bindings at teardown.

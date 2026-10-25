@@ -28,14 +28,19 @@ See [window and session behavior](docs/spec.md#window-and-session-behavior).
 **Terminal Window** — An independent native window containing one or more
 Terminal Tabs, with exactly one selected.
 
-**Terminal Tab** — A selectable container owning a Terminal Surface and, after
-initialization succeeds, one Live Terminal Session. Pending initialization and
-failure acknowledgement also retain window ownership. Tabs can be reordered
-within their window. Their state is temporary; removing the last tab follows the
-window-close lifecycle, including pending failure acknowledgement.
+**Terminal Tab** — A selectable container owning one or more Terminal Panes,
+with exactly one focused. Pending initialization and failure acknowledgement also
+retain window ownership. Tabs can be reordered within their window. Their state is
+temporary; removing the last tab follows the window-close lifecycle, including
+pending failure acknowledgement.
+
+**Terminal Pane** — One Terminal Surface and, after initialization succeeds, one
+Live Terminal Session inside a tab's split layout. Removing a tab's last pane
+removes the tab. A split pane may start in its source pane's last OSC 7-reported
+local directory; otherwise in the home directory.
 
 **Live Terminal Session** — A running shell or explicitly launched program and
-its terminal state. Closing its tab ends its processes; application quit waits
+its terminal state. Closing its pane or tab ends its processes; application quit waits
 for owned native sessions to exit. Session persistence belongs to tools such as
 tmux.
 
@@ -47,7 +52,8 @@ was requested. macOS and Linux use the OS-configured shell. Windows uses
 first tab. The program and literal argument list go directly to the PTY.
 
 **Initial Working Directory** — The operating-system account's home directory,
-where both the Default Shell and an explicit Launch Request start.
+where new tabs and an explicit Launch Request start. Split panes instead use
+an available, still-existing local OSC 7-reported directory, with home as fallback.
 
 **Busy Session** — A session whose PTY foreground process differs from the idle
 Default Shell. An unreadable foreground name, any live explicit command, and all
@@ -120,10 +126,12 @@ user's `snippets.yaml` (single bounded YAML 1.2 core document with version-1
 snippet fields). Search/loading appears immediately on activation; each
 activation rereads the file, retaining query/scroll but invalidating old actions
 and late reads. Each row shows its default Insert or Run intent; activating it
-sends the exact body through Protected Paste to the tab selected at that moment,
-and `execute` controls whether Enter is appended. A read-only preview shows the
-exact body and its final Insert/Run choice wins, delivered only to the tab
-captured when it opened.
+sends the exact body through Protected Paste to the focused pane captured at
+that moment, and `execute` controls whether Enter is appended. A read-only
+preview shows the exact body and its final Insert/Run choice wins, delivered
+only to the pane/Surface captured when it opened. Selection never retargets it;
+removal, exit or fatal failure makes that target unavailable, even while a failed
+pane remains visible for acknowledgement.
 
 ## Terminal data and interaction
 
@@ -138,10 +146,10 @@ persisted state.
 screen. Each session has its own buffer, with an approximate configured line
 target and an independent core byte limit; zero lines disables retention.
 
-**Scrollback Search** — An explicitly opened find bar over one tab's Scrollback
-Buffer and visible screen. It takes keys and clipboard actions only while its
-query field holds focus. Its query and matches live only in that tab's memory;
-they are never persisted, logged or shared with other tabs.
+**Scrollback Search** — An explicitly opened find bar over one Surface's
+Scrollback Buffer and visible screen. It takes keys and clipboard actions only
+while its query field holds focus. Its query and matches live only in that
+Surface's memory; they are never persisted, logged or shared with other panes.
 
 **Terminal Capability Identity** — The environment advertised to programs:
 `TERM=xterm-256color`, `COLORTERM=truecolor`, `TERM_PROGRAM=OMXTerm` and the
