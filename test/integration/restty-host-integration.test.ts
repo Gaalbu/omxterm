@@ -207,9 +207,9 @@ describe.skipIf(
   ),
 )("Restty through the OMXTerm host and a real native PTY", () => {
   it("preserves session lifecycle, isolation, focus, resize, and disabled routes", async (testContext) => {
-    // macOS's per-user tmpdir prefix can exceed the entire native grid. Own a
-    // short random profile so the clipping control's complete path prefix fits
-    // inside the existing window, without depending on a native resize request.
+    // Retain the existing macOS root policy: its per-user tmpdir can exceed
+    // the viewport's total capacity. Clipping supports a measured multirow
+    // prefix on the unchanged window; it no longer requires a one-row path.
     testContext.signal.throwIfAborted();
     const root = await mkdtemp(
       path.join(

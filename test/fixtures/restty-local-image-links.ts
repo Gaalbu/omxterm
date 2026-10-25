@@ -9,7 +9,15 @@ import { withTmuxImageOutput } from "./restty-image-tmux";
 import { localImageFixturePaths } from "./restty-local-image-paths";
 import { withLocalImageFixtureLayout } from "./restty-local-image-layout";
 import { readResttyImageCellSize } from "./restty-host-images";
-import { measureLocalImageRoot } from "./restty-local-image-root";
+import {
+  measureLocalImageRoot,
+  type LocalImageCoreCells,
+} from "./restty-local-image-root";
+import {
+  localImageClippingReady,
+  planLocalImageClipping,
+} from "./restty-local-image-clipping";
+import { readCellSnapshot } from "./restty-link-input";
 import { readLocalImageCoreCells } from "./restty-local-image-core-probe";
 import { exerciseUnicodeLocalImageRoots } from "./restty-local-image-unicode";
 import {
@@ -156,26 +164,82 @@ export async function exerciseResttyLocalImageLinks(options: {
       results.push({ control: "space clipped above viewport", activations: 0 });
 
       size = await refit("wide");
-      const shortPathColumns = shortPath.length + rootCellDelta;
-      assert.ok(
-        shortPathColumns < size.cols,
-        "clipping control requires a fully visible spaced path prefix",
-      );
-      const bottomLine = `${shortPath}${" ".repeat(size.cols - shortPathColumns)}continuation.png`;
-      deliverOutput(
-        `\u001b[3J\u001b[2J\u001b[H${Array.from({ length: size.rows - 1 }, (_, index) => `lead-${index}`).join("\r\n")}\r\n${bottomLine}\r\n${Array.from({ length: size.rows }, (_, index) => `trail-${index}`).join("\r\n")}`,
-      );
-      await new Promise((resolve) => setTimeout(resolve, 100));
-      await scrollTerminal(window, 1, 1, size, -1000);
-      await new Promise((resolve) => setTimeout(resolve, 100));
-      const beforeBottomClip = options.localImageRequests.length;
-      await clickTerminalCell(window, size.rows - 1, 2, size);
-      await new Promise((resolve) => setTimeout(resolve, 100));
-      assert.equal(
-        options.localImageRequests.length,
-        beforeBottomClip,
-        "literal spaces at viewport bottom must not activate an incomplete whole line",
-      );
+      let shortPathColumns: number | undefined;
+      let clipping: ReturnType<typeof planLocalImageClipping> | undefined;
+      let clippingCells: LocalImageCoreCells | null = null;
+      let clippingReady = false;
+      async function recordClipping(stage: "ready" | "failed") {
+        const { geometry } = await readCellSnapshot(window);
+        const content = (await window.webContents.executeJavaScript(
+          `(() => {
+            const { width, height } = document.querySelector('#terminal-window-content').getBoundingClientRect();
+            return { width, height };
+          })()`,
+          true,
+        )) as { width: number; height: number };
+        // Fixture-only bounded geometry; never emit the root, path or core text.
+        process.stdout.write(
+          `__OMXTERM_IMAGE_CLIPPING__${JSON.stringify({
+            stage,
+            grid: size,
+            pathColumns: shortPathColumns,
+            prefixRows: clipping?.prefixRows,
+            paddingCells: clipping?.paddingCells,
+            leadRows: clipping?.leadRows,
+            click: clipping && {
+              row: clipping.clickRow,
+              col: clipping.clickCol,
+            },
+            observedGrid: clippingCells && {
+              cols: clippingCells.cols,
+              rows: clippingCells.rows,
+            },
+            ready: clippingReady,
+            selectedCodeUnits: clippingCells?.text.length,
+            requests: options.localImageRequests.length,
+            geometry,
+            content,
+            deviceCellSize,
+          })}\n`,
+        );
+      }
+      try {
+        // A wide-wrap spacer can appear/disappear on refit: the base-grid root
+        // delta is NOT a width for this grid. Measure the complete path here.
+        shortPathColumns = await measureLocalImageRoot({
+          ...options,
+          rootPrefix: shortPath,
+          size,
+          readCells: () => readLocalImageCoreCells(window),
+        });
+        const plan = planLocalImageClipping(shortPath, shortPathColumns, size);
+        clipping = plan;
+        deliverOutput(plan.output);
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        await scrollTerminal(window, 1, 1, size, -1000);
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        await waitFor(async () => {
+          clippingCells = await readLocalImageCoreCells(window);
+          clippingReady = localImageClippingReady(
+            clippingCells,
+            shortPath,
+            plan,
+          );
+          return clippingReady;
+        }, "complete visible clipping prefix and literal bottom-edge spaces in actual core");
+        await recordClipping("ready");
+        const beforeBottomClip = options.localImageRequests.length;
+        await clickTerminalCell(window, plan.clickRow, plan.clickCol, size);
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        assert.equal(
+          options.localImageRequests.length,
+          beforeBottomClip,
+          "literal spaces at viewport bottom must not activate an incomplete whole line",
+        );
+      } catch (cause) {
+        await recordClipping("failed");
+        throw cause;
+      }
       results.push({ control: "space clipped below viewport", activations: 0 });
       await refit("base");
 

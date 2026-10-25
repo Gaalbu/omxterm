@@ -36,7 +36,7 @@ export async function measureLocalImageRoot(options: {
   }, "local image root sentinel in actual Ghostty cells");
   assert.ok(
     sentinel < options.size.cols * (options.size.rows - 1),
-    "fixture root must remain fully visible",
+    `Fixture reference capacity exceeded: ${JSON.stringify({ endpoint: sentinel, ...options.size })}`,
   );
   return sentinel;
 }
