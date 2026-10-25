@@ -9,6 +9,7 @@ const projectRoot = fileURLToPath(new URL("../..", import.meta.url));
 export async function buildFixture(
   root: string,
   cleanupOwner: FixtureCleanupOwner = "recipe",
+  mainEntry = "test/fixtures/window-chrome-main.ts",
 ): Promise<void> {
   return prepareFixture(
     root,
@@ -19,7 +20,7 @@ export async function buildFixture(
           build({
             absWorkingDir: projectRoot,
             bundle: true,
-            entryPoints: ["test/fixtures/window-chrome-main.ts"],
+            entryPoints: [mainEntry],
             external: ["electron", "node-pty"],
             format: "cjs",
             platform: "node",
