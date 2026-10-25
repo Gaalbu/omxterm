@@ -1281,8 +1281,32 @@ default.
 `font.family`, `font.size`, `font.lineHeight`, `font.ligatures`,
 `terminal.padding`, `scrollback.lines`, `keyboard.optionAsAlt` (macOS), the
 new-window defaults `window.showTitleBar`, `window.showTabBar` and
-`window.alwaysOnTop`, and `theme.path`; keybinds, transparency and blur stay
-file-only in this editor. Changing a control saves at once without a separate
+`window.alwaysOnTop`, and `theme.path`; transparency and blur stay file-only in
+this editor. Its **Shortcuts** page shows each action of the current keybind
+vocabulary with its effective shortcut and whether it inherits the default,
+has a custom binding or is explicitly unbound: Default removes the action's
+`keybinds` entry (and an emptied group), Unbind writes `null` and a recorded
+key writes its accelerator, through the same validated save; collisions report
+the loader's actionable message. Recording is main-owned: while a window
+captures, its `before-input-event` reports the next press, with the native
+identity delivery matches (including AltGr and bare F1–F24), instead of
+running a keybind, a menu shortcut or reaching the terminal, and consumes that
+key's held repeats and release, including overlapping invalid/modifier gestures.
+A fresh press after a lost release remains new input. Only unmodified Escape
+cancels; modified Escape, including native AltGr, can be recorded. A key that
+cannot round-trip through the supported accelerator identity reports invalid and
+keeps capture open; arbitrary layout translation is not added, and the existing
+logical Plus/keypad exceptions remain. Capture ends after one accepted key, on
+cancel, button/window blur, page departure, dialog disposal or at a real
+30-second timeout that notifies the current view without waiting for another
+key. Ending a recording retains its consumed gestures until release or a fresh
+press; window blur, renderer loss/reload and window disposal clear that ownership.
+Each bounded capture request, stop and notification carries the same recording
+identity: retired notifications cannot save or cancel a replacement recording,
+and a retired stop cannot release its keyboard. Cancellation replaces the
+recording instructions; Record/Cancel, Unbind and Default have localized,
+action-specific accessible names that follow their current operation. No second
+shortcut registry is added; menu display and delivery follow the reloaded configuration. Changing a control saves at once without a separate
 confirmation; a cleared text or number field removes the entry so its default
 applies. The **Config File** page shows the document with an explicit **Save**
 and **Reload File**. Writes follow ADR 0003: full startup validation before an

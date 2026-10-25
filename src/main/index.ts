@@ -21,6 +21,7 @@ import { terminalContextMenuTemplate } from "./terminal-context-menu";
 import * as applicationAbout from "./application-about";
 import { startApplicationSettings } from "./application-settings";
 import { deliverKeybindsFromKeyEvents } from "./keybind-delivery";
+import { createKeybindCapture } from "./keybind-capture";
 import { createDefaultShellResolver, defaultShellName } from "./default-shell";
 import {
   MalformedLaunchRequestError,
@@ -108,6 +109,8 @@ const notifyWindow = (channel: string) => (window: BrowserWindow) =>
   window.webContents.send(channel);
 
 let terminalApplication: TerminalApplication<BrowserWindow> | undefined;
+// Settings shortcut recording owns a window's keyboard through key delivery.
+const keybindCapture = createKeybindCapture(process.platform);
 let operationalEvents: OperationalEventLog | undefined;
 let disposeTerminalSessions = () => {};
 const shutdown = registerTerminalShutdown(app, {
@@ -214,7 +217,12 @@ app
               () => configurationReloader.current().configuration.keybinds,
               (action) => keybindActionInvocations[action](),
               process.platform,
+              keybindCapture,
             );
+            // Retain the target: BrowserWindow.webContents throws after closed.
+            const captureTarget = window.webContents;
+            window.on("blur", () => keybindCapture.release(captureTarget));
+            window.once("closed", () => keybindCapture.release(captureTarget));
             guardTerminalWindowClose(window, terminalApplication!);
             const chrome = registerWindowChrome(window, ipcMain, {
               platform: process.platform,
@@ -418,6 +426,7 @@ app
             terminalIpcRouter,
             configurationLoadOptions,
             configurationReloader,
+            keybindCapture,
           ),
         };
         const keybindActionInvocations = terminalActionInvocations(menuActions);
