@@ -31,7 +31,8 @@ export type TerminalPaneCommand =
 // The renderer reports the focused pane's session and every live session of
 // the selected tab, so Close Tab can count Busy Sessions across its panes.
 export interface TerminalTabSelection {
-  readonly sessionId: TerminalSessionId;
+  // null means the focused pane is pending or retained after native exit.
+  readonly sessionId: TerminalSessionId | null;
   readonly tabSessionIds?: readonly TerminalSessionId[];
 }
 
@@ -89,12 +90,11 @@ export function isTerminalTabSelection(
     return isTerminalSessionId(value.sessionId);
   return (
     hasExactKeys(value, ["sessionId", "tabSessionIds"]) &&
-    isTerminalSessionId(value.sessionId) &&
+    (value.sessionId === null || isTerminalSessionId(value.sessionId)) &&
     Array.isArray(value.tabSessionIds) &&
-    value.tabSessionIds.length >= 1 &&
     value.tabSessionIds.length <= MAX_PANES_PER_TAB &&
     value.tabSessionIds.every(isTerminalSessionId) &&
-    value.tabSessionIds.includes(value.sessionId)
+    (value.sessionId === null || value.tabSessionIds.includes(value.sessionId))
   );
 }
 
@@ -125,7 +125,8 @@ export function isWorkingDirectoryUri(uri: string): boolean {
 }
 
 // A reported directory names this machine only when its host is empty,
-// "localhost" or the local host name; a remote shell's path is never local.
+// "localhost" or the local host name. A remote shell emitting that same host
+// identity is indistinguishable; the result can only name a local directory.
 // Windows paths keep their drive letter; UNC and device paths are rejected.
 export function localWorkingDirectory(
   uri: string,

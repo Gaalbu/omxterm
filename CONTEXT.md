@@ -52,7 +52,8 @@ was requested. macOS and Linux use the OS-configured shell. Windows uses
 first tab. The program and literal argument list go directly to the PTY.
 
 **Initial Working Directory** — The operating-system account's home directory,
-where both the Default Shell and an explicit Launch Request start.
+where new tabs and an explicit Launch Request start. Split panes instead use
+an available, still-existing local OSC 7-reported directory, with home as fallback.
 
 **Busy Session** — A session whose PTY foreground process differs from the idle
 Default Shell. An unreadable foreground name, any live explicit command, and all
@@ -115,7 +116,7 @@ user's `snippets.yaml` (single bounded YAML 1.2 core document with version-1
 snippet fields). Search/loading appears immediately on activation; each
 activation rereads the file, retaining query/scroll but invalidating old actions
 and late reads. Activating a current snippet sends its exact body through
-Protected Paste to the selected tab; `execute` controls whether Enter is appended.
+Protected Paste to the selected tab's focused pane; `execute` controls whether Enter is appended.
 
 ## Terminal data and interaction
 
@@ -130,10 +131,10 @@ persisted state.
 screen. Each session has its own buffer, with an approximate configured line
 target and an independent core byte limit; zero lines disables retention.
 
-**Scrollback Search** — An explicitly opened find bar over one tab's Scrollback
-Buffer and visible screen. It takes keys and clipboard actions only while its
-query field holds focus. Its query and matches live only in that tab's memory;
-they are never persisted, logged or shared with other tabs.
+**Scrollback Search** — An explicitly opened find bar over one Surface's
+Scrollback Buffer and visible screen. It takes keys and clipboard actions only
+while its query field holds focus. Its query and matches live only in that
+Surface's memory; they are never persisted, logged or shared with other panes.
 
 **Terminal Capability Identity** — The environment advertised to programs:
 `TERM=xterm-256color`, `COLORTERM=truecolor`, `TERM_PROGRAM=OMXTerm` and the

@@ -44,6 +44,7 @@ async function fixture() {
     tabsContainer.append(input);
     return {
       dispose: vi.fn(),
+      geometry: () => undefined,
       focus: vi.fn(() => input.focus()),
       applyTheme: vi.fn(),
       applyConfiguration: vi.fn(),

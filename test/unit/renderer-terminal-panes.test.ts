@@ -5,7 +5,9 @@ import { createTabsHarness } from "../fixtures/terminal-tabs-harness";
 afterEach(() => vi.restoreAllMocks());
 
 async function splitHarness(size = { cols: 120, rows: 40 }) {
-  const harness = createTabsHarness();
+  const harness = createTabsHarness({
+    tabSize: { width: size.cols * 10, height: size.rows * 20 },
+  });
   await harness.tabs.ready;
   harness.sessionAdapters[0]!.resize(size);
   return harness;
@@ -48,6 +50,8 @@ describe("Terminal Panes", () => {
   it.each([
     [{ cols: 40, rows: 40 }, "right"],
     [{ cols: 120, rows: 10 }, "down"],
+    [{ cols: 120, rows: 3 }, "right"],
+    [{ cols: 19, rows: 40 }, "down"],
   ] as const)(
     "refuses a split below the 20 x 5 reference with no session (%o %s)",
     async (size, direction) => {
@@ -58,6 +62,24 @@ describe("Terminal Panes", () => {
       expect(tab(harness).hasAttribute("data-split")).toBe(false);
     },
   );
+
+  it("refuses a padded 41-column source whose prospective panes have only 19 usable columns", async () => {
+    const harness = createTabsHarness({
+      tabSize: { width: 426, height: 800 },
+      surfaceGeometry: {
+        cellWidth: 10,
+        cellHeight: 20,
+        insetWidth: 16,
+        insetHeight: 8,
+      },
+    });
+    await harness.tabs.ready;
+    harness.sessionAdapters[0]!.resize({ cols: 41, rows: 39 });
+    harness.tabs.handleCommand({ action: "split", direction: "right" });
+    expect(harness.createAdapter).toHaveBeenCalledOnce();
+    expect(tab(harness).hasAttribute("data-split")).toBe(false);
+    harness.tabs.dispose();
+  });
 
   it("refuses to split a pane whose grid is not known yet", async () => {
     const harness = createTabsHarness();
@@ -115,6 +137,47 @@ describe("Terminal Panes", () => {
     expect(harness.surfaces[0]!.dispose).not.toHaveBeenCalled();
   });
 
+  it.each(["input", "textarea"] as const)(
+    "preserves the surviving focused %s when a background pane exits",
+    async (tag) => {
+      const harness = await splitHarness();
+      await split(harness, "right");
+      const first = tab(harness).querySelector("main")!;
+      const field = document.createElement(tag);
+      field.value = "find this";
+      first.append(field);
+      field.focus();
+      field.setSelectionRange(2, 6);
+      expect(document.activeElement).toBe(field);
+      harness.adapters[1]!.handlers!.onExit({ exitCode: 0, signal: 0 });
+      expect(document.activeElement).toBe(field);
+      expect([field.selectionStart, field.selectionEnd]).toEqual([2, 6]);
+      harness.tabs.dispose();
+    },
+  );
+
+  it.each([0, 1])(
+    "preserves an outside panel field when pane %i exits",
+    async (index) => {
+      let field: HTMLInputElement | undefined;
+      const harness = createTabsHarness({
+        tabsOptions: { canAutoFocus: () => document.activeElement !== field },
+      });
+      await harness.tabs.ready;
+      harness.sessionAdapters[0]!.resize({ cols: 120, rows: 40 });
+      await split(harness, "right");
+      field = document.createElement("input");
+      document.body.append(field);
+      field.focus();
+      for (const surface of harness.surfaces) surface.focus.mockClear();
+      harness.adapters[index]!.handlers!.onExit({ exitCode: 0, signal: 0 });
+      expect(document.activeElement).toBe(field);
+      for (const surface of harness.surfaces)
+        expect(surface.focus).not.toHaveBeenCalled();
+      harness.tabs.dispose();
+    },
+  );
+
   it("never takes focus from panel controls when a focused pane exits", async () => {
     let allowPassive = true;
     const harness = createTabsHarness({
@@ -130,6 +193,26 @@ describe("Terminal Panes", () => {
     expect(harness.notifySelection).toHaveBeenLastCalledWith("s1", ["s1"]);
     expect(harness.surfaces[0]!.focus).not.toHaveBeenCalled();
   });
+
+  it.each([
+    [0, "s2"],
+    [1, "s1"],
+    [2, "s2"],
+  ] as const)(
+    "closing pane %i selects its non-wrapping nearest sibling %s",
+    async (position, expected) => {
+      const harness = await splitHarness();
+      await split(harness, "right");
+      await split(harness, "right");
+      const panes = tab(harness).querySelectorAll("main");
+      const field = document.createElement("input");
+      panes[position]!.append(field);
+      field.focus();
+      harness.tabs.handleCommand({ action: "close-pane" });
+      expect(harness.notifySelection.mock.calls.at(-1)?.[0]).toBe(expected);
+      harness.tabs.dispose();
+    },
+  );
 
   it("keeps an unexpectedly signalled pane until main orders its removal", async () => {
     const harness = await splitHarness();

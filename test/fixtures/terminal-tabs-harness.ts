@@ -8,10 +8,19 @@ import type {
   TerminalSessionAdapter,
   TerminalSessionHandlers,
 } from "../../src/terminal-surface/terminal-session-adapter";
-import type { TerminalSurfaceOptions } from "../../src/terminal-surface/terminal-surface";
+import type {
+  TerminalSurfaceGeometry,
+  TerminalSurfaceOptions,
+} from "../../src/terminal-surface/terminal-surface";
 
 export function createFakeSurface() {
   return {
+    geometry: vi.fn(() => ({
+      cellWidth: 10,
+      cellHeight: 20,
+      insetWidth: 0,
+      insetHeight: 0,
+    })),
     focus: vi.fn(),
     applyTheme: vi.fn(),
     applyConfiguration: vi.fn(),
@@ -30,6 +39,9 @@ interface FakeAdapter extends ElectronTerminalAdapter {
 export function createTabsHarness(
   options: {
     failMountAt?: number;
+    beforeStart?: (mountIndex: number) => Promise<void>;
+    tabSize?: { width: number; height: number };
+    surfaceGeometry?: TerminalSurfaceGeometry;
     surfaceOptions?: TerminalSurfaceOptions;
     tabsOptions?: Partial<TerminalTabsOptions>;
   } = {},
@@ -73,12 +85,20 @@ export function createTabsHarness(
       surfaceOptions: TerminalSurfaceOptions,
     ) => {
       mountCount += 1;
+      const tab = _container.closest<HTMLElement>(".terminal-tab")!;
+      vi.spyOn(tab, "getBoundingClientRect").mockImplementation(
+        () =>
+          ({ ...(options.tabSize ?? { width: 1200, height: 800 }) }) as DOMRect,
+      );
       if (mountCount === options.failMountAt)
         throw new Error("The Default Shell could not be started");
       mountedSurfaceOptions.push(surfaceOptions);
       sessionAdapters.push(adapter);
+      await options.beforeStart?.(mountCount);
       await adapter.start({ onOutput: vi.fn(), onExit: vi.fn() });
       const surface = createFakeSurface();
+      if (options.surfaceGeometry)
+        surface.geometry.mockReturnValue(options.surfaceGeometry);
       surfaces.push(surface);
       return surface;
     },

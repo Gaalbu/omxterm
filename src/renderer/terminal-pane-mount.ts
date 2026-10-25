@@ -45,7 +45,7 @@ export function createPaneMount(deps: {
     const sessionAdapter = paneSessionAdapter(pane, deps.onSessionEnd, () => {
       withSession((sessionId) => options.syncTitle?.(sessionId))();
       // The tab's session set grew; main counts it for Close Tab.
-      if (pane !== pane.tab.focused) deps.notifyFocus(pane.tab);
+      deps.notifyFocus(pane.tab);
     });
     // Title and BEL events carry the emitting pane's session id;
     // the Surface itself stays pane-unaware. Events can only follow session
@@ -91,6 +91,7 @@ export function createPaneMount(deps: {
       return;
     }
     pane.surface = surface;
+    pane.geometry = surface.geometry();
     const latestConfiguration = completeConfiguration(deps.surfaceOptions());
     if (latestConfiguration) surface.applyConfiguration(latestConfiguration);
     const steps = deps.zoomSteps();

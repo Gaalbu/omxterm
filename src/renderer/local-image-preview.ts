@@ -111,6 +111,7 @@ export function createLocalImagePreview(
         const selected = await options.loadImage(source);
         if (disposed) return;
         if (!selected) {
+          opening = false;
           options.focusTerminal();
           return;
         }

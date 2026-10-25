@@ -11,18 +11,29 @@ sessions; tmux remains the user's persistence and reconnection tool.
 `View -> Pane` splits the selected tab's focused pane to the right or down.
 Splitting in the parent's direction adds a sibling, so a layout is an n-ary
 tree of rows and columns with weights; rebuilding it moves pane containers and
-never recreates a Surface or session. A split is admitted only when the focused
-pane's current grid leaves both panes at least 20 columns or 5 rows, using its
-current cell geometry, and a tab holds at most 16 panes. A refused split starts
-no session. Dividers are pointer- and keyboard-operable separators limited by
-the same reference minimum; a later resize or zoom that cannot fit every
-minimum keeps sessions and layout rather than closing panes or raising the
-window's minimum size. Maximizing a pane is outside this slice.
+never recreates a Surface or session. A split is admitted only when the
+prospective weighted layout fits usable grids of at least 20 columns by 5 rows
+in both resulting panes. The new pane uses the source's current cell geometry as
+its admission reference; existing Surfaces each supply their own cell metrics
+and non-grid space, including padding and scrollbar overhead. Every divider,
+including internal subtree and additional n-ary dividers, consumes space. Unknown
+geometry refuses a split, and a tab holds at most 16 panes. A refused split
+creates no Adapter/session. Dividers are pointer- and keyboard-operable separators
+limited by the same uncapped subtree minima. A later resize or zoom that cannot
+fit every minimum keeps sessions and layout rather than closing panes or raising
+the window's minimum size; impossible divider moves retain existing proportions. Maximizing a pane is outside this slice.
 
 Exactly one pane per tab is focused. It receives keyboard input and every
 terminal-directed action (clipboard, Find, snippets, file drops); clicking a
 pane or Focus Next/Previous/Left/Right/Above/Below moves focus, and the focused
 pane carries a theme-derived ring that never dims or recolors the others.
+Structural rebuilds preserve the exact surviving DOM control (including search
+selection), without changing logical pane selection or taking focus from panel
+or modal controls. Removal chooses a non-wrapping neighbor in the nearest split;
+explicit next/previous navigation still wraps. About and Local Image Preview
+suppress competing pane split/focus/equalize and tab-navigation/new-tab commands,
+including while choosing/loading, but deliver captured closure and failure
+acknowledgement normally.
 Equalize Panes resets the shares of the split that holds the focused pane.
 
 A new pane starts the Default Shell. When the source pane's shell reported a
@@ -74,8 +85,11 @@ closes its window, and closing the last window requests application quit. Close
 confirmation is once per action and only for affected Busy Sessions under
 [ADR 0017](0017-confirm-close-only-for-busy-sessions.md): Close Pane counts the
 focused pane only, Close Tab every pane of the tab. The renderer reports the
-focused pane's session together with the selected tab's sessions, and main
-counts only sessions it still owns.
+focused pane's session (explicitly null when pending or retained dead) together
+with the selected tab's current sessions, even before the focused pane mounts.
+Main counts only sessions it still owns, never a previous tab or unrelated
+window sessions once a complete selection snapshot is known. A retired focused
+identity cannot route native input but does not prevent a fresh tab snapshot.
 [ADR 0028](0028-wait-for-native-sessions-before-application-quit.md) independently
 waits for actual native exit before accepted Quit completes; tab/controller
 disposal or `kill()` is not completion.
@@ -102,7 +116,7 @@ tab-owner notification waits for all pending acknowledgements. Acknowledgement
 removes only the failed pane (its tab when it is the last pane); sibling exit or
 another acknowledged failure does
 not release its window. Runtime rendering failure requests session termination
-and retains its failed tab until native exit and acknowledgement. Explicit
+and retains its failed pane until native exit and acknowledgement. Explicit
 window/application closure remains separately authorized; disposed owners make
 late dialogs inert.
 

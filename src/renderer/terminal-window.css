@@ -71,7 +71,7 @@ body {
 }
 
 .terminal-pane-divider {
-  flex: 0 0 4px;
+  flex: 0 0 var(--terminal-pane-divider-size, 4px);
   cursor: col-resize;
   touch-action: none;
   background: color-mix(
@@ -126,21 +126,18 @@ body {
     var(--terminal-padding-left, 8px);
 }
 
-body.tabs-visible .restty-terminal-surface {
+body.tabs-visible .restty-terminal-surface,
+.terminal-tab .restty-terminal-surface {
   padding-top: var(--terminal-padding-top, 0px);
 }
 
-/* Only the tab's top edge reserves the native title inset once it splits. */
-.terminal-tab[data-split] {
+/* The tab owns the native inset once, including before its first split. */
+.terminal-tab {
   padding-top: var(--native-title-inset);
 }
 
-body.tabs-visible .terminal-tab[data-split] {
+body.tabs-visible .terminal-tab {
   padding-top: 0;
-}
-
-.terminal-tab[data-split] .restty-terminal-surface {
-  padding-top: var(--terminal-padding-top, 0px);
 }
 
 .restty-terminal-surface .pane-split {

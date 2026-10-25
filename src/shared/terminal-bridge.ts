@@ -54,7 +54,7 @@ export interface TerminalBridge {
     listener: (sessionId: TerminalSessionId, title: string) => void,
   ): () => void;
   notifyTabSelection(
-    sessionId: TerminalSessionId,
+    sessionId: TerminalSessionId | null,
     tabSessionIds?: readonly TerminalSessionId[],
   ): void;
   syncTabTitle(sessionId: TerminalSessionId): void;

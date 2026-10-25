@@ -40,7 +40,16 @@ describe("pane contract", () => {
     expect(
       isTerminalTabSelection({ sessionId: "s2", tabSessionIds: ["s1", "s2"] }),
     ).toBe(true);
+    expect(
+      isTerminalTabSelection({ sessionId: null, tabSessionIds: ["s1"] }),
+    ).toBe(true);
+    expect(isTerminalTabSelection({ sessionId: null, tabSessionIds: [] })).toBe(
+      true,
+    );
     for (const value of [
+      { sessionId: null },
+      { sessionId: undefined, tabSessionIds: [] },
+      { sessionId: null, tabSessionIds: ["bad-id"] },
       { sessionId: "s2", tabSessionIds: ["s1"] },
       { sessionId: "s1", tabSessionIds: [] },
       { sessionId: "s1", tabSessionIds: ["s1", "x"] },

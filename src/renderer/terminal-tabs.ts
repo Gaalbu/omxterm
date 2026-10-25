@@ -51,7 +51,7 @@ export interface TerminalTabsOptions {
   readonly notifyEmpty?: (reason?: "rendering-failure") => void;
   // The selected tab's focused pane and every started session of that tab.
   readonly notifySelection?: (
-    sessionId: TerminalSessionId,
+    sessionId: TerminalSessionId | null,
     tabSessionIds: readonly TerminalSessionId[],
   ) => void;
   readonly notifyTitle?: (
@@ -136,13 +136,14 @@ export function createTerminalTabs(
     );
   };
 
-  // Main tracks the focused pane for titles and Close Pane, and the whole
-  // tab for Close Tab (a pane still starting is reported once it starts).
+  // Selection is a complete snapshot even while focus has no live session.
   const notifyFocus = (tab: TerminalTab) => {
     if (disposed || tab !== selectedTab()) return;
-    const sessionId = tab.focused.adapter.sessionId();
-    if (sessionId !== undefined)
-      options.notifySelection?.(sessionId, tabSessionIds(tab));
+    const focused = tab.focused;
+    const sessionId = focused.ended
+      ? null
+      : (focused.adapter.sessionId() ?? null);
+    options.notifySelection?.(sessionId, tabSessionIds(tab));
   };
 
   const select = (index: number, passive = false) => {
@@ -192,6 +193,7 @@ export function createTerminalTabs(
     // An ordinary end removes the pane; an unexpected signal keeps the dead
     // pane visible until main acknowledges the failure and orders removal.
     if (exit.signal === 0 && !exit.startupFailed) panes.removePane(pane);
+    else notifyFocus(pane.tab);
   };
 
   const mountPane = createPaneMount({
@@ -214,6 +216,7 @@ export function createTerminalTabs(
     createAdapter: options.createAdapter,
     mountPane,
     focusSurface: (pane, passive) => focusPane(pane, options, passive),
+    canInteract: () => options.canFocus?.() !== false,
     onFocusChange: (tab) => {
       notifyFocus(tab);
       renderStrip();

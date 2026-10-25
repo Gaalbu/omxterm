@@ -138,8 +138,11 @@ export function resizeSplit<Pane>(
   if (first === undefined || second === undefined || !Number.isFinite(delta))
     return layout;
   const pair = first + second;
-  const lower = Math.min(pair / 2, minimum(layout.children[index]!));
-  const upper = Math.max(pair / 2, pair - minimum(layout.children[index + 1]!));
+  const lower = minimum(layout.children[index]!);
+  const upper = pair - minimum(layout.children[index + 1]!);
+  // A later shrink/zoom can make the reference minima impossible. Retain the
+  // existing proportions rather than silently forcing equal halves.
+  if (lower > upper) return layout;
   const nextFirst = Math.min(upper, Math.max(lower, first + delta));
   const weights = [...layout.weights];
   weights[index] = nextFirst;
@@ -151,15 +154,40 @@ export function resizeSplit<Pane>(
 export function minimumExtent<Pane>(
   layout: PaneLayout<Pane>,
   axis: SplitAxis,
-  pane: number,
+  pane: number | ((pane: Pane) => number),
+  divider = 0,
 ): number {
-  if (layout.kind === "leaf") return pane;
+  if (layout.kind === "leaf")
+    return typeof pane === "number" ? pane : pane(layout.pane);
   const extents = layout.children.map((child) =>
-    minimumExtent(child, axis, pane),
+    minimumExtent(child, axis, pane, divider),
   );
   return layout.direction === axis
-    ? extents.reduce((sum, extent) => sum + extent, 0)
+    ? extents.reduce((sum, extent) => sum + extent, 0) +
+        divider * (extents.length - 1)
     : Math.max(...extents);
+}
+
+// Removal stays in the nearest containing split, without navigation wraparound.
+export function removalNeighbor<Pane>(
+  layout: PaneLayout<Pane>,
+  target: Pane,
+): Pane | undefined {
+  if (layout.kind === "leaf") return undefined;
+  const index = layout.children.findIndex(
+    (child) => child.kind === "leaf" && child.pane === target,
+  );
+  if (index >= 0) {
+    const sibling = layout.children[index - 1] ?? layout.children[index + 1];
+    if (!sibling) return undefined;
+    const panes = layoutPanes(sibling);
+    return index > 0 ? panes.at(-1) : panes[0];
+  }
+  for (const child of layout.children) {
+    const neighbor = removalNeighbor(child, target);
+    if (neighbor !== undefined) return neighbor;
+  }
+  return undefined;
 }
 
 export function adjacentPane<Pane>(

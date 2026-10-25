@@ -4,6 +4,7 @@ import {
   type PatchedResttyPane,
   type PatchedResttyTerminalConfig,
 } from "./restty-runtime-contract";
+import { createSurfaceGeometry } from "./surface-geometry";
 import type { TerminalSize } from "../shared/terminal-contract";
 import {
   createSemanticInputDelivery,
@@ -43,6 +44,7 @@ import { toGhosttyTheme, toResttySearchUiStyle } from "./restty-theme";
 import {
   applySearchTheme,
   focusedSearchField,
+  focusSurfacePreservingSearch,
   retainSearchEscapeGesture,
   withSearchFieldClipboard,
 } from "./restty-search-field";
@@ -178,6 +180,7 @@ export async function mountResttyTerminalSurface(
     visibleLinkController?.invalidate();
     pane?.runtime.interaction.updateSize(true);
   };
+  const geometry = createSurfaceGeometry(container, isSurfaceVisible, refit);
   const applyConfiguration = (configuration: TerminalSurfaceConfiguration) => {
     const nextBaseline = resolveFontSize(configuration.appearance.fontSize);
     resolveLineHeight(configuration.appearance.lineHeight);
@@ -246,7 +249,8 @@ export async function mountResttyTerminalSurface(
       if (!isInactive() && ready) adapter.write(data);
       return !isInactive() && ready;
     },
-    resize(cols, rows) {
+    resize(cols, rows, meta) {
+      geometry.record(meta);
       const size = { cols, rows };
       settledSize = size;
       if (!isInactive() && ready) adapter.resize(size);
@@ -342,13 +346,9 @@ export async function mountResttyTerminalSurface(
     pane.runtime.render.refresh();
 
     return {
+      geometry: geometry.measure,
       focus: () => {
-        // Window focus returns to a focused query field, not the terminal.
-        if (disposed || focusedSearchField(restty, container)) return;
-        refit();
-        pane?.runtime.interaction.focus();
-        // Tab selection calls focus in the switching task, before presentation.
-        pane?.runtime.render.refresh();
+        if (!disposed) focusSurfacePreservingSearch(restty, container, refit);
       },
       applyConfiguration,
       applyTheme(theme) {
@@ -500,6 +500,7 @@ function paintContainer(
 
 function createDisposedSurface(): TerminalSurface {
   return {
+    geometry: () => undefined,
     focus: () => undefined,
     applyConfiguration: () => undefined,
     applyTheme: () => undefined,

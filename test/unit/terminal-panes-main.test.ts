@@ -191,6 +191,32 @@ describe("working directory tracker", () => {
     expect(view.inherited("s1")).toBe("/srv/other");
   });
 
+  it("invalidates the previous cwd when an oversized report's terminator arrives later", () => {
+    const view = tracker();
+    view.observe("s1", "\u001b]7;file:///srv/project\u0007");
+    view.observe("s1", `\u001b]7;file://remote/${"a".repeat(5_000)}`);
+    view.observe("s1", "\u0007");
+    expect(view.inherited("s1")).toBeUndefined();
+    view.observe("s1", "\u001b]7;file:///srv/project\u001b\\");
+    expect(view.inherited("s1")).toBe("/srv/project");
+  });
+
+  it("accepts an exact-bound report with ST split across chunks and consumes oversized bodies as one report", () => {
+    const directory = "/" + "a".repeat(4_088);
+    const view = tracker([directory, "/srv/project"]);
+    const uri = `file://${directory}`;
+    expect(uri.length).toBe(4_096);
+    view.observe("s1", `\u001b]7;${uri}\u001b`);
+    view.observe("s1", "\\");
+    expect(view.inherited("s1")).toBe(directory);
+    view.observe("s1", `\u001b]7;${uri}x`);
+    // A nested-looking report is still inside the rejected control, not new cwd.
+    view.observe("s1", "\u001b]7;file:///srv/project\u0007");
+    expect(view.inherited("s1")).toBeUndefined();
+    view.observe("s1", "\u001b]7;file:///srv/project\u0007");
+    expect(view.inherited("s1")).toBe("/srv/project");
+  });
+
   it("drops remote, malformed and unbounded reports and forgets ended sessions", () => {
     const view = tracker();
     view.observe("s1", "\u001b]7;file:///srv/project\u0007");

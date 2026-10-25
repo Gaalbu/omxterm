@@ -16,35 +16,38 @@ export function createTabSelection<State>(options: {
   readonly reject: () => void;
   readonly onSessionSelected: (sessionId: TerminalSessionId) => void;
 }) {
-  let focused: TerminalSessionId | undefined;
-  let tab: readonly TerminalSessionId[] = [];
+  let focused: TerminalSessionId | null = null;
+  let tab: readonly TerminalSessionId[] | undefined;
   return {
     tabSelected(payload?: unknown) {
       if (!isTerminalTabSelection(payload)) {
         options.reject();
         return;
       }
-      if (!options.routed(payload.sessionId)) return;
+      // Legacy one-session notifications must still name a live owned session.
+      // A full snapshot also represents pending/retired focus and an empty tab.
+      if (
+        payload.tabSessionIds === undefined &&
+        (payload.sessionId === null || !options.routed(payload.sessionId))
+      )
+        return;
       focused = payload.sessionId;
-      // Other panes' ids count only while this window owns them.
-      tab = payload.tabSessionIds ?? [payload.sessionId];
-      options.onSessionSelected(payload.sessionId);
+      tab = payload.tabSessionIds ?? (focused === null ? [] : [focused]);
+      if (focused !== null && options.current(focused))
+        options.onSessionSelected(focused);
     },
     hasBusySelectedSession() {
+      if (tab === undefined) return options.hasBusySession();
       const states = tab.flatMap((id) => {
         const state = options.current(id);
         return state === undefined ? [] : [state];
       });
-      return states.length > 0
-        ? states.some(options.isBusy)
-        : options.hasBusySession();
+      return states.some(options.isBusy);
     },
     hasBusyFocusedSession() {
-      const state =
-        focused === undefined ? undefined : options.current(focused);
-      return state === undefined
-        ? options.hasBusySession()
-        : options.isBusy(state);
+      if (tab === undefined) return options.hasBusySession();
+      const state = focused === null ? undefined : options.current(focused);
+      return state !== undefined && options.isBusy(state);
     },
   };
 }

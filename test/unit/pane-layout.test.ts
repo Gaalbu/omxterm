@@ -6,6 +6,7 @@ import {
   layoutPanes,
   leaf,
   minimumExtent,
+  removalNeighbor,
   removePane,
   resizeSplit,
   splitPane,
@@ -86,6 +87,21 @@ describe("pane layout", () => {
     expect(resizeSplit(layout, [], 0, Number.NaN, () => 0)).toBe(layout);
   });
 
+  it("honors feasible asymmetric minima rather than capping either subtree at half", () => {
+    const layout = splitPane(leaf("a"), "a", "b", "row");
+    expectWeights(
+      resizeSplit(layout, [], 0, -0.4, (child) =>
+        child.kind === "leaf" && child.pane === "a" ? 0.6 : 0.2,
+      ),
+      [0.6, 0.4],
+    );
+    const asymmetric = resizeSplit(layout, [], 0, 0.2, () => 0);
+    expectWeights(
+      resizeSplit(asymmetric, [], 0, -0.4, () => 0.7),
+      [0.7, 0.3],
+    );
+  });
+
   it("measures minimum extents along each axis", () => {
     let layout = splitPane(leaf("a"), "a", "b", "row");
     layout = splitPane(layout, "b", "c", "column");
@@ -99,6 +115,9 @@ describe("pane layout", () => {
     expect(adjacentPane(layout, "c", 1)).toBe("a");
     expect(adjacentPane(layout, "a", -1)).toBe("c");
     expect(adjacentPane(leaf("a"), "a", 1)).toBeUndefined();
+    expect(removalNeighbor(layout, "a")).toBe("b");
+    expect(removalNeighbor(layout, "b")).toBe("c");
+    expect(removalNeighbor(layout, "c")).toBe("b");
     const rectangles: Record<string, [number, number, number, number]> = {
       a: [0, 0, 100, 100],
       b: [104, 0, 200, 48],

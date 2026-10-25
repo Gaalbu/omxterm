@@ -43,6 +43,7 @@ function createAdapterFactory() {
 function createSurface(overrides: Record<string, unknown> = {}) {
   return {
     dispose: vi.fn(),
+    geometry: () => undefined,
     focus: vi.fn(),
     applyTheme: vi.fn(),
     applyConfiguration: vi.fn(),

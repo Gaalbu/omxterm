@@ -11,13 +11,15 @@ import {
   directionalPane,
   equalizeParent,
   leaf,
-  minimumExtent,
+  removalNeighbor,
   removePane as removeLayoutPane,
   resizeSplit,
   splitPane,
   type PaneLayout,
   type SplitAxis,
 } from "./pane-layout";
+import { fitsPaneLayout, minimumLayoutExtent } from "./pane-geometry";
+import type { TerminalSurfaceGeometry } from "../terminal-surface/terminal-surface";
 import { applyPaneWeights, renderPaneLayout } from "./pane-view";
 import {
   createPane,
@@ -39,10 +41,12 @@ export function createPaneOperations(deps: {
   // passive: a background change, which never takes focus from panel or
   // overlay controls.
   readonly focusSurface: (pane: TerminalPane, passive?: boolean) => void;
+  readonly canInteract: () => boolean;
   // The focused pane or the tab's set of sessions changed.
   readonly onFocusChange: (tab: TerminalTab) => void;
   readonly disposed: () => boolean;
 }) {
+  let rendering = false;
   const renderTab = (tab: TerminalTab) => {
     const panes = tabPanes(tab);
     tab.container.toggleAttribute("data-split", panes.length > 1);
@@ -51,15 +55,21 @@ export function createPaneOperations(deps: {
         "pane-focused",
         panes.length > 1 && pane === tab.focused,
       );
-    renderPaneLayout(tab.container, tab.layout, {
-      onResize(path, index, delta, length) {
-        if (tab.removed || length <= 0) return;
-        tab.layout = resizeSplit(tab.layout, path, index, delta, (child) =>
-          minimumFraction(tab, child, axisAt(tab.layout, path), length),
-        );
-        applyPaneWeights(tab.container, tab.layout);
-      },
-    });
+    rendering = true;
+    try {
+      renderPaneLayout(tab.container, tab.layout, {
+        isInteractive: deps.canInteract,
+        onResize(path, index, delta, length) {
+          if (tab.removed || !deps.canInteract() || length <= 0) return;
+          tab.layout = resizeSplit(tab.layout, path, index, delta, (child) =>
+            minimumFraction(child, axisAt(tab.layout, path), length),
+          );
+          applyPaneWeights(tab.container, tab.layout);
+        },
+      });
+    } finally {
+      rendering = false;
+    }
   };
 
   const focusPane = (tab: TerminalTab, pane: TerminalPane, move = false) => {
@@ -79,7 +89,8 @@ export function createPaneOperations(deps: {
 
   const trackFocus = (pane: TerminalPane) => {
     pane.container.addEventListener("focusin", () => {
-      if (!deps.disposed() && !pane.removed) focusPane(pane.tab, pane);
+      if (!rendering && !deps.disposed() && !pane.removed)
+        focusPane(pane.tab, pane);
     });
   };
 
@@ -92,8 +103,7 @@ export function createPaneOperations(deps: {
       deps.removeTab(tab, notify);
       return;
     }
-    const fallback =
-      adjacentPane(tab.layout, pane, -1) ?? adjacentPane(tab.layout, pane, 1)!;
+    const fallback = removalNeighbor(tab.layout, pane)!;
     pane.removed = true;
     tab.layout = removeLayoutPane(tab.layout, pane) ?? leaf(fallback);
     pane.container.remove();
@@ -128,9 +138,14 @@ export function createPaneOperations(deps: {
       const size = source.size;
       if (
         !size ||
-        (direction === "right"
-          ? size.cols < MIN_PANE_COLUMNS * 2 + 1
-          : size.rows < MIN_PANE_ROWS * 2 + 1)
+        source.ended ||
+        size.cols < MIN_PANE_COLUMNS ||
+        size.rows < MIN_PANE_ROWS ||
+        !fitsProspectiveSplit(
+          tab,
+          source,
+          direction === "right" ? "row" : "column",
+        )
       )
         return;
       const pane = createPane(
@@ -207,22 +222,40 @@ function axisAt(
   return node.kind === "split" ? node.direction : "row";
 }
 
-// The share of `length` a subtree needs so each of its panes keeps the
-// reference minimum, from a mounted pane's current cell size. Without a
-// measured cell (hidden or not yet sized), any share is allowed.
-function minimumFraction(
+function measurePane(pane: TerminalPane): TerminalSurfaceGeometry | undefined {
+  const geometry = pane.surface?.geometry();
+  if (geometry) pane.geometry = geometry;
+  return geometry ?? pane.geometry;
+}
+
+function fitsProspectiveSplit(
   tab: TerminalTab,
+  source: TerminalPane,
+  axis: SplitAxis,
+): boolean {
+  const rectangle = tab.container.getBoundingClientRect();
+  const style = tab.container.ownerDocument.defaultView!.getComputedStyle(
+    tab.container,
+  );
+  const pixels = (value: string) => Number.parseFloat(value) || 0;
+  const width =
+    rectangle.width - pixels(style.paddingLeft) - pixels(style.paddingRight);
+  const height =
+    rectangle.height - pixels(style.paddingTop) - pixels(style.paddingBottom);
+  // Reuse the source's current cell geometry as the new pane's admission
+  // reference, without allocating an Adapter to represent the prospective leaf.
+  return fitsPaneLayout(
+    splitPane(tab.layout, source, source, axis),
+    width,
+    height,
+    measurePane,
+  );
+}
+
+function minimumFraction(
   child: PaneLayout<TerminalPane>,
   axis: SplitAxis,
   length: number,
 ): number {
-  const measured = tabPanes(tab).find(
-    (pane) => pane.size && pane.container.clientWidth > 0,
-  );
-  if (!measured?.size) return 0;
-  const cell =
-    axis === "row"
-      ? (measured.container.clientWidth / measured.size.cols) * MIN_PANE_COLUMNS
-      : (measured.container.clientHeight / measured.size.rows) * MIN_PANE_ROWS;
-  return Math.min(0.5, minimumExtent(child, axis, cell) / length);
+  return minimumLayoutExtent(child, axis, measurePane) / length;
 }

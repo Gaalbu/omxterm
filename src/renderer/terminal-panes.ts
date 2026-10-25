@@ -6,7 +6,10 @@ import type {
   TerminalSessionAdapter,
   TerminalSessionHandlers,
 } from "../terminal-surface/terminal-session-adapter";
-import type { TerminalSurface } from "../terminal-surface/terminal-surface";
+import type {
+  TerminalSurface,
+  TerminalSurfaceGeometry,
+} from "../terminal-surface/terminal-surface";
 import type { ElectronTerminalAdapter } from "./electron-terminal-adapter";
 import { layoutPanes, leaf, type PaneLayout } from "./pane-layout";
 
@@ -21,9 +24,11 @@ export interface TerminalPane {
   readonly adapter: ElectronTerminalAdapter;
   readonly mountAbort: AbortController;
   surface: TerminalSurface | undefined;
+  geometry: TerminalSurfaceGeometry | undefined;
   label: string;
   removed: boolean;
   startRequested: boolean;
+  ended: boolean;
   // The grid last sent to the PTY: the reference for split admission.
   size: TerminalSize | undefined;
 }
@@ -66,9 +71,11 @@ export function createPane(
     adapter: createAdapter(workingDirectoryOf),
     mountAbort: new AbortController(),
     surface: undefined,
+    geometry: undefined,
     label: "",
     removed: false,
     startRequested: false,
+    ended: false,
     size: undefined,
   };
 }
@@ -93,7 +100,9 @@ export function tabPanes(tab: TerminalTab): TerminalPane[] {
 export function tabSessionIds(tab: TerminalTab): TerminalSessionId[] {
   return tabPanes(tab).flatMap((pane) => {
     const sessionId = pane.adapter.sessionId();
-    return sessionId === undefined || pane.removed ? [] : [sessionId];
+    return sessionId === undefined || pane.removed || pane.ended
+      ? []
+      : [sessionId];
   });
 }
 
@@ -122,6 +131,7 @@ export function paneSessionAdapter(
       await adapter.start({
         onOutput: handlers.onOutput,
         onExit(exit) {
+          pane.ended = true;
           handlers.onExit(exit);
           onSessionEnd(pane, exit);
         },

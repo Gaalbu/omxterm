@@ -374,7 +374,7 @@ app
           showCloseTabConfirmation: (window) =>
             confirmClose(window, "Close Tab", [
               "Close this Terminal Tab?",
-              "Its Live Terminal Session will end.",
+              "All of its Live Terminal Sessions will end.",
             ]),
           showClosePaneConfirmation: (window) =>
             confirmClose(window, "Close Pane", [

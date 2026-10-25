@@ -84,7 +84,7 @@ interface TerminalWindowPageOptions {
     listener: (sessionId: TerminalSessionId, title: string) => void,
   ) => () => void;
   readonly notifyTabSelection?: (
-    sessionId: TerminalSessionId,
+    sessionId: TerminalSessionId | null,
     tabSessionIds?: readonly TerminalSessionId[],
   ) => void;
   readonly syncTabTitle?: (sessionId: TerminalSessionId) => void;
@@ -193,7 +193,7 @@ export function mountTerminalWindowPage(
     {
       createAdapter: (workingDirectoryOf) =>
         options.createAdapter(fontConfigurationId, workingDirectoryOf),
-      canFocus: () => !disposed && !about?.isActive(),
+      canFocus: () => !disposed && !previewActive(),
       canAutoFocus: (unchangedFocus) =>
         !previewActive() && (unchangedFocus || !auxiliaryPanel?.ownsFocus()),
       mount,
@@ -332,10 +332,7 @@ export function mountTerminalWindowPage(
       (action) => auxiliaryPanel?.clipboardAction(action) ?? false,
     );
     removeTabCommandListener = options.subscribeToTabCommands?.((command) => {
-      if (
-        about?.isActive() &&
-        ["new", "next", "previous", "select"].includes(command.action)
-      )
+      if (previewActive() && MODAL_COMPETING_TAB_ACTIONS.has(command.action))
         return;
       tabs.handleCommand(command);
     });
@@ -372,6 +369,18 @@ export function mountTerminalWindowPage(
 
   return { ready, dispose };
 }
+
+// Closure preparation/resolution and failure acknowledgement are deliberately
+// absent: modal ownership suppresses competing navigation, not lifecycle delivery.
+const MODAL_COMPETING_TAB_ACTIONS = new Set<TerminalTabCommand["action"]>([
+  "new",
+  "next",
+  "previous",
+  "select",
+  "split",
+  "focus-pane",
+  "equalize-panes",
+]);
 
 // Terminal-directed actions are ignored while a preview or About owns input.
 function subscribeToGuardedActions(

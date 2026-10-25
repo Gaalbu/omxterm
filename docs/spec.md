@@ -39,7 +39,8 @@ unsupported.
 
 OMXTerm:
 
-- opens the Default Shell in the user's home directory: on macOS and Linux the
+- opens the Default Shell in the user's home directory (except a split pane's
+  usable OSC 7 directory inheritance described below): on macOS and Linux the
   operating-system-configured shell as an interactive login shell; on Windows,
   which has no login-shell concept, a configured `windowsShell` executable when
   present, otherwise Windows PowerShell — falling back to the ComSpec command
@@ -92,21 +93,28 @@ succeeds ([ADR 0025](adr/0025-use-restty-as-the-terminal-surface.md)).
   `focusPreviousPane`, `focusPaneLeft`, `focusPaneRight`, `focusPaneUp`,
   `focusPaneDown`), resets the shares of the focused pane's split
   (`equalizePanes`) and closes the focused pane (`closePane`); every shortcut
-  is remappable and nullable. A split needs room for two panes of at least 20
-  columns (right) or 5 rows (down) in the focused pane's current grid, and a tab
-  holds at most 16 panes; otherwise it starts nothing. Splitting in the same
+  is remappable and nullable. A split needs room for two usable grids of at least
+  20 columns by 5 rows, using the source Surface's current cell geometry as the
+  new pane's admission reference. The prospective layout accounts for each
+  existing Surface's own metrics, padding/other non-grid space and every divider,
+  including same-direction sibling allocation. Unknown geometry refuses a split,
+  and a tab holds at most 16 panes; otherwise it starts nothing. Splitting in the same
   direction adds a sibling; pane containers move without recreating Surfaces or
   sessions. Dividers drag with the pointer and move with arrow keys as
   `role="separator"` controls, limited by the same minimum; a later resize or
-  zoom that cannot fit every minimum keeps every session and the layout.
+  zoom that cannot fit every minimum keeps every session and the layout; an
+  impossible divider move retains the existing proportions.
   Exactly one pane per tab is focused: it receives keyboard input and every
   terminal-directed action, shows a theme-derived ring without dimming other
   panes, and supplies the tab and window title. Clicking a pane focuses it, and
   switching tabs restores each tab's focused pane. A new pane starts the Default
   Shell in its source pane's last OSC 7-reported local directory when the shell
   emitted one and it still exists, otherwise in the home directory; main reads
-  the report from PTY output, rejects remote hosts and UNC/device paths, and
-  never logs or persists the directory. Ordinary exit removes only that pane
+  the report from PTY output, rejects non-local host names and UNC/device paths,
+  and never logs or persists the directory. An empty or local host name emitted
+  by a remote shell is indistinguishable from a local report; program output can
+  also emit it. Either can only select an existing local directory, never execute
+  shell text. Ordinary exit removes only that pane
   and gives its space and focus to the nearest sibling; an unexpected signal
   keeps the pane until its failure dialog is acknowledged; the last pane closes
   its tab. Close Pane confirms only a Busy focused pane, Close Tab counts every
@@ -156,11 +164,14 @@ succeeds ([ADR 0025](adr/0025-use-restty-as-the-terminal-surface.md)).
   unchanged. Tab order is ephemeral and is neither shared between windows nor
   persisted or restored.
 - Close Tab defaults to `Cmd+W` on macOS and `Ctrl+Shift+W` on Linux and
-  Windows, and terminates only the selected tab's session. A pending
+  Windows, and terminates every session in the selected tab. A pending
   confirmation retains its original tab: approval never retargets a later
   selection, and does nothing if that tab has already ended. Repeated requests
-  during that confirmation share the same decision, even if the selected session
-  becomes idle. Closing a window's last tab closes that window. During the first
+  during that confirmation share the same decision, even if its sessions
+  become idle. Selection reports the tab's session set even when the focused
+  pane is still mounting or retained after native exit. A pending or dead focused
+  pane never borrows another tab's Busy decision; Close Pane considers only its
+  captured focused pane. Closing a window's last tab closes that window. During the first
   tab's initialization, however, the renderer has not yet subscribed to tab
   commands: an early Close Tab, New Tab or tab-navigation command can be lost
   rather than queued. Clipboard, zoom, tab-bar and snippets actions also
@@ -183,7 +194,7 @@ succeeds ([ADR 0025](adr/0025-use-restty-as-the-terminal-surface.md)).
   the session object. Pending failure acknowledgements retain only their
   separate ownership metadata; retired identities cannot route input, resize,
   title, bell or ACKs.
-- `confirmClose` defaults to `true` and guards tab close, window close, and
+- `confirmClose` defaults to `true` and guards pane close, tab close, window close, and
   quit. Each action can produce at most one confirmation, so closing a window
   with several tabs asks once for the whole window. OMXTerm asks only when the
   action affects a Busy Session, defined as a Live Terminal Session whose PTY
@@ -202,12 +213,13 @@ succeeds ([ADR 0025](adr/0025-use-restty-as-the-terminal-surface.md)).
   neighbor when it was last; removing the only tab retains the last-tab window
   lifecycle.
 - After the Default Shell starts successfully, an ordinary shell exit closes its
-  tab — and its window when that was the last tab — without confirmation or a
-  failure dialog, regardless of its numeric exit code. A tab whose fonts or
-  rendering are still initializing remains a window owner even before its PTY
-  starts: another session's ordinary exit cannot close that window. The pending
-  tab may finish and start one session, or be cancelled without starting one.
-  Cancelling the final pending tab closes the window; final pre-start rendering
+  pane — and its tab/window only when it was their last pane/tab — without
+  confirmation or a failure dialog, regardless of its numeric exit code. A pane
+  whose fonts or rendering are still initializing retains its tab and window
+  even before its PTY starts: another session's ordinary exit cannot close that
+  window. The pending pane may finish and start one session, or be cancelled
+  without starting one. Cancelling the final pending pane of the final tab
+  closes the window; final pre-start rendering
   failure retains a native failure dialog until acknowledgement. Last-tab
   closure is committed by the renderer's tab owner, not inferred from a zero
   native-PTY count. Queued New Tab commands cannot revive an emptied owner;
@@ -218,10 +230,11 @@ succeeds ([ADR 0025](adr/0025-use-restty-as-the-terminal-surface.md)).
   0032). This applies to explicit commands and the Default Shell, with no
   fallback shell. Safe Operational Events classify it as `spawn-failure`.
 - A spawn failure or unexpected signal remains visible in a native error dialog
-  and local log until acknowledged; the useless tab then closes. Each pending
+  and local log until acknowledged; the failed pane then closes. Each pending
   failure acknowledgement retains its window even if a sibling exits ordinarily
   or another failure is acknowledged first. Acknowledgement removes only its
-  failed tab; automatic window closure waits for both an empty renderer tab
+  failed pane, closing its tab only when no panes remain; automatic window
+  closure waits for both an empty renderer tab
   owner and every pending failure acknowledgement. Explicit authorized window
   closure and Quit remain separate, and late dialog results cannot act on
   disposed owners. Native shutdown completion is recorded independently of
@@ -328,8 +341,8 @@ succeeds ([ADR 0025](adr/0025-use-restty-as-the-terminal-surface.md)).
   restoring terminal focus; late metadata and link errors cannot reopen it.
   About and Local Image Preview do not stack: opening either while the other
   is choosing/loading/showing is ignored. While About is active, terminal
-  clipboard, file-drop, zoom, snippet, tab/title-bar and tab-navigation/new-tab
-  actions are suppressed; output, configuration updates and approved tab/session/
+  clipboard, file-drop, zoom, snippet, tab/title-bar, tab-navigation/new-tab and
+  pane split/focus/equalize actions are suppressed; output, configuration updates and approved tab/session/
   window closure or Quit remain active. About does not add a configurable
   shortcut, settings service or persistent state.
 - `View -> Toggle Developer Tools` is a menu-only diagnostic action for the
@@ -347,13 +360,14 @@ succeeds ([ADR 0025](adr/0025-use-restty-as-the-terminal-surface.md)).
   without an error. The picker and visible local-image sources share the bounded
   read and overlay contract below. While choosing, loading, or displaying a
   preview, terminal clipboard actions, file drops, font zoom, tab bar toggles,
-  snippet toggles, title-bar toggles and snippet injection are ignored; page
+  snippet toggles, title-bar toggles, snippet injection, tab navigation/new-tab
+  and pane split/focus/equalize actions are ignored; page
   activation does not steal preview focus. The hover drag handle is suppressed.
   Dismissal restores ordinary routing. Already accepted terminal input is not
   rolled back, and confirmed tab/session/window closure remains active.
 - Dropping one or more native file-manager files or folders anywhere in a
   Terminal Window without an active Local Image Preview inserts their absolute
-  paths into only the selected Terminal Tab. The paths retain platform order,
+  paths into only the focused Terminal Pane of the selected tab. The paths retain platform order,
   are separated by one space, and are delivered through Protected Paste without
   sending Enter. Drag navigation is prevented over the whole renderer document.
   Internal tab dragging only reorders tabs and never inserts a path; any other
@@ -682,12 +696,12 @@ devices keep the existing touch scrolling path.
 
 OSC 0 and OSC 2 titles are display-only and per session: the raw OSC request
 must be no longer than 256 code points, then control and bidi characters are
-removed and the result must be one printable line. A tab shows its session's
+removed and the result must be one printable line. A tab shows its focused pane's
 accepted title and falls back to the basename of the shell selected when that
-session started. Startup reconciles the current main-owned title once the tab's
+session started. Startup reconciles the current main-owned title once the pane's
 session identity is known, including when the initial fallback arrived before
 the start response. It neither overwrites a newer accepted title nor retargets a
-cancelled tab; unknown titles are not retained for future tabs. The native
+cancelled pane; unknown titles are not retained for future panes. The native
 window title mirrors the selected tab and falls back to `OMXTerm`. Title
 contents are never logged or reported to the PTY.
 
@@ -788,7 +802,7 @@ mouse input. OSC 8 destinations and all other schemes are ignored.
 
 Scrollback Search opens only through **Edit → Find…** or the `find` keybind
 (`Cmd+F` on macOS, `Ctrl+Shift+F` on Linux and Windows). It uses Restty's
-search bar and the pinned core's search over the selected tab's retained
+search bar and the pinned core's search over the focused pane's retained
 Scrollback Buffer and visible screen; output evicted by the scrollback limits
 is not searchable. Opening the bar focuses its query field, and invoking Find
 again focuses and selects the query. Keys act on the bar only while its query
@@ -805,7 +819,7 @@ field holds focus, application Copy, Paste and Select All, from the menu, a
 keybind or the context menu, act on the query instead of the terminal: Paste
 inserts clipboard text at the field's selection with line breaks replaced by
 spaces, and nothing reaches Protected Paste or the PTY. The bar, including its
-match counter, follows the active Terminal Theme. Each tab owns its own query.
+match counter, follows the active Terminal Theme. Each Surface owns its own query.
 Search state, the query and its matches, stays in renderer memory and is never
 persisted, logged or written to the PTY, and searching never sends it to main.
 Only an explicit Copy from the focused field moves the selected query text,
@@ -1004,7 +1018,9 @@ An optional `keybinds` object remaps application-chrome shortcuts for a fixed
 action vocabulary: `quit`, `copy`, `paste`, `selectAll`, `find`, `newWindow`,
 `closeWindow`, `newTab`, `closeTab`, `nextTab`, `previousTab`, `selectTab1`
 through `selectTab9`, `zoomIn`, `zoomOut`, `actualSize`, `toggleFullScreen`,
-`toggleSnippets`, `toggleTabBar`, `toggleTitleBar`, and `reloadConfig`. Each
+`toggleSnippets`, `toggleTabBar`, `toggleTitleBar`, `reloadConfig`, `splitRight`,
+`splitDown`, `closePane`, `focusNextPane`, `focusPreviousPane`, `focusPaneLeft`,
+`focusPaneRight`, `focusPaneUp`, `focusPaneDown`, and `equalizePanes`. Each
 value is either `null` or a case-insensitive Electron accelerator containing
 exactly one key and at least one non-Shift modifier; bare or Shift-only
 accelerators are rejected so a keybind can never swallow plain typing. Function

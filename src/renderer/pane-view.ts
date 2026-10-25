@@ -1,3 +1,4 @@
+import { PANE_DIVIDER_SIZE } from "./pane-geometry";
 import type { PaneLayout, SplitAxis } from "./pane-layout";
 
 export interface PaneViewItem {
@@ -5,6 +6,7 @@ export interface PaneViewItem {
 }
 
 export interface PaneViewOptions {
+  readonly isInteractive?: () => boolean;
   // `delta` is a fraction of the split's `length` (CSS px) along its axis.
   readonly onResize: (
     path: readonly number[],
@@ -26,7 +28,22 @@ export function renderPaneLayout<Pane extends PaneViewItem>(
   layout: PaneLayout<Pane>,
   options: PaneViewOptions,
 ): void {
+  host.style.setProperty(
+    "--terminal-pane-divider-size",
+    `${PANE_DIVIDER_SIZE}px`,
+  );
+  const active = host.ownerDocument.activeElement;
+  const retained =
+    active instanceof HTMLElement && host.contains(active) ? active : undefined;
   host.replaceChildren(buildNode(host.ownerDocument, layout, [], options));
+  // Moving a surviving Surface through a detached split loses DOM focus,
+  // including its search field. Restore that exact control, not generic input.
+  if (
+    retained?.isConnected &&
+    host.contains(retained) &&
+    options.isInteractive?.() !== false
+  )
+    retained.focus({ preventScroll: true });
 }
 
 // Resizing changes only weights: update flex shares in place so a focused
@@ -118,29 +135,53 @@ function createDivider<Pane>(
   divider.setAttribute("aria-valuemax", "100");
 
   const length = () => {
+    if (!split.isConnected || options.isInteractive?.() === false) return 0;
     const rectangle = split.getBoundingClientRect();
-    return direction === "row" ? rectangle.width : rectangle.height;
+    return (
+      (direction === "row" ? rectangle.width : rectangle.height) -
+      PANE_DIVIDER_SIZE * (layout.children.length - 1)
+    );
   };
+  let dragging = false;
   divider.addEventListener("pointerdown", (event) => {
-    if (event.button !== 0) return;
+    if (
+      event.button !== 0 ||
+      event.isPrimary === false ||
+      dragging ||
+      length() <= 0
+    )
+      return;
     event.preventDefault();
+    const pointerId = event.pointerId;
     let last = direction === "row" ? event.clientX : event.clientY;
-    divider.setPointerCapture?.(event.pointerId);
+    divider.setPointerCapture?.(pointerId);
+    dragging = true;
     divider.classList.add("dragging");
     const move = (moveEvent: PointerEvent) => {
+      if (moveEvent.pointerId !== pointerId) return;
+      const total = length();
+      if (total <= 0) {
+        stop();
+        return;
+      }
       const position =
         direction === "row" ? moveEvent.clientX : moveEvent.clientY;
-      const total = length();
-      if (total <= 0 || position === last) return;
+      if (position === last) return;
       options.onResize(path, index, (position - last) / total, total);
       last = position;
     };
-    const end = () => {
+    const stop = () => {
+      dragging = false;
       divider.classList.remove("dragging");
       divider.removeEventListener("pointermove", move);
       divider.removeEventListener("pointerup", end);
       divider.removeEventListener("pointercancel", end);
       divider.removeEventListener("lostpointercapture", end);
+      if (divider.hasPointerCapture?.(pointerId))
+        divider.releasePointerCapture(pointerId);
+    };
+    const end = (endEvent: PointerEvent) => {
+      if (endEvent.pointerId === pointerId) stop();
     };
     divider.addEventListener("pointermove", move);
     divider.addEventListener("pointerup", end);
@@ -150,7 +191,8 @@ function createDivider<Pane>(
   divider.addEventListener("keydown", (event) => {
     const decrease = direction === "row" ? "ArrowLeft" : "ArrowUp";
     const increase = direction === "row" ? "ArrowRight" : "ArrowDown";
-    if (event.key !== decrease && event.key !== increase) return;
+    if ((event.key !== decrease && event.key !== increase) || length() <= 0)
+      return;
     event.preventDefault();
     event.stopPropagation();
     options.onResize(

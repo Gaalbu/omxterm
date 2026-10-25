@@ -24,6 +24,8 @@ export function createWorkingDirectoryTracker(
   const directories = new Map<TerminalSessionId, string>();
   // An unterminated report, or a possibly split introducer, per session.
   const carries = new Map<TerminalSessionId, string>();
+  // Once over budget, consume the same rejected report through its terminator.
+  const discarding = new Set<TerminalSessionId>();
   const platform = options.platform ?? process.platform;
   const hostName = options.hostName ?? hostname;
   const isDirectory = options.isDirectory ?? existingDirectory;
@@ -40,10 +42,24 @@ export function createWorkingDirectoryTracker(
   return {
     observe(sessionId: TerminalSessionId, data: string) {
       const carried = carries.get(sessionId);
-      if (carried === undefined && !data.includes("\u001b")) return;
+      if (
+        carried === undefined &&
+        !discarding.has(sessionId) &&
+        !data.includes("\u001b")
+      )
+        return;
       carries.delete(sessionId);
       const text = (carried ?? "") + data;
       let from = 0;
+      if (discarding.has(sessionId)) {
+        const end = terminator(text, 0);
+        if (end === undefined) {
+          if (text.endsWith("\u001b")) carries.set(sessionId, "\u001b");
+          return;
+        }
+        discarding.delete(sessionId);
+        from = end.index + end.length;
+      }
       for (;;) {
         const start = text.indexOf(INTRODUCER, from);
         if (start < 0) {
@@ -55,8 +71,18 @@ export function createWorkingDirectoryTracker(
         const end = terminator(text, body);
         if (end === undefined) {
           // A bounded report may continue in the next chunk.
-          if (text.length - body <= MAX_WORKING_DIRECTORY_REPORT_LENGTH)
+          const length = text.length - body;
+          const pendingSt = text.endsWith("\u001b");
+          if (
+            length <= MAX_WORKING_DIRECTORY_REPORT_LENGTH ||
+            (pendingSt && length === MAX_WORKING_DIRECTORY_REPORT_LENGTH + 1)
+          )
             carries.set(sessionId, text.slice(start));
+          else {
+            directories.delete(sessionId);
+            discarding.add(sessionId);
+            if (pendingSt) carries.set(sessionId, "\u001b");
+          }
           return;
         }
         record(sessionId, text.slice(body, end.index));
@@ -74,6 +100,7 @@ export function createWorkingDirectoryTracker(
     forget(sessionId: TerminalSessionId) {
       directories.delete(sessionId);
       carries.delete(sessionId);
+      discarding.delete(sessionId);
     },
   };
 }
