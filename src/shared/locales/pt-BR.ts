@@ -265,4 +265,23 @@ export const brazilianPortugueseMessages: Readonly<
     "Não foi possível gravar config.json. Nada foi alterado.",
   "settings.applicationError":
     "Falha inesperada ao aplicar. Algumas configurações podem já estar ativas; escolha Exibir -> Recarregar Configuração novamente.",
+  "settings.page.shortcuts": "Atalhos",
+  "shortcuts.hint":
+    "Padrão segue o atalho embutido. Sem atalho mantém a ação no menu sem tecla. Atalhos do aplicativo recebem a tecla antes dos programas do terminal.",
+  "shortcuts.prompt": "Pressione o novo atalho, ou Escape para cancelar.",
+  "shortcuts.invalid":
+    "Essa combinação de teclas não é compatível. Use Ctrl, Alt, Cmd ou AltGr com uma tecla compatível, ou use F1–F24.",
+  "shortcuts.cancelled": "Gravação cancelada.",
+  "shortcuts.pressing": "Pressione um atalho…",
+  "shortcuts.none": "Nenhum",
+  "shortcuts.record": "Gravar",
+  "shortcuts.recordLabel": "Gravar atalho para {action}",
+  "shortcuts.cancelLabel": "Cancelar gravação de atalho para {action}",
+  "shortcuts.unbindLabel": "Remover atalho para {action}",
+  "shortcuts.defaultLabel": "Usar atalho padrão para {action}",
+  "shortcuts.unbind": "Remover",
+  "shortcuts.default": "Padrão",
+  "shortcuts.state.inherit": "Padrão",
+  "shortcuts.state.custom": "Personalizado",
+  "shortcuts.state.unbound": "Sem atalho",
 };
