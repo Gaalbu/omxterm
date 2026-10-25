@@ -14,12 +14,14 @@ import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { verifyLinuxWrapperPropagation } from "../../scripts/linux-packaged-process.mjs";
 
-// Alter only external procfs visibility, through the unchanged verifier caller.
+// Control external filesystem I/O through the unchanged verifier caller.
 // Native actors, streams, outcomes, recovery and pidfd validation remain real.
 const procView = vi.hoisted(() => ({
   sample: undefined as undefined | ((names: string[]) => string[]),
   stat: undefined as undefined | ((file: string, text: string) => string),
   ackFault: "" as string,
+  recordSuccess: false,
+  recordedRoot: "",
 }));
 vi.mock("node:fs", async (importOriginal) => {
   const fs = await importOriginal<typeof import("node:fs")>();
@@ -60,7 +62,33 @@ vi.mock("node:fs", async (importOriginal) => {
     },
   };
 });
+vi.mock("node:fs/promises", async (importOriginal) => {
+  const fs = await importOriginal<typeof import("node:fs/promises")>();
+  const path = await import("node:path");
+  return {
+    ...fs,
+    async rm(...args: Parameters<typeof fs.rm>) {
+      const directory = args[0];
+      if (
+        procView.recordSuccess &&
+        typeof directory === "string" &&
+        path.basename(directory).startsWith("omxterm-wrapper-outcome-")
+      ) {
+        // Observe the actual receipts before the unchanged successful cleanup.
+        procView.recordedRoot = path.resolve(
+          ".scratch/694-acquisition-controls",
+          path.basename(directory),
+        );
+        await fs.cp(directory, procView.recordedRoot, { recursive: true });
+      }
+      return fs.rm(...args);
+    },
+  };
+});
 const fs = await vi.importActual<typeof import("node:fs")>("node:fs");
+const positiveSetupBudgetMs = 3_000;
+// Three controls, preflight/signaling/recovery bounds, and witness cleanup.
+const nativeOutcomeGuardMs = 4 * positiveSetupBudgetMs + 3 * 2_000;
 const roots: string[] = [];
 const cleanup: Identity[] = [];
 interface Identity {
@@ -80,6 +108,7 @@ interface Receipt {
   closed: boolean;
   remaining: Identity[];
   stdout: string;
+  stderr: string;
   failures: string[];
 }
 function identity(pid: number): Identity {
@@ -99,7 +128,7 @@ function json<T>(file: string): T {
   return JSON.parse(fs.readFileSync(file, "utf8")) as T;
 }
 async function until(check: () => boolean) {
-  const deadline = Date.now() + 3_000;
+  const deadline = Date.now() + positiveSetupBudgetMs;
   while (!check()) {
     if (Date.now() >= deadline)
       throw new Error("Acquisition fixture deadline exceeded");
@@ -171,10 +200,57 @@ function rootOnlyUntilReleased(
     return names.filter((name) => Number(name) === rootPid);
   };
 }
+function lateHiddenCollection(root: string, timeoutMs: number) {
+  const state = { ready: false };
+  const sample = () => {
+    if (state.ready || !fs.existsSync(`${root}/control-path`)) return;
+    const stem = fs.readFileSync(`${root}/control-path`, "utf8");
+    if (!fs.existsSync(`${stem}.proposal.json`)) return;
+    const proposed = json<{ pid: number; start: string }>(
+      `${stem}.proposal.json`,
+    );
+    const witness = identity(proposed.pid);
+    cleanup.push(witness);
+    expect(witness.start).toBe(proposed.start);
+    expect(fs.existsSync(`${stem}.acquired.json`)).toBe(false);
+    const deadline = Number(
+      fs.readFileSync(`${root}/control-deadline`, "utf8"),
+    );
+    const started = deadline - timeoutMs;
+    // One bounded scheduling fault, not an ownership/readiness substitute. Keep
+    // this collection hidden until setup +220 ms: the next 50 ms opportunity is
+    // too late for the deliberate 250 ms negative, but not the positive budget.
+    const pause = Math.max(0, Math.min(220, started + 220 - Date.now()));
+    const before = Date.now();
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, pause);
+    const hiddenAt = Date.now();
+    const retained = path.resolve(
+      ".scratch/694-acquisition-controls",
+      path.basename(path.dirname(stem)),
+    );
+    fs.mkdirSync(retained, { recursive: true });
+    fs.writeFileSync(
+      path.join(retained, "late-hidden.json"),
+      JSON.stringify({
+        timeoutMs,
+        deadline,
+        started,
+        before,
+        pause,
+        hiddenAt,
+        witness,
+      }),
+    );
+    state.ready = true;
+  };
+  return { state, sample };
+}
 afterEach(async () => {
   procView.sample = undefined;
   procView.stat = undefined;
   procView.ackFault = "";
+  procView.recordSuccess = false;
+  procView.recordedRoot = "";
   vi.unstubAllEnvs();
   // Independent native witnesses are for test recovery only, including when an
   // ordering assertion fails. Never inject them into the verifier's ownership.
@@ -257,48 +333,86 @@ describe.skipIf(process.platform !== "linux")(
       ]);
     });
 
-    it("keeps the generated Run-as-Node actor alive without acknowledgement before exercising all three native outcomes", async () => {
-      const { root, launcher } = await setup("normal");
-      let release = false;
-      let sampledReady = false;
-      rootOnlyUntilReleased(
-        () => release,
-        () => {
-          sampledReady ||=
-            fs.existsSync(`${root}/control-path`) &&
-            fs.existsSync(
-              `${fs.readFileSync(`${root}/control-path`, "utf8")}.proposal.json`,
-            );
-        },
-      );
-      const pending = verifyLinuxWrapperPropagation(launcher, 250);
-      try {
-        await until(() => sampledReady);
-        const stem = fs.readFileSync(`${root}/control-path`, "utf8");
-        const proposed = json<{ pid: number; start: string }>(
-          `${stem}.proposal.json`,
+    it(
+      "keeps the generated Run-as-Node actor alive without acknowledgement before exercising all three native outcomes",
+      async () => {
+        const { root, launcher } = await setup("normal");
+        let release = false;
+        const hidden = lateHiddenCollection(root, positiveSetupBudgetMs);
+        procView.recordSuccess = true;
+        rootOnlyUntilReleased(() => release, hidden.sample);
+        const pending = verifyLinuxWrapperPropagation(
+          launcher,
+          positiveSetupBudgetMs,
         );
-        cleanup.push(identity(proposed.pid));
-        expect(identity(proposed.pid).start).toBe(proposed.start);
-        expect(fs.existsSync(`${stem}.acquired.json`)).toBe(false);
-        release = true;
-      } finally {
-        release = true;
-        await pending;
-      }
-      await expect(pending).resolves.toMatch(/^[a-f0-9]{64}$/u);
-    });
+        try {
+          await until(() => hidden.state.ready);
+          const stem = fs.readFileSync(`${root}/control-path`, "utf8");
+          const proposed = json<{ pid: number; start: string }>(
+            `${stem}.proposal.json`,
+          );
+          cleanup.push(identity(proposed.pid));
+          expect(identity(proposed.pid).start).toBe(proposed.start);
+          expect(fs.existsSync(`${stem}.acquired.json`)).toBe(false);
+          release = true;
+        } finally {
+          release = true;
+          await pending;
+        }
+        await expect(pending).resolves.toMatch(/^[a-f0-9]{64}$/u);
+        const completedStem = fs.readFileSync(`${root}/control-path`, "utf8");
+        expect(fs.existsSync(path.dirname(completedStem))).toBe(false);
+        expect(procView.recordedRoot).not.toBe("");
+        const held = json<{ witness: Identity }>(
+          path.join(procView.recordedRoot, "late-hidden.json"),
+        );
+        expect(
+          json<Receipt>(path.join(procView.recordedRoot, "zero.json")).acquired,
+        ).toEqual(held.witness);
+        for (const [name, code] of [
+          ["zero", 0],
+          ["nonzero", 3],
+          ["signal", 127],
+        ] as const) {
+          const stem = path.join(procView.recordedRoot, name);
+          const receipt = json<Receipt>(`${stem}.json`);
+          const proposed = json<{ pid: number; start: string }>(
+            `${stem}.proposal.json`,
+          );
+          expect(receipt.acquired).toMatchObject({
+            pid: proposed.pid,
+            start: proposed.start,
+          });
+          expect(receipt.beforeCleanup).toEqual({
+            outcome: { code, signal: null },
+            closed: true,
+            remaining: [],
+          });
+          expect(receipt.outcome).toEqual({ code, signal: null });
+          expect(receipt.closed).toBe(true);
+          expect(receipt.remaining).toEqual([]);
+          expect(receipt.stdout).toBe(`OMXTERM_WRAPPER_CONTROL_${name}`);
+          expect(receipt.stderr).toBe("");
+          expect(receipt.failures).toEqual([]);
+        }
+      },
+      nativeOutcomeGuardMs,
+    );
 
-    it("keeps generated actor paths literal across shell metacharacters", async () => {
-      const { root, launcher } = await setup("normal");
-      const temporary = path.join(root, "space $HOME `literal` ' \" control");
-      await mkdir(temporary);
-      vi.stubEnv("TMPDIR", temporary);
-      await expect(
-        verifyLinuxWrapperPropagation(launcher, 250),
-      ).resolves.toMatch(/^[a-f0-9]{64}$/u);
-      expect(await readdir(temporary)).toEqual([]);
-    });
+    it(
+      "keeps generated actor paths literal across shell metacharacters",
+      async () => {
+        const { root, launcher } = await setup("normal");
+        const temporary = path.join(root, "space $HOME `literal` ' \" control");
+        await mkdir(temporary);
+        vi.stubEnv("TMPDIR", temporary);
+        await expect(
+          verifyLinuxWrapperPropagation(launcher, positiveSetupBudgetMs),
+        ).resolves.toMatch(/^[a-f0-9]{64}$/u);
+        expect(await readdir(temporary)).toEqual([]);
+      },
+      nativeOutcomeGuardMs,
+    );
 
     it("still exposes the missed orphan when an early-release control deliberately bypasses acquisition", async () => {
       const { root, launcher } = await setup("control-early-release");
@@ -466,4 +580,38 @@ describe.skipIf(process.platform !== "linux")(
       ]);
     });
   },
+);
+
+it.skipIf(process.platform !== "linux")(
+  "expires the deliberate 250 ms control after a late hidden collection without releasing the actor, then settles cleanup",
+  async () => {
+    const { root, launcher } = await setup("normal");
+    let release = false;
+    const hidden = lateHiddenCollection(root, 250);
+    rootOnlyUntilReleased(() => release, hidden.sample);
+    const pending = failed(launcher);
+    try {
+      await until(() => hidden.state.ready);
+      const stem = fs.readFileSync(`${root}/control-path`, "utf8");
+      expect(fs.existsSync(`${stem}.acquired.json`)).toBe(false);
+      release = true;
+    } finally {
+      release = true;
+      await pending;
+    }
+    const { error, directory, receipt } = await pending;
+    expect(error.message).toContain(
+      "Linux wrapper control acquisition did not complete",
+    );
+    expect(receipt.acquired).toBeUndefined();
+    expect(fs.existsSync(`${directory}/zero.acquired.json`)).toBe(false);
+    expect(receipt.stdout).toBe("");
+    expect(receipt.stderr).toContain(
+      "Linux wrapper actor acquisition deadline exceeded",
+    );
+    expect(receipt.outcome).not.toEqual({ code: 0, signal: null });
+    expect(receipt.closed).toBe(true);
+    expect(receipt.remaining).toEqual([]);
+  },
+  nativeOutcomeGuardMs,
 );

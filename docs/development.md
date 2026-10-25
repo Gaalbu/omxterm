@@ -387,11 +387,24 @@ collected actor with a live retained parent chain to the immutable initial
 wrapper identity. Proposals never seed ownership or authorize signaling.
 Malformed, oversized, stale and foreign controls fail within the existing
 bounds; recovery cannot turn a timeout/native failure into success. This does
-not provide containment of arbitrary unobserved orphans. Headless regressions,
-including a deliberately bypassed handoff and forced procfs observation gaps:
+not provide containment of arbitrary unobserved orphans.
+
+Positive generated-actor tests share the existing 3-second readiness/setup
+allowance with their readiness polling; their outer test guards also allow all
+three native controls and bounded recovery. This is not a 250 ms native-latency
+requirement. Deliberate 250 ms negative controls still require failure: the same
+late hidden collection that succeeds with the positive allowance must expire
+without an acknowledgement or action under the negative budget, then settle
+cleanup. Controlled-clock tests call the actual actor acquisition helper to
+check matching acknowledgements just before, exactly at and after expiry, plus
+missing/mismatched acknowledgements. Production deadlines and ownership/signaling
+rules are unchanged.
+
+Headless regressions, including a deliberately bypassed handoff and forced
+procfs observation gaps:
 
 ```sh
-node node_modules/vitest/vitest.mjs run test/unit/linux-packaged-process.test.ts test/unit/linux-wrapper-acquisition.test.ts
+node node_modules/vitest/vitest.mjs run test/unit/linux-packaged-process.test.ts test/unit/linux-wrapper-acquisition.test.ts test/unit/linux-wrapper-control.test.ts
 ```
 
 Graphical integration tests use [`runNativeFixture`](../test/fixtures/run-native-fixture.ts) and [`prepareFixture`](../test/fixtures/prepare-fixture.ts) to manage temporary user profiles, child Electron processes, and PTYs (`spawnFixturePty` / `spawnFixtureProcess`):

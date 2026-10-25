@@ -37,7 +37,13 @@ appendFileSync(`${root}/launches`, `${role}\n`);
 
 if (role === "wrapper") {
   const control = Boolean(process.env.BASH_ENV);
-  if (control) writeFileSync(`${root}/control-path`, controlStem);
+  if (control) {
+    writeFileSync(`${root}/control-path`, controlStem);
+    writeFileSync(
+      `${root}/control-deadline`,
+      process.env.OMXTERM_WRAPPER_CONTROL_DEADLINE,
+    );
+  }
   if (control && mode.startsWith("control-")) {
     if (mode === "control-recording")
       mkdirSync(path.join(path.dirname(controlScript), "zero.json"));
