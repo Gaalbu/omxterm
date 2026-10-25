@@ -1,4 +1,5 @@
 import { app, BrowserWindow, ipcMain } from "electron";
+import { translatorFor } from "../shared/i18n";
 import { createSettingsService } from "./settings-service";
 import { startSettings } from "./settings-wiring";
 import type { TerminalIpcRouter } from "./terminal-ipc-types";
@@ -16,6 +17,8 @@ export function startApplicationSettings(
     service: createSettingsService({
       loadOptions,
       reload: () => reloader.reload(),
+      translator: () =>
+        translatorFor(reloader.current().configuration.language),
     }),
     selectedContents: () => BrowserWindow.getFocusedWindow()?.webContents,
   });

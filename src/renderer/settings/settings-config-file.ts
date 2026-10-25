@@ -1,5 +1,7 @@
 import type { SettingsBridge, SettingsSnapshot } from "../../shared/settings";
+import type { Translate } from "../renderer-language";
 import { describeSettingsResult } from "./settings-dialog";
+import type { SettingsViewHooks } from "./settings-pages";
 
 // Raw JSON keeps its explicit Save. A dirty draft is never replaced by a
 // graphical or external change; saving it from a stale revision is refused.
@@ -9,7 +11,7 @@ export function renderConfigFile(
   snapshot: () => SettingsSnapshot | undefined,
   live: () => boolean,
   adopt: (next: SettingsSnapshot) => void,
-  syncs: (() => void)[],
+  { syncs, relabels, language }: SettingsViewHooks,
 ): HTMLElement {
   const panel = document.createElement("div");
   panel.className = "settings-panel settings-config-file";
@@ -20,12 +22,21 @@ export function renderConfigFile(
   editor.setAttribute("aria-label", "config.json");
   const message = document.createElement("p");
   message.setAttribute("role", "status");
+  // The message keeps how it was worded, so a language change rewords it.
+  let messageText: (t: Translate) => string = () => "";
+  const show = (text: (t: Translate) => string) => {
+    messageText = text;
+    message.textContent = text(language.t);
+  };
   const save = document.createElement("button");
   save.type = "button";
-  save.textContent = "Save";
   const revert = document.createElement("button");
   revert.type = "button";
-  revert.textContent = "Reload File";
+  relabels.push((t) => {
+    save.textContent = t("settings.file.save");
+    revert.textContent = t("settings.file.reload");
+    message.textContent = messageText(t);
+  });
   const actions = document.createElement("div");
   actions.className = "settings-actions";
   actions.append(save, revert);
@@ -38,8 +49,7 @@ export function renderConfigFile(
     editor.placeholder = '{\n  "version": 1\n}';
     if (dirty) {
       if (draftRevision !== current.revision)
-        message.textContent =
-          "config.json changed since you started editing. Your draft is kept; saving it will be refused until you reload the file.";
+        show((t) => t("settings.file.changed"));
       return;
     }
     editor.value = current.text ?? "";
@@ -51,7 +61,7 @@ export function renderConfigFile(
   });
   revert.addEventListener("click", () => {
     dirty = false;
-    message.textContent = "";
+    show(() => "");
     void bridge.snapshot().then((next) => {
       if (live()) adopt(next);
     });
@@ -59,16 +69,16 @@ export function renderConfigFile(
   save.addEventListener("click", () => {
     const revision = draftRevision ?? snapshot()?.revision;
     if (!revision) return;
-    message.textContent = "Saving…";
+    show((t) => t("settings.saving"));
     void bridge.saveText(editor.value, revision).then(
       (result) => {
         if (!live()) return;
         if (result.status === "saved") dirty = false;
         adopt(result.snapshot);
-        message.textContent = describeSettingsResult(result).text;
+        show((t) => describeSettingsResult(result, undefined, t).text);
       },
       () => {
-        if (live()) message.textContent = "Not saved: the request failed.";
+        if (live()) show((t) => t("settings.requestFailed"));
       },
     );
   });

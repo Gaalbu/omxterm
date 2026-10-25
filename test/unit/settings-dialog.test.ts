@@ -4,6 +4,7 @@ import {
   createSettingsDialog,
   describeSettingsResult,
 } from "../../src/renderer/settings/settings-dialog";
+import { createRendererLanguage } from "../../src/renderer/renderer-language";
 import type {
   SettingsBridge,
   SettingsChange,
@@ -285,5 +286,107 @@ describe("settings dialog", () => {
     finish(base);
     await opening;
     expect(document.querySelector(".settings-dialog")).toBeNull();
+  });
+});
+
+describe("settings dialog language", () => {
+  it("chooses the Interface Language and relabels the open dialog in place", async () => {
+    const language = createRendererLanguage("pt-BR");
+    const bridge: SettingsBridge = {
+      snapshot: vi.fn(async () => ({
+        ...base,
+        values: { ...base.values, language: "pt-BR" },
+      })),
+      change: vi.fn(async (change: SettingsChange) =>
+        saved({
+          ...base,
+          values: { ...base.values, [change.path]: change.value as unknown },
+        }),
+      ),
+      saveText: vi.fn(async () => saved(base)),
+      onOpen: () => () => {},
+    };
+    const dialog = createSettingsDialog(document, bridge, {
+      focusTerminal: vi.fn(),
+      onActivityChange: vi.fn(),
+      language,
+    });
+    await dialog.open();
+    const tabs = () =>
+      [...document.querySelectorAll('[role="tab"]')].map(
+        (tab) => tab.textContent,
+      );
+    const select = document.querySelector<HTMLSelectElement>("select")!;
+    const text = () => document.querySelector("dialog")!.textContent;
+    expect(tabs()).toEqual([
+      "Geral",
+      "Aparência",
+      "Terminal",
+      "Novas Janelas",
+      "Arquivo de Configuração",
+    ]);
+    expect(document.querySelector("#settings-title")!.textContent).toBe(
+      "Configurações",
+    );
+    expect(select.value).toBe("pt-BR");
+    expect([...select.options].map((option) => option.textContent)).toEqual([
+      "English (United States)",
+      "Português (Brasil)",
+    ]);
+    expect(text()).toContain("Confirmar antes de fechar sessões ocupadas");
+    expect(text()).toContain("Fechar");
+
+    select.value = "en-US";
+    select.dispatchEvent(new Event("change"));
+    expect(document.querySelector(".settings-status")!.textContent).toBe(
+      "Salvando…",
+    );
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(bridge.change).toHaveBeenCalledExactlyOnceWith({
+      path: "language",
+      value: "en-US",
+    });
+    expect(document.querySelector(".settings-status")!.textContent).toBe(
+      "Salvo.",
+    );
+    // Main's configuration update then switches the window language.
+    language.set("en-US");
+    expect(tabs()).toEqual([
+      "General",
+      "Appearance",
+      "Terminal",
+      "New Windows",
+      "Config File",
+    ]);
+    expect(document.querySelector(".settings-status")!.textContent).toBe(
+      "Saved.",
+    );
+    expect(text()).toContain("Confirm before closing busy sessions");
+    expect(
+      document.querySelector<HTMLInputElement>('input[type="text"]')!
+        .placeholder,
+    ).toBe("Bundled FiraCode Nerd Font Mono");
+    expect(document.querySelectorAll("dialog")).toHaveLength(1);
+
+    dialog.dispose();
+    language.set("pt-BR");
+    expect(document.querySelector("dialog")).toBeNull();
+  });
+
+  it("words saved results in the requested language", () => {
+    const t = createRendererLanguage("pt-BR").t;
+    expect(
+      describeSettingsResult(saved(base), "window.showTabBar", t).text,
+    ).toBe("Salvo. Vale para as novas janelas.");
+    expect(
+      describeSettingsResult(
+        saved(base, { applied: false, notice: "detail" }),
+        undefined,
+        t,
+      ),
+    ).toEqual({
+      text: "Salvo no config.json, mas não pôde ser aplicado: detail",
+      error: true,
+    });
   });
 });

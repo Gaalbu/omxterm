@@ -7,31 +7,49 @@ import {
 } from "../../shared/settings";
 import type { TerminalClipboardAction } from "../../shared/terminal-contract";
 import type { TerminalClipboard } from "../../terminal-surface/terminal-surface";
+import type { MessageKey } from "../../shared/i18n";
 import { retainDismissalGesture } from "../about/about-dialog";
+import {
+  englishLanguage,
+  type RendererLanguage,
+  type Translate,
+} from "../renderer-language";
 import { renderConfigFile } from "./settings-config-file";
-import { pages, renderControl } from "./settings-pages";
+import { pages, renderControl, type SettingsViewHooks } from "./settings-pages";
 
-const LIFETIME_NOTES = {
-  live: "",
-  "new-tabs": " New tabs use it.",
-  "new-windows": " It applies to new windows.",
-  restart: " New tabs use it; restart OMXTerm to apply it to open tabs.",
-} as const;
+const SAVED = {
+  live: "settings.saved.live",
+  "new-tabs": "settings.saved.newTabs",
+  "new-windows": "settings.saved.newWindows",
+  restart: "settings.saved.restart",
+} as const satisfies Record<string, MessageKey>;
 
 // Describes what a result actually did, never more: saved is not applied.
+// Text from main (validator detail, notices) is shown as main reported it.
 export function describeSettingsResult(
   result: SettingsResult,
   path?: SettingsPath,
+  t: Translate = englishLanguage.t,
 ): { readonly text: string; readonly error: boolean } {
   if (result.status !== "saved") return { text: result.message, error: true };
   if (!result.application.applied)
     return {
-      text: `Saved to config.json, but it could not be applied: ${result.application.notice}`,
+      text: t("settings.notApplied", { notice: result.application.notice }),
       error: true,
     };
-  const note = path ? LIFETIME_NOTES[SETTINGS_FIELDS[path].lifetime] : "";
-  return { text: `Saved.${note}`, error: false };
+  return {
+    text: t(
+      path ? SAVED[SETTINGS_FIELDS[path].lifetime] : "settings.saved.live",
+    ),
+    error: false,
+  };
 }
+
+type DialogOptions = {
+  readonly focusTerminal: () => void;
+  readonly onActivityChange: (active: boolean) => void;
+  readonly language?: RendererLanguage;
+};
 
 // Save-on-change dialog and controls adapted from ruscher/omxterm PR #622 at
 // b3c3a4ad6c1f2224bded65873ba0b09a07ec5d38 (MIT).
@@ -39,10 +57,7 @@ export function mountSettingsDialog(
   document: Document,
   bridge: SettingsBridge | undefined,
   canOpen: () => boolean,
-  options: {
-    readonly focusTerminal: () => void;
-    readonly onActivityChange: (active: boolean) => void;
-  },
+  options: DialogOptions,
 ) {
   if (!bridge) return undefined;
   const dialog = createSettingsDialog(document, bridge, options);
@@ -62,18 +77,20 @@ export function mountSettingsDialog(
 export function createSettingsDialog(
   document: Document,
   bridge: SettingsBridge,
-  options: {
-    readonly focusTerminal: () => void;
-    readonly onActivityChange: (active: boolean) => void;
-  },
+  options: DialogOptions,
 ) {
+  const language = options.language ?? englishLanguage;
   let dialog: HTMLDialogElement | undefined;
   let disposed = false;
+  // Relabels the open dialog in place, including after its own language change.
+  let relabel: ((t: Translate) => void) | undefined;
+  const unbindLabels = language.bind((t) => relabel?.(t));
   const keyboard = retainDismissalGesture(document);
   const close = (restoreFocus: boolean) => {
     const previous = dialog;
     if (!previous) return;
     dialog = undefined;
+    relabel = undefined;
     if (restoreFocus) previous.close();
     previous.remove();
     options.onActivityChange(false);
@@ -95,11 +112,15 @@ export function createSettingsDialog(
     current.className = "settings-dialog";
     current.setAttribute("aria-labelledby", "settings-title");
     const live = () => dialog === current;
-    const view = buildSettingsView(document, bridge, live);
+    const view = buildSettingsView(document, bridge, live, language);
     const done = document.createElement("button");
     done.type = "button";
     done.className = "settings-close";
-    done.textContent = "Close";
+    relabel = (t) => {
+      view.relabel(t);
+      done.textContent = t("common.close");
+    };
+    relabel(language.t);
     done.addEventListener("click", () => {
       if (live()) close(true);
     });
@@ -140,6 +161,7 @@ export function createSettingsDialog(
     },
     dispose() {
       disposed = true;
+      unbindLabels();
       keyboard.dispose();
       close(false);
     },
@@ -176,14 +198,19 @@ function buildSettingsView(
   document: Document,
   bridge: SettingsBridge,
   live: () => boolean,
+  language: RendererLanguage,
 ) {
   let snapshot: SettingsSnapshot | undefined;
   const syncs: (() => void)[] = [];
+  const relabels: ((t: Translate) => void)[] = [];
+  const hooks: SettingsViewHooks = { syncs, relabels, language };
   const element = document.createElement("div");
   element.className = "settings-body";
   const title = document.createElement("h2");
   title.id = "settings-title";
-  title.textContent = "Settings";
+  relabels.push((t) => {
+    title.textContent = t("settings.title");
+  });
   const status = document.createElement("p");
   status.className = "settings-status";
   status.setAttribute("role", "status");
@@ -197,33 +224,44 @@ function buildSettingsView(
   const panels = document.createElement("div");
   panels.className = "settings-panels";
 
-  const report = (text: string, error: boolean) => {
-    status.textContent = text;
+  // The status keeps how it was worded, so a language change rewords it.
+  let statusText: (t: Translate) => string = () => "";
+  const report = (text: (t: Translate) => string, error: boolean) => {
+    statusText = text;
+    status.textContent = text(language.t);
     status.classList.toggle("error", error);
   };
+  relabels.push((t) => {
+    status.textContent = statusText(t);
+    problem.textContent = snapshot?.problem
+      ? t("settings.problem", { problem: snapshot.problem })
+      : "";
+  });
   const adopt = (next: SettingsSnapshot) => {
     snapshot = next;
     problem.textContent = next.problem
-      ? `${next.problem}. Graphical changes are checked against the whole file; fix it here or in the Config File page.`
+      ? language.t("settings.problem", { problem: next.problem })
       : "";
     problem.hidden = next.problem === undefined;
     for (const sync of syncs) sync();
   };
   let queue = Promise.resolve();
   const change = (path: SettingsPath, value: unknown) => {
-    report("Saving…", false);
+    report((t) => t("settings.saving"), false);
     queue = queue
       .then(() => bridge.change({ path, value }))
       .then(
         (result) => {
           if (!live()) return;
           adopt(result.snapshot);
-          const message = describeSettingsResult(result, path);
-          report(message.text, message.error);
+          report(
+            (t) => describeSettingsResult(result, path, t).text,
+            describeSettingsResult(result, path).error,
+          );
         },
         () => {
           if (!live()) return;
-          report("Not saved: the request failed.", true);
+          report((t) => t("settings.requestFailed"), true);
           for (const sync of syncs) sync();
         },
       );
@@ -239,12 +277,14 @@ function buildSettingsView(
       panels.children[position]!.toggleAttribute("hidden", !selected);
     });
   };
-  const addPage = (id: string, label: string, panel: HTMLElement) => {
+  const addPage = (id: string, label: MessageKey, panel: HTMLElement) => {
     const index = tabButtons.length;
     const button = document.createElement("button");
     button.type = "button";
     button.id = `settings-tab-${id}`;
-    button.textContent = label;
+    relabels.push((t) => {
+      button.textContent = t(label);
+    });
     button.setAttribute("role", "tab");
     button.setAttribute("aria-controls", `settings-panel-${id}`);
     button.addEventListener("click", () => select(index));
@@ -276,18 +316,19 @@ function buildSettingsView(
       const panel = document.createElement("div");
       panel.className = "settings-panel";
       for (const control of page.controls)
-        panel.append(renderControl(document, control, value, change, syncs));
+        panel.append(renderControl(document, control, value, change, hooks));
       addPage(page.id, page.label, panel);
     }
     addPage(
       "config-file",
-      "Config File",
-      renderConfigFile(document, bridge, () => snapshot, live, adopt, syncs),
+      "settings.page.configFile",
+      renderConfigFile(document, bridge, () => snapshot, live, adopt, hooks),
     );
     select(0);
+    for (const apply of relabels) apply(language.t);
   };
   element.append(title, problem, tabs, panels, status);
-  report("Loading settings…", false);
+  report((t) => t("settings.loading"), false);
 
   return {
     element,
@@ -297,11 +338,14 @@ function buildSettingsView(
         if (!live()) return;
         build(loaded.platform);
         adopt(loaded);
-        report("", false);
+        report(() => "", false);
         tabButtons[0]?.focus();
       } catch {
-        if (live()) report("Settings could not be loaded.", true);
+        if (live()) report((t) => t("settings.loadFailed"), true);
       }
+    },
+    relabel(t: Translate) {
+      for (const apply of relabels) apply(t);
     },
   };
 }

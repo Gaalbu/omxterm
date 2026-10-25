@@ -7,6 +7,7 @@ import {
   MIN_TERMINAL_LINE_HEIGHT,
   MIN_TERMINAL_PADDING,
 } from "./user-configuration";
+import { SUPPORTED_LANGUAGES } from "./i18n";
 
 export const settingsIpc = {
   open: "settings:open",
@@ -41,6 +42,7 @@ const padding = integer(MIN_TERMINAL_PADDING, MAX_TERMINAL_PADDING);
 // main-process loader stays the validation authority; these checks only bound
 // what the renderer may ask main to write.
 export const SETTINGS_FIELDS = {
+  language: { lifetime: "live", accepts: oneOf(SUPPORTED_LANGUAGES) },
   confirmClose: { lifetime: "live", accepts: isBoolean },
   logLevel: { lifetime: "live", accepts: oneOf(["error", "info", "debug"]) },
   windowsShell: { lifetime: "new-tabs", accepts: nonEmptyText },

@@ -16,6 +16,11 @@ import type {
   SettingsSnapshot,
 } from "../shared/settings";
 import type { UserConfiguration } from "../shared/user-configuration";
+import {
+  DEFAULT_LANGUAGE,
+  translatorFor,
+  type Translator,
+} from "../shared/i18n";
 import type { UserConfigurationReloadOutcome } from "./user-configuration-reloader";
 import {
   DEFAULT_USER_CONFIGURATION,
@@ -58,8 +63,15 @@ export function createSettingsService(options: {
   readonly loadOptions: LoadUserConfigurationOptions;
   readonly reload: () => Promise<UserConfigurationReloadOutcome>;
   readonly files?: SettingsFiles;
+  // The active Interface Language; the validator's own detail stays English.
+  readonly translator?: () => Translator;
 }): SettingsService {
   const files = options.files ?? nodeSettingsFiles;
+  const t: Translator["t"] = (key, parameters) =>
+    (options.translator?.() ?? translatorFor(DEFAULT_LANGUAGE)).t(
+      key,
+      parameters,
+    );
   const configurationPath = resolveUserConfigurationPath(
     options.loadOptions.environment,
     options.loadOptions.homeDirectory,
@@ -88,7 +100,7 @@ export function createSettingsService(options: {
       return {
         revision: "unreadable",
         text: null,
-        problem: "config.json could not be read",
+        problem: t("settings.error.unreadable"),
       };
     }
     const revision = createHash("sha256").update(bytes).digest("hex");
@@ -99,17 +111,17 @@ export function createSettingsService(options: {
       return {
         revision,
         text: null,
-        problem: "config.json is not valid UTF-8",
+        problem: t("settings.error.utf8"),
       };
     }
     let document: unknown;
     try {
       document = JSON.parse(text);
     } catch {
-      return { revision, text, problem: "config.json is not valid JSON" };
+      return { revision, text, problem: t("settings.error.json") };
     }
     if (!isRecord(document))
-      return { revision, text, problem: "config.json must hold an object" };
+      return { revision, text, problem: t("settings.error.object") };
     const load = await loadUserConfiguration({
       ...options.loadOptions,
       read: fixedRead(bytes),
@@ -144,7 +156,7 @@ export function createSettingsService(options: {
     } catch {
       return {
         status: "failed",
-        message: "config.json could not be written. Nothing was changed.",
+        message: t("settings.error.write"),
         snapshot: snapshotOf(await readCurrent()),
       };
     }
@@ -166,7 +178,7 @@ export function createSettingsService(options: {
         if (current.problem && !current.document)
           return {
             status: "rejected",
-            message: `${current.problem}. Fix it in the Config File page first.`,
+            message: t("settings.error.fixFirst", { problem: current.problem }),
             snapshot: snapshotOf(current),
           };
         const document = structuredClone(current.document ?? { version: 1 });
@@ -179,8 +191,7 @@ export function createSettingsService(options: {
         if (current.revision !== revision)
           return {
             status: "conflict",
-            message:
-              "config.json changed since this draft was opened. Copy your draft, reload the file and apply your edits again.",
+            message: t("settings.error.conflict"),
             snapshot: snapshotOf(current),
           };
         return commit(text);
@@ -224,6 +235,7 @@ function settingsValues(
 ): SettingsSnapshot["values"] {
   const theme = isRecord(document?.theme) ? document.theme.path : undefined;
   return {
+    language: configuration.language,
     confirmClose: configuration.confirmClose,
     logLevel: configuration.logLevel,
     windowsShell: configuration.windowsShell ?? "",

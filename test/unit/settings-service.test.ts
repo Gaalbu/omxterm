@@ -16,6 +16,7 @@ import {
   setField,
 } from "../../src/main/settings-service";
 import type { UserConfigurationReloadOutcome } from "../../src/main/user-configuration-reloader";
+import { translatorFor } from "../../src/shared/i18n";
 
 const roots: string[] = [];
 
@@ -276,5 +277,49 @@ describe("settings file helpers", () => {
     expect(document).toEqual({ version: 1 });
     setField(document, "theme.path", null);
     expect(document).toEqual({ version: 1 });
+  });
+});
+
+describe("settings language", () => {
+  it("writes the Interface Language as one root field and reports it", async () => {
+    const { service, read } = await setup('{\n  "version": 1\n}\n');
+    expect((await service.snapshot()).values.language).toBe("en-US");
+    const result = await service.change({ path: "language", value: "pt-BR" });
+    expect(result.status).toBe("saved");
+    expect(JSON.parse(await read())).toEqual({
+      version: 1,
+      language: "pt-BR",
+    });
+    expect(result.snapshot.values.language).toBe("pt-BR");
+    await service.change({ path: "language", value: null });
+    expect(JSON.parse(await read())).toEqual({ version: 1 });
+  });
+
+  it("words its own problems in the active language", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "omxterm-settings-"));
+    roots.push(root);
+    const file = path.join(root, "omxterm", "config.json");
+    await mkdir(path.dirname(file), { recursive: true });
+    await writeFile(file, "{not json");
+    const service = createSettingsService({
+      loadOptions: {
+        environment: { XDG_CONFIG_HOME: root },
+        homeDirectory: root,
+        platform: "linux",
+        getInstalledFontFamilyMetrics: async () => undefined,
+      },
+      reload: async () => ({ applied: true, notices: [] }),
+      translator: () => translatorFor("pt-BR"),
+    });
+    expect((await service.snapshot()).problem).toBe(
+      "O config.json não é um JSON válido",
+    );
+    const result = await service.change({ path: "confirmClose", value: false });
+    expect(result).toMatchObject({
+      status: "rejected",
+      message:
+        "O config.json não é um JSON válido. Corrija primeiro na página Arquivo de Configuração.",
+    });
+    expect(await readFile(file, "utf8")).toBe("{not json");
   });
 });
