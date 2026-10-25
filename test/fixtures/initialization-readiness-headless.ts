@@ -70,13 +70,15 @@ export async function initializationReadinessScene(
   boundary: "fonts" | "runtime" = "runtime",
 ) {
   const root = await mkdtemp(path.join(tmpdir(), "omxterm-init-ready-"));
-  await buildFixture(root);
-  const dom = new JSDOM(await readFile("src/renderer/index.html", "utf8"), {
-    url: `https://fixture.invalid/?boundary=${boundary}`,
-    runScripts: "outside-only",
-  });
-  const window = dom.window;
+  let setupWindow: (Window & typeof globalThis) | undefined;
   try {
+    await buildFixture(root);
+    const dom = new JSDOM(await readFile("src/renderer/index.html", "utf8"), {
+      url: `https://fixture.invalid/?boundary=${boundary}`,
+      runScripts: "outside-only",
+    });
+    const window = dom.window;
+    setupWindow = window;
     Object.defineProperty(window.document, "hasFocus", { value: () => true });
     Object.defineProperty(window.Uint8Array, "fromBase64", {
       value: (text: string) =>
@@ -170,8 +172,10 @@ export async function initializationReadinessScene(
       },
     };
   } catch (error) {
-    window.dispatchEvent(new window.Event("pagehide"));
-    window.close();
+    if (setupWindow) {
+      setupWindow.dispatchEvent(new setupWindow.Event("pagehide"));
+      setupWindow.close();
+    }
     await rm(root, { recursive: true, force: true });
     throw error;
   }

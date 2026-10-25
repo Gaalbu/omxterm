@@ -1,3 +1,5 @@
+import { access, mkdtemp, readFile, rm } from "node:fs/promises";
+import path from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
 import { initializationReadinessScene } from "../fixtures/initialization-readiness-headless";
 import { startCancellationTab } from "../fixtures/initialization-cancellation-readiness";
@@ -11,6 +13,14 @@ vi.mock("esbuild", async (importOriginal) => {
         await import("../fixtures/initialization-readiness-headless");
       return actual.build(headlessInitializationSurface(options));
     },
+  };
+});
+vi.mock("node:fs/promises", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:fs/promises")>();
+  return {
+    ...actual,
+    mkdtemp: vi.fn(actual.mkdtemp),
+    readFile: vi.fn(actual.readFile),
   };
 });
 const cleanups: Array<() => Promise<void>> = [];
@@ -91,4 +101,24 @@ it("rejects B creation when the window retires before actual host registration",
   expect(createTab).not.toHaveBeenCalled();
   expect(f.starts).toBe(1);
   expect(f.listeners).toBe(0);
+}, 30_000);
+
+it("removes its owned root before rejecting a failure to load the scene HTML", async () => {
+  const failure = new Error("Injected scene HTML read failure");
+  let root: string | undefined;
+  vi.mocked(readFile).mockImplementationOnce(async () => {
+    root = await (vi.mocked(mkdtemp).mock.results.at(-1)!
+      .value as Promise<string>);
+    // The real recipe has already built the owned fixture at this point.
+    await access(path.join(root, "renderer/index.js"));
+    throw failure;
+  });
+  try {
+    await expect(initializationReadinessScene()).rejects.toBe(failure);
+    expect(root).toBeDefined();
+    await expect(access(root!)).rejects.toMatchObject({ code: "ENOENT" });
+  } finally {
+    // Also settle the exact root when this regression is run against old code.
+    if (root) await rm(root, { recursive: true, force: true });
+  }
 }, 30_000);
