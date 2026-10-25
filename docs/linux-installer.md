@@ -26,7 +26,7 @@ It automatically detects whether your system supports direct FUSE mounting or ne
 
 ## Only if graphics fail
 
-If OMXTerm opens a blank window or reports a WebGL2 initialization error inside a virtual machine or on older GPU drivers, install with the `--compatibility` flag:
+On Linux, OMXTerm permits Chromium's SwiftShader WebGL fallback when available. Software rendering costs CPU and does not guarantee successful WebGL2 initialization; see the [accepted graphics/JIT security tradeoff](adr/0037-allow-the-linux-software-webgl-fallback.md). A blank window or initialization error alone does not diagnose a driver problem. For separate, opt-in Mesa/blocklist troubleshooting, install with the `--compatibility` flag:
 
 ```sh
 ./linux_install.sh install --compatibility "$appimage"

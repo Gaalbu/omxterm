@@ -45,11 +45,12 @@ source/test boundaries and known limitations.
 | 0034 | [Support native Windows x64 packages](0034-support-native-windows-x64-packages.md)                                             |
 | 0035 | [Select the interface language explicitly](0035-select-the-interface-language-explicitly.md)                                   |
 | 0036 | [Distribute build-only x64 CI artifacts](0036-distribute-build-only-x64-ci-artifacts.md)                                       |
+| 0037 | [Allow the Linux software WebGL fallback](0037-allow-the-linux-software-webgl-fallback.md)                                     |
 
 ## Related boundaries
 
 - Tabs/chrome/close/native completion: 0016, 0017, 0027, 0028, 0032, 0033.
-- Portable Surface/fonts/protocols: 0008, 0012, 0022, 0025.
+- Portable Surface/fonts/protocols: 0008, 0012, 0022, 0025, 0037.
 - User-owned configuration and live application: 0002, 0003, 0025, 0029, 0030, 0035.
-- Renderer privilege and explicit payload actions: 0006, 0009–0011, 0021, 0024, 0026.
+- Renderer privilege and explicit payload actions: 0006, 0009–0011, 0021, 0024, 0026, 0037.
 - Native distribution, verification and installers: 0015, 0019, 0020, 0023, 0031, 0034, 0036.

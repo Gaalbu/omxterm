@@ -29,6 +29,7 @@ import {
 import { registerTerminalShutdown } from "./terminal-shutdown";
 import { applyLinuxDisplayBackendDefault } from "./linux-display-backend";
 import { applyChromiumSandboxPolicy } from "./chromium-sandbox-policy";
+import { applyChromiumGpuPolicy } from "./chromium-gpu-policy";
 import {
   isFilePathPlatform,
   readClipboardPathInsertion,
@@ -115,6 +116,8 @@ const shutdown = registerTerminalShutdown(app, {
 });
 
 applyChromiumSandboxPolicy(app.commandLine);
+
+applyChromiumGpuPolicy(app.commandLine);
 
 applyLinuxDisplayBackendDefault(app);
 

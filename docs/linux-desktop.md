@@ -101,9 +101,9 @@ Use the value that matches your display. This is a launch option, not a `config.
 
 ## Graphics troubleshooting
 
-OMXTerm needs **WebGL2** to draw the terminal. Some VMs and older GPU drivers cannot provide it, and you see a blank window or a rendering error instead of a shell.
+OMXTerm needs **WebGL2** to draw the terminal. On Linux, OMXTerm permits Chromium's SwiftShader WebGL fallback when available, including on some VMs without 3D acceleration. Software rendering costs CPU and initialization may still fail. This permission accepts [lower graphics/JIT security guarantees](adr/0037-allow-the-linux-software-webgl-fallback.md); it does not force software rendering or bypass the GPU blocklist.
 
-If you use the [Linux installer](linux-installer.md#only-if-graphics-fail), reinstall with `--compatibility`. If you launch the AppImage directly, run:
+A blank window or rendering error alone does not identify a driver problem. For separate, opt-in Mesa/blocklist troubleshooting, if you use the [Linux installer](linux-installer.md#only-if-graphics-fail), reinstall with `--compatibility`. If you launch the AppImage directly, run:
 
 ```sh
 LIBGL_ALWAYS_SOFTWARE=1 ./OMXTerm-VERSION-arm64.AppImage \
