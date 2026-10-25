@@ -8,13 +8,13 @@ For product behavior, see [`spec.md`](spec.md); for architectural rationale, see
 
 The portable Terminal Surface (`src/terminal-surface/`) receives a session Adapter and imports neither Electron nor `node-pty`. Electron `main` owns local PTYs and privileged capabilities; `preload` exposes typed, sender-validated IPC routes.
 
-- **Initialization:** Fonts, the Ghostty WASM core, and a WebGL2 context initialize before the PTY starts. If initialization fails, no shell is spawned. WebGL context loss reports a visible error and disposes the affected tab/session without affecting other tabs.
-- **Tab cancellation:** Closing an initializing tab marks late callbacks inert, waits for pending acquisitions to settle, and releases partial resources. An already accepted session start is closed once through the Adapter.
+- **Initialization:** Fonts, the Ghostty WASM core, and a WebGL2 context initialize before the PTY starts. If initialization fails, no shell is spawned. WebGL context loss reports a visible error and disposes the affected pane/session without affecting siblings.
+- **Pane cancellation:** Closing an initializing pane (directly or through its tab) marks late callbacks inert, waits for pending acquisitions to settle, and releases partial resources. An already accepted session start is closed once through the Adapter.
 
 ### Configuration and Surface lifetime
 
-- **Live-safe settings:** Theme colors, font size, programming ligatures, padding, scrollback lines, and macOS Option Key Mode apply in place to existing tabs and sessions.
-- **Creation-time settings:** `font.family` and `font.lineHeight` are fixed when a Surface is created. New tabs use the latest validated values; existing tabs keep their creation-time values until OMXTerm restarts.
+- **Live-safe settings:** Theme colors, font size, programming ligatures, padding, scrollback lines, and macOS Option Key Mode apply in place to existing panes and sessions; the latest labels also replay after a pending pane mount.
+- **Creation-time settings:** `font.family` and `font.lineHeight` are fixed when a Surface is created. New panes use the latest validated values; existing panes keep their creation-time values until OMXTerm restarts.
 
 ### Current runtime limitations
 
@@ -25,7 +25,7 @@ The portable Terminal Surface (`src/terminal-surface/`) receives a session Adapt
 
 ### Scrollback and viewport
 
-- `scrollback.lines` (0 to 100,000, default 10,000) sets an approximate history-row target per tab. Ghostty evicts whole pages and enforces a 10,000,000-byte core ceiling. Setting `0` clears and disables history immediately.
+- `scrollback.lines` (0 to 100,000, default 10,000) sets an approximate history-row target per pane. Ghostty evicts whole pages and enforces a 10,000,000-byte core ceiling. Setting `0` clears and disables history immediately.
 - Accepted user input (typing, paste, snippets, or dropped paths) returns the viewport to the live bottom; background output, focus, and selection do not jump the scroll position.
 - Desktops with a fine pointer use native scrolling even if touch hardware is present.
 
@@ -52,7 +52,7 @@ The pinned Ghostty core handles Kitty graphics parsing, decoding, placement, and
 
 ### Hidden Surface rendering
 
-Hidden tabs continue synchronous output ingestion, protocol replies, and Adapter ACKs while suppressing WebGL frame clears, draws, and texture uploads. Disposable renderer image copies are released while hidden and rebuilt from core storage when the tab is selected again.
+Panes in hidden tabs continue synchronous output ingestion, protocol replies, and Adapter ACKs while suppressing WebGL frame clears, draws, and texture uploads. Disposable renderer image copies are released while hidden and rebuilt from core storage when the tab is selected again.
 
 ### Background composition
 

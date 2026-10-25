@@ -39,6 +39,9 @@ it("bundles the auxiliary native scenario and production renderer headlessly", a
     expect(production.outputFiles[0]!.text).not.toContain(
       "Overlay consumption capacity exceeded",
     );
+    expect(production.outputFiles[0]!.text).not.toContain(
+      "__windowChromeHostReady",
+    );
   } finally {
     await rm(root, { recursive: true, force: true });
   }

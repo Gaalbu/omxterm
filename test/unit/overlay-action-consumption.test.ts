@@ -88,6 +88,7 @@ async function fixture(
       mount: async (container) => {
         container.append(input);
         return {
+          geometry: () => undefined,
           ...actions,
           dispose() {},
           focus() {

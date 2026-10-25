@@ -5,6 +5,11 @@ import { runInNewContext } from "node:vm";
 import { afterEach, beforeAll, beforeEach, expect, it, vi } from "vitest";
 import { createFixtureSessionInput } from "../fixtures/fixture-session-input";
 import { explicitFixtureReadyMarker } from "../fixtures/restty-host-platform";
+import { createFeatureSmoke } from "../fixtures/feature-native-smoke";
+import { FEATURE_SMOKE_FLAG } from "../fixtures/feature-native-smoke-contract";
+
+// The added observer is real; its native-only scenario is not invoked here.
+vi.mock("electron", () => ({ ipcMain: {} }));
 
 let entry: string;
 beforeAll(async () => {
@@ -155,6 +160,8 @@ function harness(
         return session;
       },
     },
+    "./feature-native-smoke": { createFeatureSmoke },
+    "./feature-native-smoke-contract": { FEATURE_SMOKE_FLAG },
     "./fixture-session-input": { createFixtureSessionInput },
     "./restty-host-platform": {
       explicitFixtureReadyMarker,
@@ -178,6 +185,10 @@ function harness(
         exercise: async () => {},
         dispose() {},
       }),
+    },
+    "./settings-dialog-exercise": { runSettingsExercise: async () => ({}) },
+    "./window-chrome-configuration": {
+      fixtureConfigurationApplier: () => () => {},
     },
     "../../src/main/native-application-menu": {},
   };
