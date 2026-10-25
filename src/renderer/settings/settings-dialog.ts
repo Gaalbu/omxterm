@@ -9,33 +9,15 @@ import type { TerminalClipboard } from "../../terminal-surface/terminal-surface"
 import { retainDismissalGesture } from "../about/about-dialog";
 import { renderConfigFile } from "./settings-config-file";
 import { pages, renderControl } from "./settings-pages";
-
-const LIFETIME_NOTES = {
-  live: "",
-  "new-tabs": " New tabs use it.",
-  "new-windows": " It applies to new windows.",
-  restart: " New tabs use it; restart OMXTerm to apply it to open tabs.",
-} as const;
-
-// Describes what a result actually did, never more: saved is not applied.
-export function describeSettingsResult(result: SettingsResult): {
-  readonly text: string;
-  readonly error: boolean;
-} {
-  if (result.status !== "saved") return { text: result.message, error: true };
-  if (!result.application.applied)
-    return {
-      text: `Saved to config.json, but it could not be applied: ${result.application.notice}`,
-      error: true,
-    };
-  const note = result.lifetimes
-    .map((lifetime) => LIFETIME_NOTES[lifetime])
-    .join("");
-  const notices = result.application.notices
-    .map((notice) => ` ${notice}`)
-    .join("");
-  return { text: `Saved.${note}${notices}`, error: false };
-}
+import {
+  englishLanguage,
+  type RendererLanguage,
+  type Translate,
+} from "../renderer-language";
+import type { MessageKey } from "../../shared/i18n";
+import { settingsMessageText } from "../../shared/settings-messages";
+import { describeSettingsResult } from "./settings-results";
+export { describeSettingsResult } from "./settings-results";
 
 // Save-on-change dialog and controls adapted from ruscher/omxterm PR #622 at
 // b3c3a4ad6c1f2224bded65873ba0b09a07ec5d38 (MIT).
@@ -46,6 +28,7 @@ export function mountSettingsDialog(
   options: {
     readonly focusTerminal: () => void;
     readonly onActivityChange: (active: boolean) => void;
+    readonly language?: RendererLanguage;
   },
 ) {
   if (!bridge) return undefined;
@@ -69,8 +52,11 @@ export function createSettingsDialog(
   options: {
     readonly focusTerminal: () => void;
     readonly onActivityChange: (active: boolean) => void;
+    readonly language?: RendererLanguage;
   },
 ) {
+  const language = options.language ?? englishLanguage;
+  let unbindView: (() => void) | undefined;
   let dialog: HTMLDialogElement | undefined;
   let disposed = false;
   const keyboard = retainDismissalGesture(document);
@@ -78,6 +64,8 @@ export function createSettingsDialog(
     const previous = dialog;
     if (!previous) return;
     dialog = undefined;
+    unbindView?.();
+    unbindView = undefined;
     if (restoreFocus) previous.close();
     previous.remove();
     options.onActivityChange(false);
@@ -99,11 +87,11 @@ export function createSettingsDialog(
     current.className = "settings-dialog";
     current.setAttribute("aria-labelledby", "settings-title");
     const live = () => dialog === current;
-    const view = buildSettingsView(document, bridge, live);
     const done = document.createElement("button");
+    const view = buildSettingsView(document, bridge, live, language, done);
+    unbindView = view.dispose;
     done.type = "button";
     done.className = "settings-close";
-    done.textContent = "Close";
     done.addEventListener("click", () => {
       if (live()) close(true);
     });
@@ -193,14 +181,21 @@ function buildSettingsView(
   document: Document,
   bridge: SettingsBridge,
   live: () => boolean,
+  language: RendererLanguage,
+  done: HTMLButtonElement,
 ) {
   let snapshot: SettingsSnapshot | undefined;
   const syncs: (() => void)[] = [];
+  const labels: ((t: Translate) => void)[] = [];
+  let pending = 0;
+  let statusMessage:
+    | { key: MessageKey; error: boolean }
+    | { result: SettingsResult }
+    | undefined;
   const element = document.createElement("div");
   element.className = "settings-body";
   const title = document.createElement("h2");
   title.id = "settings-title";
-  title.textContent = "Settings";
   const status = document.createElement("p");
   status.className = "settings-status";
   status.setAttribute("role", "status");
@@ -214,26 +209,38 @@ function buildSettingsView(
   const panels = document.createElement("div");
   panels.className = "settings-panels";
 
-  const report = (text: string, error: boolean) => {
-    status.textContent = text;
-    status.classList.toggle("error", error);
+  const renderStatus = (t: Translate) => {
+    const message = !statusMessage
+      ? { text: "", error: false }
+      : "result" in statusMessage
+        ? describeSettingsResult(statusMessage.result, t)
+        : { text: t(statusMessage.key), error: statusMessage.error };
+    status.textContent =
+      pending > 0
+        ? t("settings.saving") + (message.error ? ` ${message.text}` : "")
+        : message.text;
+    status.classList.toggle("error", message.error);
+  };
+  const renderProblem = (t: Translate) => {
+    problem.textContent = snapshot?.problem
+      ? t("settings.fileGuidance", {
+          problem: settingsMessageText(snapshot.problem, t),
+        })
+      : "";
+    problem.hidden = snapshot?.problem === undefined;
+  };
+  const report = (key?: MessageKey, error = false) => {
+    statusMessage = key ? { key, error } : undefined;
+    renderStatus(language.t);
   };
   const adopt = (next: SettingsSnapshot) => {
     snapshot = next;
-    problem.textContent = next.problem
-      ? `${next.problem}. Graphical changes are checked against the whole file; fix it here or in the Config File page.`
-      : "";
-    problem.hidden = next.problem === undefined;
+    renderProblem(language.t);
     for (const sync of syncs) sync();
-  };
-  let pending = 0;
-  const completed = (text: string, error: boolean) => {
-    pending -= 1;
-    report(pending > 0 ? `Saving…${error ? ` ${text}` : ""}` : text, error);
   };
   const change = (path: SettingsPath, value: unknown, settled: () => void) => {
     pending += 1;
-    report("Saving…", false);
+    report();
     // Main already serializes saves and reads. Submit deliberate changes now,
     // so a reopened view's snapshot cannot overtake work held by a removed view.
     void bridge.change({ path, value }).then(
@@ -241,13 +248,15 @@ function buildSettingsView(
         if (!live()) return;
         settled();
         adopt(result.snapshot);
-        const message = describeSettingsResult(result);
-        completed(message.text, message.error);
+        pending -= 1;
+        statusMessage = { result };
+        renderStatus(language.t);
       },
       () => {
         if (!live()) return;
         settled();
-        completed("Not saved: the request failed.", true);
+        pending -= 1;
+        report("settings.requestError", true);
         for (const sync of syncs) sync();
       },
     );
@@ -263,12 +272,14 @@ function buildSettingsView(
       panels.children[position]!.toggleAttribute("hidden", !selected);
     });
   };
-  const addPage = (id: string, label: string, panel: HTMLElement) => {
+  const addPage = (id: string, label: MessageKey, panel: HTMLElement) => {
     const index = tabButtons.length;
     const button = document.createElement("button");
     button.type = "button";
     button.id = `settings-tab-${id}`;
-    button.textContent = label;
+    labels.push((t) => {
+      button.textContent = t(label);
+    });
     button.setAttribute("role", "tab");
     button.setAttribute("aria-controls", `settings-panel-${id}`);
     button.addEventListener("click", () => select(index));
@@ -300,31 +311,50 @@ function buildSettingsView(
       const panel = document.createElement("div");
       panel.className = "settings-panel";
       for (const control of page.controls)
-        panel.append(renderControl(document, control, value, change, syncs));
+        panel.append(
+          renderControl(document, control, value, change, syncs, labels),
+        );
       addPage(page.id, page.label, panel);
     }
     addPage(
       "config-file",
-      "Config File",
-      renderConfigFile(document, bridge, () => snapshot, live, adopt, syncs),
+      "settings.page.file",
+      renderConfigFile(document, bridge, {
+        snapshot: () => snapshot,
+        live,
+        adopt,
+        syncs,
+        labels,
+        language,
+      }),
     );
     select(0);
   };
   element.append(title, problem, tabs, panels, status);
-  report("Loading settings…", false);
+  report("settings.loading");
+  const relabel = (t: Translate) => {
+    title.textContent = t("settings.title");
+    done.textContent = t("common.close");
+    for (const label of labels) label(t);
+    renderProblem(t);
+    renderStatus(t);
+  };
+  const unbind = language.bind(relabel);
 
   return {
     element,
+    dispose: unbind,
     async load() {
       try {
         const loaded = await bridge.snapshot();
         if (!live()) return;
         build(loaded.platform);
+        relabel(language.t);
         adopt(loaded);
-        report("", false);
+        report();
         tabButtons[0]?.focus();
       } catch {
-        if (live()) report("Settings could not be loaded.", true);
+        if (live()) report("settings.loadError", true);
       }
     },
   };

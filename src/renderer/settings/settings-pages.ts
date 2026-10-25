@@ -1,36 +1,26 @@
 import { SETTINGS_FIELDS, type SettingsPath } from "../../shared/settings";
+import type { MessageKey } from "../../shared/i18n";
+import { englishLanguage, type Translate } from "../renderer-language";
 
-export type Control =
-  | {
-      readonly kind: "toggle";
-      readonly path: SettingsPath;
-      readonly label: string;
-    }
-  | {
-      readonly kind: "choice";
-      readonly path: SettingsPath;
-      readonly label: string;
-      readonly options: readonly (readonly [string, string])[];
-    }
-  | {
-      readonly kind: "number";
-      readonly path: SettingsPath;
-      readonly label: string;
-      readonly min: number;
-      readonly max: number;
-      readonly step?: number;
-    }
-  | {
-      readonly kind: "text";
-      readonly path: SettingsPath;
-      readonly label: string;
-      // Shown when empty: the field then inherits this default.
-      readonly placeholder: string;
-    };
-
+type Caption = { readonly path: SettingsPath; readonly label: MessageKey };
+export type Control = Caption &
+  (
+    | { readonly kind: "toggle" }
+    | {
+        readonly kind: "choice";
+        readonly options: readonly (readonly [string, MessageKey])[];
+      }
+    | {
+        readonly kind: "number";
+        readonly min: number;
+        readonly max: number;
+        readonly step?: number;
+      }
+    | { readonly kind: "text"; readonly placeholder: MessageKey }
+  );
 export interface Page {
   readonly id: string;
-  readonly label: string;
+  readonly label: MessageKey;
   readonly controls: readonly Control[];
 }
 
@@ -38,21 +28,30 @@ export function pages(platform: string): readonly Page[] {
   return [
     {
       id: "general",
-      label: "General",
+      label: "settings.page.general",
       controls: [
+        {
+          kind: "choice",
+          path: "language",
+          label: "settings.language",
+          options: [
+            ["en-US", "settings.english"],
+            ["pt-BR", "settings.portuguese"],
+          ],
+        },
         {
           kind: "toggle",
           path: "confirmClose",
-          label: "Confirm before closing busy sessions",
+          label: "settings.confirmClose",
         },
         {
           kind: "choice",
           path: "logLevel",
-          label: "Log level",
+          label: "settings.logLevel",
           options: [
-            ["error", "Errors only"],
-            ["info", "Information"],
-            ["debug", "Debug"],
+            ["error", "settings.errors"],
+            ["info", "settings.info"],
+            ["debug", "settings.debug"],
           ],
         },
         ...(platform === "win32"
@@ -60,8 +59,8 @@ export function pages(platform: string): readonly Page[] {
               {
                 kind: "text",
                 path: "windowsShell",
-                label: "Shell executable",
-                placeholder: "Windows PowerShell",
+                label: "settings.shell",
+                placeholder: "settings.defaultShell",
               } as const,
             ]
           : []),
@@ -69,50 +68,46 @@ export function pages(platform: string): readonly Page[] {
     },
     {
       id: "appearance",
-      label: "Appearance",
+      label: "settings.page.appearance",
       controls: [
         {
           kind: "text",
           path: "font.family",
-          label: "Font family",
-          placeholder: "Bundled FiraCode Nerd Font Mono",
+          label: "settings.fontFamily",
+          placeholder: "settings.bundledFont",
         },
         {
           kind: "number",
           path: "font.size",
-          label: "Font size",
+          label: "settings.fontSize",
           min: 8,
           max: 72,
         },
         {
           kind: "number",
           path: "font.lineHeight",
-          label: "Line height",
+          label: "settings.lineHeight",
           min: 1,
           max: 2,
           step: 0.05,
         },
-        {
-          kind: "toggle",
-          path: "font.ligatures",
-          label: "Programming ligatures",
-        },
+        { kind: "toggle", path: "font.ligatures", label: "settings.ligatures" },
         {
           kind: "text",
           path: "theme.path",
-          label: "Theme file",
-          placeholder: "Bundled omtheme",
+          label: "settings.theme",
+          placeholder: "settings.bundledTheme",
         },
       ],
     },
     {
       id: "terminal",
-      label: "Terminal",
+      label: "settings.page.terminal",
       controls: [
         {
           kind: "number",
           path: "scrollback.lines",
-          label: "Scrollback lines",
+          label: "settings.scrollback",
           min: 0,
           max: 100_000,
           step: 1_000,
@@ -122,7 +117,7 @@ export function pages(platform: string): readonly Page[] {
             ({
               kind: "number",
               path: `terminal.padding.${side}`,
-              label: `Padding ${side}`,
+              label: `settings.padding.${side}`,
               min: 0,
               max: 128,
             }) as const,
@@ -132,12 +127,12 @@ export function pages(platform: string): readonly Page[] {
               {
                 kind: "choice",
                 path: "keyboard.optionAsAlt",
-                label: "Option key acts as Alt",
+                label: "settings.optionAlt",
                 options: [
-                  ["none", "Neither"],
-                  ["left", "Left Option"],
-                  ["right", "Right Option"],
-                  ["both", "Both"],
+                  ["none", "settings.option.none"],
+                  ["left", "settings.option.left"],
+                  ["right", "settings.option.right"],
+                  ["both", "settings.option.both"],
                 ],
               } as const,
             ]
@@ -146,15 +141,19 @@ export function pages(platform: string): readonly Page[] {
     },
     {
       id: "window",
-      label: "New Windows",
+      label: "settings.page.window",
       controls: [
         {
           kind: "toggle",
           path: "window.showTitleBar",
-          label: "Show title bar",
+          label: "settings.titleBar",
         },
-        { kind: "toggle", path: "window.showTabBar", label: "Show tab bar" },
-        { kind: "toggle", path: "window.alwaysOnTop", label: "Always on top" },
+        { kind: "toggle", path: "window.showTabBar", label: "settings.tabBar" },
+        {
+          kind: "toggle",
+          path: "window.alwaysOnTop",
+          label: "settings.alwaysOnTop",
+        },
       ],
     },
   ];
@@ -166,11 +165,16 @@ export function renderControl(
   value: (path: SettingsPath) => unknown,
   change: (path: SettingsPath, value: unknown, settled: () => void) => void,
   syncs: (() => void)[],
+  labels: ((t: Translate) => void)[],
 ): HTMLElement {
   const row = document.createElement("label");
   row.className = `settings-row settings-${control.kind}`;
   const caption = document.createElement("span");
-  caption.textContent = control.label;
+  let t = englishLanguage.t;
+  labels.push((translate) => {
+    t = translate;
+    caption.textContent = t(control.label);
+  });
   let input: HTMLInputElement | HTMLSelectElement;
   let generation = 0;
   let dirty = false;
@@ -190,7 +194,9 @@ export function renderControl(
     for (const [optionValue, label] of control.options) {
       const option = document.createElement("option");
       option.value = optionValue;
-      option.textContent = label;
+      labels.push((t) => {
+        option.textContent = t(label);
+      });
       select.append(option);
     }
     select.addEventListener("change", () => commit(select.value));
@@ -213,7 +219,10 @@ export function renderControl(
         field.min = String(control.min);
         field.max = String(control.max);
         field.step = String(control.step ?? 1);
-      } else field.placeholder = control.placeholder;
+      } else
+        labels.push((t) => {
+          field.placeholder = t(control.placeholder);
+        });
       field.addEventListener("input", edited);
       const sync = () => {
         if (dirty) return;
@@ -228,7 +237,7 @@ export function renderControl(
           dirty = false;
           generation += 1;
           sync();
-          field.setCustomValidity("Out of range");
+          field.setCustomValidity(t("settings.range"));
           field.reportValidity();
           field.setCustomValidity("");
           return;

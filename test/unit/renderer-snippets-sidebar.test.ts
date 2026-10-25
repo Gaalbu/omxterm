@@ -1,6 +1,10 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createSnippetsView } from "../../src/renderer/snippets-sidebar";
+import {
+  createRendererLanguage,
+  type RendererLanguage,
+} from "../../src/renderer/renderer-language";
 import type { TerminalSnippetsResponse } from "../../src/shared/terminal-snippets";
 
 const catalog: TerminalSnippetsResponse = {
@@ -19,7 +23,10 @@ afterEach(() => {
   for (const cleanup of cleanups.splice(0)) cleanup();
   document.body.replaceChildren();
 });
-function fixture(load = vi.fn(async () => catalog)) {
+function fixture(
+  load = vi.fn(async () => catalog),
+  language?: RendererLanguage,
+) {
   let interactive = true;
   const inject = vi.fn();
   const preview = vi.fn();
@@ -28,6 +35,7 @@ function fixture(load = vi.fn(async () => catalog)) {
     inject,
     preview,
     isInteractive: () => interactive,
+    ...(language ? { language } : {}),
   });
   document.body.append(view.element);
   cleanups.push(view.dispose);
@@ -59,6 +67,78 @@ async function settle() {
 }
 
 describe("Snippets auxiliary view", () => {
+  it.each(["reject", "throw"])(
+    "relabels a visible generic %s failure without reloading or replacing the view",
+    async (outcome) => {
+      const language = createRendererLanguage();
+      const load = vi.fn<() => Promise<TerminalSnippetsResponse>>(() => {
+        if (outcome === "throw") throw new Error("private details");
+        return Promise.reject(new Error("private details"));
+      });
+      const f = fixture(load, language);
+      f.view.activate();
+      f.input("retained query");
+      f.view.focus();
+      await settle();
+      const error = f.root.querySelector<HTMLElement>(".snippets-error")!;
+      expect(error.hidden).toBe(false);
+      expect(error.textContent).toBe(
+        "Could not load snippets. Close and reopen Snippets to retry.",
+      );
+      language.set("pt-BR");
+      expect(error.textContent).toBe(
+        "Não foi possível carregar os snippets. Feche e abra Snippets de novo para tentar outra vez.",
+      );
+      expect(f.search.placeholder).toBe("Buscar snippets");
+      language.set("en-US");
+      expect(error.textContent).toBe(
+        "Could not load snippets. Close and reopen Snippets to retry.",
+      );
+      expect(f.root.querySelector("input")).toBe(f.search);
+      expect(f.search.value).toBe("retained query");
+      expect(document.activeElement).toBe(f.search);
+      expect(load).toHaveBeenCalledOnce();
+      expect(f.root.textContent).not.toContain("private details");
+      f.view.dispose();
+      language.set("pt-BR");
+      expect(error.textContent).toBe(
+        "Could not load snippets. Close and reopen Snippets to retry.",
+      );
+    },
+  );
+  it("keeps file diagnostics literal after replacing a transport failure, then clears them on fresh data", async () => {
+    const language = createRendererLanguage();
+    // Even a diagnostic matching a catalog string is not an application notice.
+    const diagnostic =
+      "Could not load snippets. Close and reopen Snippets to retry.";
+    const load = vi
+      .fn<() => Promise<TerminalSnippetsResponse>>()
+      .mockRejectedValueOnce(new Error("private details"))
+      .mockResolvedValueOnce({ snippets: [], error: diagnostic })
+      .mockResolvedValueOnce(catalog);
+    const f = fixture(load, language);
+    f.view.activate();
+    await settle();
+    language.set("pt-BR");
+    f.view.deactivate();
+    f.view.activate();
+    await settle();
+    const error = f.root.querySelector<HTMLElement>(".snippets-error")!;
+    expect(error.textContent).toBe(diagnostic);
+    language.set("en-US");
+    language.set("pt-BR");
+    expect(error.textContent).toBe(diagnostic);
+    expect(error.hidden).toBe(false);
+    f.view.deactivate();
+    f.view.activate();
+    await settle();
+    language.set("en-US");
+    expect(error.hidden).toBe(true);
+    expect(error.textContent).toBe("");
+    expect(f.root.querySelectorAll("li")).toHaveLength(2);
+    expect(load).toHaveBeenCalledTimes(3);
+  });
+
   it("reveals loading/search synchronously, rereads on activation, and never refocuses on completion", async () => {
     const f = fixture();
     f.view.activate();

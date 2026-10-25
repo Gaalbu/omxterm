@@ -11,6 +11,7 @@ import {
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
+import { settingsMessageText } from "../../src/shared/settings-messages";
 import { createSettingsService } from "../../src/main/settings-service";
 
 const preparation = vi.hoisted(() => ({
@@ -94,7 +95,10 @@ it("preserves a symlink introduced during preparation", async () => {
   };
   const result = await service.change({ path: "font.size", value: 18 });
   expect(result.status).toBe("failed");
-  if (result.status !== "saved") expect(result.message).toMatch(/symlink/iu);
+  if (result.status !== "saved") {
+    expect(result.message).toEqual({ kind: "symlink" });
+    expect(settingsMessageText(result.message)).toMatch(/symlink/iu);
+  }
   expect((await lstat(file)).isSymbolicLink()).toBe(true);
   expect(await readFile(target, "utf8")).toBe('{"version":1}');
   expect(await readdir(path.dirname(file))).toEqual([

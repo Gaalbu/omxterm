@@ -1,4 +1,5 @@
 import { vi } from "vitest";
+import type { RendererLanguage } from "../../src/renderer/renderer-language";
 import { createSettingsDialog } from "../../src/renderer/settings/settings-dialog";
 import type {
   SettingsBridge,
@@ -14,6 +15,7 @@ export const base: SettingsSnapshot = {
   revision: "r1",
   text: '{\n  "version": 1\n}\n',
   values: {
+    language: "en-US",
     confirmClose: true,
     logLevel: "info",
     "font.family": "",
@@ -52,7 +54,10 @@ export function saved(
   return { status: "saved", snapshot, application, lifetimes };
 }
 
-export async function open(overrides: Partial<SettingsBridge> = {}) {
+export async function open(
+  overrides: Partial<SettingsBridge> = {},
+  language?: RendererLanguage,
+) {
   const bridge: SettingsBridge = {
     snapshot: vi.fn(async () => base),
     change: vi.fn(async (change: SettingsChange) =>
@@ -78,6 +83,7 @@ export async function open(overrides: Partial<SettingsBridge> = {}) {
   const dialog = createSettingsDialog(document, bridge, {
     focusTerminal,
     onActivityChange,
+    ...(language ? { language } : {}),
   });
   await dialog.open();
   const query = <Element extends HTMLElement>(selector: string) =>

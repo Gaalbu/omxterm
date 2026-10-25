@@ -1,6 +1,9 @@
 import { mountWindowChrome, type WindowChromeBridge } from "./window-chrome";
 import { mountWindowDialogs } from "./window-dialogs";
 import type { SettingsBridge } from "../shared/settings";
+import { surfaceLabels, windowLanguage } from "./renderer-language";
+import { DEFAULT_LANGUAGE } from "../shared/i18n";
+import { bindTerminalWindowLanguage } from "./terminal-window-language";
 import type { AboutBridge } from "../shared/about";
 import type { TerminalSessionAdapter } from "../terminal-surface/terminal-session-adapter";
 import {
@@ -73,6 +76,7 @@ interface TerminalWindowPageOptions {
     listener: (configuration: TerminalRendererConfiguration) => void,
   ) => () => void;
   readonly userFileErrorBanner?: HTMLElement;
+  readonly surfaceFailureBanner?: HTMLElement;
   readonly clipboard?: TerminalClipboard;
   readonly subscribeToClipboardActions?: (
     listener: (action: "copy" | "paste" | "select-all") => void,
@@ -161,6 +165,13 @@ export function mountTerminalWindowPage(
     );
   }
 
+  const language = windowLanguage(options.configuration);
+  const pageLabels = bindTerminalWindowLanguage(
+    page.document,
+    elements.tabStrip,
+    language,
+    options,
+  );
   const surfaceOptions: TerminalSurfaceOptions = {
     ...activeSurfaceConfiguration,
     background: "host",
@@ -186,9 +197,7 @@ export function mountTerminalWindowPage(
           },
         }
       : {}),
-    ...(options.onSurfaceFailure
-      ? { onFatalError: options.onSurfaceFailure }
-      : {}),
+    ...pageLabels.surfaceOptions,
   };
 
   const tabs: TerminalTabs = createTerminalTabs(
@@ -216,10 +225,15 @@ export function mountTerminalWindowPage(
   );
 
   const chrome = options.chrome
-    ? mountWindowChrome(page.document, options.chrome, () => {
-        if (!previewActive() && !auxiliaryPanel?.ownsFocus())
-          tabs.focusSelected();
-      })
+    ? mountWindowChrome(
+        page.document,
+        options.chrome,
+        () => {
+          if (!previewActive() && !auxiliaryPanel?.ownsFocus())
+            tabs.focusSelected();
+        },
+        language,
+      )
     : undefined;
 
   const onOverlayActivity = () => {
@@ -229,6 +243,7 @@ export function mountTerminalWindowPage(
   };
   if (options.loadLocalImage) {
     localImagePreview = createLocalImagePreview(page.document, {
+      language,
       loadImage: options.loadLocalImage,
       focusTerminal: () => tabs.focusSelected(),
       onActivityChange: onOverlayActivity,
@@ -242,7 +257,11 @@ export function mountTerminalWindowPage(
     page.document,
     options,
     () => !disposed && !previewActive(),
-    { focusTerminal: tabs.focusSelected, onActivityChange: onOverlayActivity },
+    {
+      language,
+      focusTerminal: tabs.focusSelected,
+      onActivityChange: onOverlayActivity,
+    },
   );
   const onPageFocus = () => {
     if (!previewActive() && !auxiliaryPanel?.ownsFocus()) tabs.focusSelected();
@@ -261,6 +280,7 @@ export function mountTerminalWindowPage(
     removeFileDrops();
     removeGuardedActionListeners?.();
     removeConfigurationUpdateListener?.();
+    pageLabels.dispose();
     removeTabCommandListener?.();
     removeTabTitleListener?.();
     removeSnippetsToggleListener?.();
@@ -285,6 +305,7 @@ export function mountTerminalWindowPage(
   removeConfigurationUpdateListener = options.subscribeToConfigurationUpdates?.(
     (configuration) => {
       if (disposed) return;
+      language.set(configuration.language);
       fontConfigurationId = configuration.fontConfigurationId;
       if (!chrome)
         page.document.documentElement.style.setProperty(
@@ -340,13 +361,10 @@ export function mountTerminalWindowPage(
       const snippets = options.snippets;
       const mounted = mountSnippetsPanel(page.document, snippets, {
         tabs,
+        language,
         clipboard: options.clipboard,
         blocked: previewActive,
-        onPreviewActivity: () => {
-          chrome?.setPreviewActive(previewActive());
-          panel.setBlocked(previewActive());
-          for (const listener of hoverAvailabilityListeners) listener();
-        },
+        onPreviewActivity: onOverlayActivity,
       });
       const panel = mounted.panel;
       auxiliaryPanel = panel;
@@ -457,6 +475,7 @@ function sameSurfaceConfiguration(
   const firstSystemFont = first.appearance.systemFont;
   const secondSystemFont = second.appearance.systemFont;
   return (
+    first.labels === second.labels &&
     first.appearance.fontSize === second.appearance.fontSize &&
     first.appearance.lineHeight === second.appearance.lineHeight &&
     first.appearance.ligatures === second.appearance.ligatures &&
@@ -480,6 +499,7 @@ function surfaceConfiguration(
   configuration: TerminalRendererConfiguration,
 ): TerminalSurfaceConfiguration {
   return {
+    labels: surfaceLabels(configuration.language ?? DEFAULT_LANGUAGE),
     appearance: {
       fontSize: configuration.fontSize,
       lineHeight: configuration.fontLineHeight,

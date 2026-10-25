@@ -1,174 +1,110 @@
 // @vitest-environment jsdom
-import { afterEach, expect, it, vi, type Mock } from "vitest";
-import { mountTerminalWindowPage } from "../../src/renderer/terminal-window-host";
-import type { TerminalTabCommand } from "../../src/shared/terminal-contract";
+import { afterEach, expect, it, vi } from "vitest";
 import type { TerminalSnippetsResponse } from "../../src/shared/terminal-snippets";
-import type { LocalImageData } from "../../src/shared/local-image";
-import type {
-  TerminalSessionAdapter,
-  TerminalSessionHandlers,
-} from "../../src/terminal-surface/terminal-session-adapter";
-import { createSemanticInputDelivery } from "../../src/terminal-surface/semantic-input-delivery";
-import type { TerminalSurfaceOptions } from "../../src/terminal-surface/terminal-surface";
+import {
+  snippetsWindow as fixture,
+  cleanupSnippetsWindows,
+} from "../fixtures/snippets-window";
 
-const cleanups: Array<() => void> = [];
-afterEach(() => {
-  for (const cleanup of cleanups.splice(0)) cleanup();
-  vi.restoreAllMocks();
-  document.body.replaceChildren();
-});
-async function fixture() {
-  HTMLDialogElement.prototype.showModal = function () {
-    this.setAttribute("open", "");
-  };
-  HTMLDialogElement.prototype.close = function () {
-    this.removeAttribute("open");
-  };
-  const content = document.createElement("div"),
-    root = document.createElement("aside"),
-    tabsContainer = document.createElement("main"),
-    tabStrip = document.createElement("nav");
-  content.append(tabsContainer, root);
-  document.body.append(tabStrip, content);
-  vi.spyOn(content, "getBoundingClientRect").mockReturnValue({
-    width: 1000,
-  } as DOMRect);
-  vi.spyOn(document, "hasFocus").mockReturnValue(true);
-  let toggle!: () => void, about!: () => void, image!: () => void;
-  let clipboardAction!: (action: "copy" | "paste" | "select-all") => void;
-  let tabCommand!: (command: TerminalTabCommand) => void;
-  let tabBar!: () => void;
-  const clipboard = {
-    readText: vi.fn(async () => "pasted\nquery"),
-    writeText: vi.fn(async () => {}),
-    confirmPaste: vi.fn(async () => false),
-    requestContextMenu: vi.fn(),
-  };
-  const surfaces: ReturnType<typeof surface>[] = [];
-  function surface(adapter: TerminalSessionAdapter) {
-    const input = document.createElement("textarea");
-    tabsContainer.append(input);
-    const delivery = createSemanticInputDelivery({
-      isLive: () => true,
-      isBracketedPasteEnabled: () => false,
-      confirmPaste: clipboard.confirmPaste,
-      write: adapter.write,
-    });
-    return {
-      dispose: vi.fn(() => delivery.dispose()),
-      focus: vi.fn(() => input.focus()),
-      applyTheme: vi.fn(),
-      applyConfiguration: vi.fn(),
-      inject: vi.fn(
-        async (text: string, options?: { readonly submit?: boolean }) => {
-          await delivery.deliver(text, options);
-        },
-      ),
-      zoom: vi.fn(),
-      copy: vi.fn(async () => {}),
-      paste: vi.fn(async () => {}),
-      selectAll: vi.fn(),
-      find: vi.fn(),
-    };
-  }
-  const sessionHandlers: TerminalSessionHandlers[] = [];
-  const surfaceOptions: TerminalSurfaceOptions[] = [];
-  const failure = vi.fn();
-  const transportWrites: Mock<(data: string) => void>[] = [];
-  let nextSession = 0;
-  const adapters = vi.fn(() => {
-    const sessionId = `s${++nextSession}`;
-    const write = vi.fn<(data: string) => void>();
-    transportWrites.push(write);
-    return {
-      sessionId: () => sessionId,
-      start: async (handlers: TerminalSessionHandlers) => {
-        sessionHandlers.push(handlers);
-      },
-      write,
-      resize: vi.fn(),
-      close: vi.fn(),
-    };
-  });
-  const load = vi
-    .fn<() => Promise<TerminalSnippetsResponse>>()
-    .mockResolvedValue({
-      snippets: [{ name: "literal", body: " a  b\n$VALUE\n", execute: true }],
-    });
-  const loadImage = vi
-    .fn<() => Promise<LocalImageData | null>>()
-    .mockResolvedValue(null);
-  const host = mountTerminalWindowPage(
-    { tabsContainer, tabStrip },
-    {
-      page: window,
-      createAdapter: adapters,
-      mount: async (_container, adapter, options) => {
-        const value = surface(adapter);
-        surfaces.push(value);
-        surfaceOptions.push(options);
-        await adapter.start({ onOutput() {}, onExit: () => value.dispose() });
-        return value;
-      },
-      onSurfaceFailure: failure,
-      clipboard,
-      snippets: {
-        element: root,
-        load,
-        subscribeToToggle(listener) {
-          toggle = listener;
-          return vi.fn();
-        },
-      },
-      subscribeToClipboardActions(listener) {
-        clipboardAction = listener;
-        return vi.fn();
-      },
-      subscribeToTabCommands(listener) {
-        tabCommand = listener;
-        return vi.fn();
-      },
-      subscribeToTabBarToggle(listener) {
-        tabBar = listener;
-        return vi.fn();
-      },
-      about: {
-        info: async () => ({ name: "OMXTerm", version: "1", copyright: "MIT" }),
-        openLink: async () => {},
-        onOpen(listener) {
-          about = listener;
-          return vi.fn();
-        },
-      },
-      loadLocalImage: loadImage,
-      subscribeToLocalImageOpen(listener) {
-        image = listener;
-        return vi.fn();
-      },
-    },
+afterEach(cleanupSnippetsWindows);
+
+it.each(["signal", "rendering"] as const)(
+  "relabels retained preview controls and %s-dead target in place",
+  async (kind) => {
+    const f = await fixture();
+    f.toggle();
+    await vi.waitFor(() =>
+      expect(f.root.querySelector(".snippet-preview-open")).not.toBeNull(),
+    );
+    const opener = f.root.querySelector<HTMLButtonElement>(
+      ".snippet-preview-open",
+    )!;
+    opener.focus();
+    f.setLanguage("pt-BR");
+    expect(document.activeElement).toBe(opener);
+    expect(f.root.querySelector(".snippet-preview-open")).toBe(opener);
+    expect(opener.textContent).toBe("Pré-visualizar");
+    expect(opener.getAttribute("aria-label")).toBe("Pré-visualizar literal");
+    expect(f.root.querySelector(".snippet-intent")!.textContent).toBe(
+      "Executar · adiciona Enter",
+    );
+    opener.click();
+    const dialog = document.querySelector(".snippet-preview")!;
+    const body = dialog.querySelector("pre")!;
+    const run = dialog.querySelector<HTMLButtonElement>(
+      ".snippet-preview-run",
+    )!;
+    const insert = dialog.querySelector<HTMLButtonElement>(
+      ".snippet-preview-insert",
+    )!;
+    expect(run.textContent).toBe("Executar — adiciona Enter");
+    expect(document.activeElement).toBe(run);
+    f.setLanguage("en-US");
+    expect(document.querySelector(".snippet-preview")).toBe(dialog);
+    expect(dialog.querySelector("pre")).toBe(body);
+    expect(body.textContent).toBe(" a  b\n$VALUE\n");
+    expect(document.activeElement).toBe(run);
+    if (kind === "signal")
+      f.sessionHandlers[0]!.onExit({ exitCode: 0, signal: 9 });
+    else f.surfaceOptions[0]!.onFatalError!({ kind: "backend-loss" });
+    f.setLanguage("pt-BR");
+    expect(dialog.querySelector(".snippet-preview-closed")!.textContent).toBe(
+      "O terminal deste snippet foi encerrado. Nada será enviado.",
+    );
+    expect(run.disabled).toBe(true);
+    expect(insert.disabled).toBe(true);
+    insert.disabled = false;
+    insert.click();
+    expect(f.transportWrites[0]).not.toHaveBeenCalled();
+    expect(f.surfaces[0]!.inject).not.toHaveBeenCalled();
+    dialog.querySelector<HTMLButtonElement>(".snippet-preview-cancel")!.click();
+    expect(document.activeElement).toBe(opener);
+    expect(f.load).toHaveBeenCalledOnce();
+  },
+);
+
+it("excludes Settings, About, image and snippet preview symmetrically and keeps Settings clipboard field-only", async () => {
+  const f = await fixture();
+  f.toggle();
+  await vi.waitFor(() =>
+    expect(f.root.querySelector(".snippet-preview-open")).not.toBeNull(),
   );
-  cleanups.push(host.dispose);
-  await host.ready;
-  return {
-    root,
-    host,
-    toggle,
-    about,
-    image,
-    load,
-    loadImage,
-    clipboard,
-    clipboardAction,
-    tabCommand,
-    tabBar,
-    surfaces,
-    adapters,
-    sessionHandlers,
-    transportWrites,
-    surfaceOptions,
-    failure,
-  };
-}
+  const opener = f.root.querySelector<HTMLButtonElement>(
+    ".snippet-preview-open",
+  )!;
+  opener.click();
+  f.settingsOpen();
+  f.about();
+  f.image();
+  expect(document.querySelector(".settings-dialog")).toBeNull();
+  expect(document.querySelector(".about-dialog")).toBeNull();
+  expect(f.loadImage).not.toHaveBeenCalled();
+  document.querySelector<HTMLButtonElement>(".snippet-preview-cancel")!.click();
+  f.settingsOpen();
+  await vi.waitFor(() =>
+    expect(document.querySelector(".settings-dialog textarea")).not.toBeNull(),
+  );
+  const settings = document.querySelector(".settings-dialog")!;
+  const family = settings.querySelector<HTMLInputElement>(
+    ".settings-text input",
+  )!;
+  family.focus();
+  f.clipboardAction("paste");
+  await vi.waitFor(() => expect(f.settingsChange).toHaveBeenCalledOnce());
+  expect(f.settingsChange).toHaveBeenCalledWith({
+    path: "font.family",
+    value: "pastedquery",
+  });
+  opener.dispatchEvent(new Event("click"));
+  f.about();
+  f.image();
+  expect(document.querySelector(".snippet-preview")).toBeNull();
+  expect(document.querySelector(".about-dialog")).toBeNull();
+  expect(f.loadImage).not.toHaveBeenCalled();
+  expect(f.transportWrites[0]).not.toHaveBeenCalled();
+  f.setLanguage("pt-BR");
+  expect(settings.querySelector("h2")!.textContent).toBe("Configurações");
+});
 
 it("routes native action subscriptions to panel text, retains passive focus, and preserves exact selected injection", async () => {
   const f = await fixture();
@@ -276,9 +212,9 @@ it.each(["signal", "rendering"] as const)(
       f.sessionHandlers[0]!.onExit({ exitCode: 0, signal: 9 });
       expect(f.surfaces[0]!.dispose).toHaveBeenCalledOnce();
     } else {
-      f.surfaceOptions[0]!.onFatalError!("Synthetic rendering failure");
+      f.surfaceOptions[0]!.onFatalError!({ kind: "backend-loss" });
       expect(f.failure).toHaveBeenCalledExactlyOnceWith(
-        "Synthetic rendering failure",
+        "The OMXTerm Terminal Surface rendering backend was lost",
       );
     }
     expect(document.querySelectorAll("main.terminal-surface")).toHaveLength(1);
@@ -312,7 +248,7 @@ it.each(["signal", "rendering", "startup"] as const)(
       expect(f.root.querySelector(".snippet-preview-open")).not.toBeNull(),
     );
     if (kind === "rendering")
-      f.surfaceOptions[0]!.onFatalError!("Synthetic rendering failure");
+      f.surfaceOptions[0]!.onFatalError!({ kind: "backend-loss" });
     else
       f.sessionHandlers[0]!.onExit({
         exitCode: 1,

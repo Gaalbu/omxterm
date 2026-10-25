@@ -69,7 +69,7 @@ describe("settings snapshot", () => {
   it("reports an unparseable file instead of replacing it", async () => {
     const { service, read, reload } = await setup("{ broken");
     const snapshot = await service.snapshot();
-    expect(snapshot.problem).toBe("config.json is not valid JSON");
+    expect(snapshot.problem).toEqual({ kind: "json" });
     const result = await service.change({ path: "font.size", value: 18 });
     expect(result).toMatchObject({ status: "rejected" });
     expect(await read()).toBe("{ broken");

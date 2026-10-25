@@ -401,7 +401,10 @@ describe("User Configuration reload outcomes", () => {
     });
     const rejected = await reloader.reload();
     expect(rejected).toMatchObject({ applied: false });
-    expect(rejected.applied === false && rejected.notice).toMatch(
+    expect(rejected.applied === false && rejected.notice).toMatchObject({
+      kind: "reload",
+    });
+    expect(reloader.current().userFileErrors[0]).toMatch(
       /font\.size.*is invalid/u,
     );
     apply.mockImplementationOnce(() => {

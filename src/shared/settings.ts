@@ -1,3 +1,5 @@
+import { isSupportedLanguage } from "./i18n";
+import { isSettingsMessage, type SettingsMessage } from "./settings-messages";
 import {
   MAX_SCROLLBACK_LINES,
   MAX_TERMINAL_FONT_SIZE,
@@ -41,6 +43,7 @@ const padding = integer(MIN_TERMINAL_PADDING, MAX_TERMINAL_PADDING);
 // main-process loader stays the validation authority; these checks only bound
 // what the renderer may ask main to write.
 export const SETTINGS_FIELDS = {
+  language: { lifetime: "live", accepts: isSupportedLanguage },
   confirmClose: { lifetime: "live", accepts: isBoolean },
   logLevel: { lifetime: "live", accepts: oneOf(["error", "info", "debug"]) },
   windowsShell: { lifetime: "new-tabs", accepts: nonEmptyText },
@@ -97,12 +100,12 @@ export interface SettingsSnapshot {
   // the effective defaults for omitted fields.
   readonly values: Readonly<Partial<Record<SettingsPath, unknown>>>;
   // Why config.json cannot be edited graphically right now, if it cannot.
-  readonly problem?: string;
+  readonly problem?: SettingsMessage;
 }
 
 export type SettingsApplication =
-  | { readonly applied: true; readonly notices: readonly string[] }
-  | { readonly applied: false; readonly notice: string };
+  | { readonly applied: true; readonly notices: readonly SettingsMessage[] }
+  | { readonly applied: false; readonly notice: SettingsMessage };
 
 export type SettingsResult =
   | {
@@ -114,7 +117,7 @@ export type SettingsResult =
     }
   | {
       readonly status: "rejected" | "conflict" | "failed";
-      readonly message: string;
+      readonly message: SettingsMessage;
       readonly snapshot: SettingsSnapshot;
     };
 
@@ -176,7 +179,7 @@ export function isSettingsSnapshot(value: unknown): value is SettingsSnapshot {
     isBoundedText(snapshot.revision, 128) &&
     (snapshot.text === null ||
       isBoundedText(snapshot.text, MAX_SETTINGS_TEXT_LENGTH)) &&
-    (snapshot.problem === undefined || isBoundedText(snapshot.problem)) &&
+    (snapshot.problem === undefined || isSettingsMessage(snapshot.problem)) &&
     typeof values === "object" &&
     values !== null &&
     Object.keys(values).every(isSettingsPath)
@@ -201,12 +204,13 @@ export function isSettingsResult(value: unknown): value is SettingsResult {
       ) &&
       (application.applied === true
         ? Array.isArray(application.notices) &&
-          application.notices.every((notice) => isBoundedText(notice))
-        : application.applied === false && isBoundedText(application.notice))
+          application.notices.every(isSettingsMessage)
+        : application.applied === false &&
+          isSettingsMessage(application.notice))
     );
   }
   return (
     ["rejected", "conflict", "failed"].includes(result.status as string) &&
-    isBoundedText(result.message)
+    isSettingsMessage(result.message)
   );
 }

@@ -65,8 +65,8 @@ OMXTerm:
   operating-system emoji/CJK/symbol faces for missing-glyph coverage;
 - uses the black-and-blue OMXTerm application icon in development and on the
   packaged macOS Dock, Finder, application-switcher, and DMG surfaces;
-- reads strict, versioned JSON configuration and writes bounded local JSONL
-  operational logs;
+- reads strict, versioned JSON configuration, including an explicit en-US or
+  pt-BR Interface Language, and writes bounded local JSONL operational logs;
 - packages ready-to-run artifacts from an accepted version: ARM64 DMG for macOS,
   ARM64 AppImage for Linux, and ARM64/x64 NSIS for Windows. Linux releases additionally provide
   an optional versioned per-user AppImage desktop installer and its checksum;
@@ -397,10 +397,13 @@ succeeds ([ADR 0025](adr/0025-use-restty-as-the-terminal-surface.md)).
   ends or fails while the preview is open, its actions are disabled even when
   the tab remains visible for failure acknowledgement. Nothing is sent to any
   other tab, and that unavailable Surface cannot be captured for a new preview.
+  Language switching relabels current row/preview controls and the unavailable
+  notice without replacing their DOM, changing focus, rereading YAML, recapturing
+  the target, mutating user text or re-enabling a dead target's actions.
   Insert only omits the added Enter: embedded line breaks or control characters
   can still execute, and Protected Paste may still ask for
-  confirmation after acceptance. The preview, About and Local Image Preview never
-  stack; while the preview is open, terminal-directed actions, tab navigation and
+  confirmation after acceptance. The preview, Settings, About and Local Image
+  Preview never stack; while the preview is open, terminal-directed actions, tab navigation and
   new tabs are suppressed as they are under About. Enter activation
   of a row retains that gesture's held repeats and release, so they cannot append
   terminal Enter independently of the snippet's `execute` choice. A fresh
@@ -884,6 +887,7 @@ installation or manual reload. The copied theme belongs to the user and does not
 track subsequent bundled palette changes. A present file must contain
 `"version": 1` and only supported keys:
 
+- `language`: `en-US` or `pt-BR`;
 - `confirmClose`;
 - `logLevel`;
 - `windowsShell`;
@@ -914,6 +918,26 @@ and Windows. Hiding the title area or entering fullscreen removes only the
 app-owned title space, without changing configured padding or the macOS system
 safe area. `logLevel` defaults to `info`, `keyboard.optionAsAlt` to `none`, and
 `window.alwaysOnTop` to `false`.
+
+`language` selects the Interface Language from the exact tags `en-US` and
+`pt-BR`, defaults to `en-US`, and is never inferred from the operating-system
+locale ([ADR 0035](adr/0035-select-the-interface-language-explicitly.md)). It
+covers native menus, OMXTerm's native dialogs, Window Chrome, the Auxiliary
+Panel and Snippets Sidebar/preview, Settings, Local Image Preview, About, and
+the Scrollback Search controls. Main resolves it from the active configuration whenever it
+builds a menu or opens a dialog; renderers relabel existing elements in place,
+so a User Configuration Reload changes it without recreating tabs, Surfaces or
+sessions, including when a Surface is still mounting. The document's accessibility
+language, application-owned accessible names and resize value text follow the same
+choice. Visible generic Snippets errors, narrow-window notices and renderer
+Surface failure notices relabel without rereading data or resetting their lifetime.
+A Surface reports failure identity and separate technical cause detail to its host;
+the host retains and translates the notice until window teardown, even after
+initial mount rejection. The validator's diagnostic detail inside a reload notice,
+technical cause detail inside a translated Surface failure notice, failures
+reported before configuration loads, Operational Events, `snippets.yaml`
+diagnostics, and operating-system, Electron or Restty text that OMXTerm does not
+set remain English. Terminal Payload is never translated.
 
 `window.showTitleBar` and `window.showTabBar` accept only booleans and default
 to `true`. They choose initial visibility for newly created windows. A
@@ -1162,8 +1186,8 @@ changing the active family invalidates outstanding old-generation reads,
 including an accepted request for a still-initializing Surface. It can fail that
 tab instead of letting it finish with its original family. Repeating a reload
 cannot erase a notice while an older Surface survives; removing that Surface
-releases its font bookkeeping. Theme, configured font-size baseline, padding and
-Window Font Zoom remain live and preserve the existing Surface and PTY. Invalid,
+releases its font bookkeeping. Theme, Interface Language, configured font-size
+baseline, padding and Window Font Zoom remain live and preserve the existing Surface and PTY. Invalid,
 missing, unreadable, unsupported or corrupt configured font input rejects the
 whole reload. Runtime scrollback reduction, including zero, uses the selected
 Surface's in-memory core behavior described above; programming-ligature changes
@@ -1176,7 +1200,7 @@ a keybind shadowing a PTY control key — which inform without activating any
 default.
 
 **Settings** (application menu, **Settings…**) is a modal editor of the same
-`config.json`. It covers `confirmClose`, `logLevel`, `windowsShell` (Windows),
+`config.json`. It covers `language`, `confirmClose`, `logLevel`, `windowsShell` (Windows),
 `font.family`, `font.size`, `font.lineHeight`, `font.ligatures`,
 `terminal.padding`, `scrollback.lines`, `keyboard.optionAsAlt` (macOS), the
 new-window defaults `window.showTitleBar`, `window.showTabBar` and
@@ -1210,8 +1234,16 @@ open it owns modal input like About, and the auxiliary panel stays visible
 but inert: terminal-directed actions and tab navigation are ignored,
 application Copy, Paste and Select All edit its focused field and never reach
 the terminal, and closing returns focus to the selected terminal. Settings has
-no default shortcut. Diagnostics shown in Settings never enter operational
-logs.
+no default shortcut. Its General-page language selector uses exact en-US/pt-BR
+values and the same validated save/reload route as other live controls. All
+Settings text, options, placeholders, accessibility labels and visible statuses
+relabel in place, preserving draft bytes/revisions, focused control, caret,
+selection, scroll, selected page and pending operations. Relabeling performs no
+read/save or value adoption/synchronization. Bounded app-owned Settings/reload
+message identities cross IPC separately from literal validator/warning detail,
+so late and already-visible results use the current language without matching
+English sentences. The existing main user-file banner keeps its rendered-text
+contract. Diagnostics shown in Settings never enter operational logs.
 
 Operational logs are JSONL under `$XDG_STATE_HOME/omxterm/logs`, falling back to
 `~/.local/state/omxterm/logs`. Levels are `error`, `info`, and `debug`. Only the

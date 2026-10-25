@@ -27,7 +27,7 @@ it.each(["signal", "rendering", "close", "dispose"] as const)(
     if (kind === "signal")
       f.adapters[0]!.handlers!.onExit({ exitCode: 0, signal: 9 });
     else if (kind === "rendering")
-      f.mountedSurfaceOptions[0]!.onFatalError!("Synthetic failure");
+      f.mountedSurfaceOptions[0]!.onFatalError!({ kind: "backend-loss" });
     else if (kind === "close") f.tabs.handleCommand({ action: "close" });
     else f.tabs.dispose();
 

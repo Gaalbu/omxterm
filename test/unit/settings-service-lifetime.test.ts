@@ -11,6 +11,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
 import { createSettingsService } from "../../src/main/settings-service";
+import { settingsMessageText } from "../../src/shared/settings-messages";
 import { loadUserConfiguration } from "../../src/main/user-configuration";
 import { createUserConfigurationReloader } from "../../src/main/user-configuration-reloader";
 
@@ -29,7 +30,8 @@ it.each([false, true])(
       reload: vi.fn(),
     });
     const snapshot = await service.snapshot();
-    expect(snapshot.problem).toMatch(/symlink.*manual/iu);
+    expect(snapshot.problem).toEqual({ kind: "symlink" });
+    expect(settingsMessageText(snapshot.problem!)).toMatch(/symlink.*manual/iu);
     expect(snapshot.revision).not.toBe("absent");
     expect(
       await service.change({ path: "font.size", value: 18 }),

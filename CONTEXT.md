@@ -83,13 +83,19 @@ subsequent edits belong to the user.
 
 **Settings** — The in-app editor of User Configuration. A deliberate change
 validates, writes and reloads `config.json`; opening OMXTerm or Settings never
-rewrites an existing document. Initial-kit creation is the startup exception.
+rewrites an existing document. Its language selector and editor text share the
+Interface Language, relabeling in place while retaining drafts and pending
+operations. Initial-kit creation is the startup exception.
 
 **User Configuration Reload** — A manual, serialized load and validation
 followed by sequential application. Validation rejection keeps active settings;
 application-time exceptions can leave partial updates. Surfaces keep their
 creation-time font family and line height; new tabs use the latest values. A
 family change during pending font acquisition can fail an initializing tab.
+
+**Interface Language** — The language of OMXTerm's own menus, dialogs and
+controls, chosen only by the User Configuration `language` key (`en-US` default
+or `pt-BR`). Diagnostics, logs and Terminal Payload stay untranslated.
 
 **Terminal Theme** — The terminal palette: foreground, background, cursor,
 selection and ANSI colors. The bundled default is `omtheme`.

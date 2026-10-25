@@ -35,16 +35,13 @@ void window.omxterm.terminal.configuration().then((configuration) => {
       chrome: window.omxterm.terminal,
       mount: mountResttyTerminalSurface,
       loadFontData: window.omxterm.terminal.fontData,
-      onSurfaceFailure(message) {
-        surfaceFailure.textContent = message;
-        surfaceFailure.hidden = false;
-      },
       createAdapter: (configurationId) =>
         createElectronTerminalAdapter(window.omxterm.terminal, configurationId),
       subscribeToFontZoom: window.omxterm.terminal.onFontZoom,
       subscribeToConfigurationUpdates:
         window.omxterm.terminal.onConfigurationUpdate,
       userFileErrorBanner: errorBanner,
+      surfaceFailureBanner: surfaceFailure,
       subscribeToClipboardActions: window.omxterm.terminal.onClipboardAction,
       droppedFilePathInsertion:
         window.omxterm.terminal.droppedFilePathInsertion,
@@ -74,7 +71,12 @@ void window.omxterm.terminal.configuration().then((configuration) => {
     },
   );
   void host.ready.catch((error: unknown) => {
-    host.dispose();
-    throw new Error("Failed to mount the Terminal Surface", { cause: error });
+    // A reported Surface failure releases its own resources. Keep the host
+    // alive to relabel that notice until page teardown/native ACK. Unreported
+    // host-setup failures still follow the original failure path.
+    if (surfaceFailure.hidden) {
+      host.dispose();
+      throw new Error("Failed to mount the Terminal Surface", { cause: error });
+    }
   });
 });

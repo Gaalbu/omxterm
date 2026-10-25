@@ -3,6 +3,7 @@ import type {
   TerminalSnippetsResponse,
 } from "../shared/terminal-snippets";
 import type { AuxiliaryView } from "./auxiliary-panel";
+import { englishLanguage, type RendererLanguage } from "./renderer-language";
 
 // Content/query/scroll belong to this view; visibility, focus transitions and
 // resize belong to the window's auxiliary host. Reread YAML on every activation.
@@ -17,8 +18,10 @@ export function createSnippetsView(
       returnFocus: () => boolean,
     ) => void;
     readonly isInteractive: () => boolean;
+    readonly language?: RendererLanguage;
   },
 ): AuxiliaryView {
+  const language = options.language ?? englishLanguage;
   const root = document.createElement("div");
   root.className = "snippets-view";
   let disposed = false;
@@ -27,11 +30,11 @@ export function createSnippetsView(
   let renderGeneration = 0;
   let snippets: readonly TerminalSnippet[] = [];
   let loading = false;
+  let transportFailure = false;
   let retainedScroll = 0;
+  let rowLabels: ((t: RendererLanguage["t"]) => void)[] = [];
   const search = document.createElement("input");
   search.type = "search";
-  search.placeholder = "Search snippets";
-  search.setAttribute("aria-label", "Search Snippets");
   const results = document.createElement("div");
   results.className = "snippets-results";
   const list = document.createElement("ul");
@@ -47,6 +50,7 @@ export function createSnippetsView(
 
   const render = () => {
     const rendering = ++renderGeneration;
+    rowLabels = [];
     const query = search.value.trim().toLowerCase();
     const visible = snippets.filter((snippet) =>
       `${snippet.name}\n${snippet.description ?? ""}`
@@ -78,7 +82,6 @@ export function createSnippetsView(
         // The default action is visible before activation: Run adds Enter.
         const intent = document.createElement("span");
         intent.className = "snippet-intent";
-        intent.textContent = snippet.execute ? "Run · adds Enter" : "Insert";
         button.append(intent);
         button.addEventListener("click", () => {
           if (usable()) options.inject(snippet);
@@ -86,8 +89,18 @@ export function createSnippetsView(
         const preview = document.createElement("button");
         preview.type = "button";
         preview.className = "snippet-preview-open";
-        preview.textContent = "Preview";
-        preview.setAttribute("aria-label", `Preview ${snippet.name}`);
+        const relabel = (t: RendererLanguage["t"]) => {
+          intent.textContent = t(
+            snippet.execute ? "snippets.run" : "snippets.insert",
+          );
+          preview.textContent = t("snippets.preview");
+          preview.setAttribute(
+            "aria-label",
+            t("snippets.previewNamed", { name: snippet.name }),
+          );
+        };
+        rowLabels.push(relabel);
+        relabel(language.t);
         const returnFocus = () => {
           if (!active || disposed || !options.isInteractive()) return false;
           const control =
@@ -103,12 +116,21 @@ export function createSnippetsView(
       }),
     );
     status.hidden = !error.hidden || visible.length > 0;
-    status.textContent = loading
-      ? "Loading snippets…"
-      : snippets.length === 0
-        ? "No snippets. Create snippets.yaml next to config.json."
-        : "No snippets match the search.";
+    status.textContent = statusText(language.t);
   };
+  const statusText = (t: RendererLanguage["t"]) =>
+    loading
+      ? t("snippets.loading")
+      : snippets.length === 0
+        ? t("snippets.empty")
+        : t("snippets.noMatch");
+  const unbindLabels = language.bind((t) => {
+    search.placeholder = t("snippets.searchPlaceholder");
+    search.setAttribute("aria-label", t("snippets.search"));
+    status.textContent = statusText(t);
+    if (transportFailure) error.textContent = t("snippets.loadError");
+    for (const label of rowLabels) label(t);
+  });
   const restoreScroll = () => {
     results.scrollTop = Math.min(
       retainedScroll,
@@ -131,29 +153,27 @@ export function createSnippetsView(
       active = true;
       const activation = ++generation;
       loading = true;
+      transportFailure = false;
       snippets = [];
       error.hidden = true;
       error.textContent = "";
       render();
-      const settle = (response: TerminalSnippetsResponse) => {
+      const settle = (response: TerminalSnippetsResponse, failed = false) => {
         if (disposed || !active || activation !== generation) return;
         loading = false;
-        snippets = response.error ? [] : response.snippets;
-        error.hidden = response.error === undefined;
-        error.textContent = response.error ?? "";
+        transportFailure = failed;
+        snippets = response.error || failed ? [] : response.snippets;
+        error.hidden = !failed && response.error === undefined;
+        error.textContent = failed
+          ? language.t("snippets.loadError")
+          : (response.error ?? "");
         render();
         restoreScroll();
       };
       // Also contain a synchronous loader failure; never render raw rejection text.
       void Promise.resolve()
         .then(options.loadSnippets)
-        .then(settle, () =>
-          settle({
-            snippets: [],
-            error:
-              "Could not load snippets. Close and reopen Snippets to retry.",
-          }),
-        );
+        .then(settle, () => settle({ snippets: [] }, true));
     },
     deactivate() {
       if (!active) return;
@@ -172,6 +192,8 @@ export function createSnippetsView(
       generation += 1;
       renderGeneration += 1;
       search.removeEventListener("input", onInput);
+      unbindLabels();
+      rowLabels = [];
       root.replaceChildren();
     },
   };

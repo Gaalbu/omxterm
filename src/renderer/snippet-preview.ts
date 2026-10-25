@@ -1,6 +1,11 @@
 import type { TerminalSnippet } from "../shared/terminal-snippets";
 import { retainDismissalGesture } from "./about/about-dialog";
 import type { SnippetTarget } from "./snippet-target";
+import {
+  englishLanguage,
+  type RendererLanguage,
+  type Translate,
+} from "./renderer-language";
 
 export type SnippetPreview = ReturnType<typeof createSnippetPreview>;
 
@@ -12,10 +17,14 @@ export function createSnippetPreview(
   options: {
     // Another overlay owns input; competing opens are ignored, not queued.
     readonly canOpen: () => boolean;
+    readonly language?: RendererLanguage;
     readonly onActivityChange: (active: boolean) => void;
     readonly focusTerminal: () => void;
   },
 ) {
+  const language = options.language ?? englishLanguage;
+  let relabel: ((t: Translate) => void) | undefined;
+  const unbindLabels = language.bind((t) => relabel?.(t));
   let dialog: HTMLDialogElement | undefined;
   let disposed = false;
   let stopWatching: (() => void) | undefined;
@@ -25,6 +34,7 @@ export function createSnippetPreview(
     const previous = dialog;
     if (!previous) return false;
     dialog = undefined;
+    relabel = undefined;
     stopWatching?.();
     stopWatching = undefined;
     previous.close();
@@ -59,7 +69,6 @@ export function createSnippetPreview(
       body.className = "snippet-preview-body";
       body.textContent = snippet.body;
       body.tabIndex = 0;
-      body.setAttribute("aria-label", "Snippet body");
       const closed = document.createElement("p");
       closed.className = "snippet-preview-closed";
       closed.setAttribute("role", "status");
@@ -73,12 +82,18 @@ export function createSnippetPreview(
         actions.append(element);
         return element;
       };
-      const cancel = button("Cancel", "snippet-preview-cancel");
-      const insert = button(
-        "Insert — no added Enter",
-        "snippet-preview-insert",
-      );
-      const run = button("Run — adds Enter", "snippet-preview-run");
+      const cancel = button("", "snippet-preview-cancel");
+      const insert = button("", "snippet-preview-insert");
+      const run = button("", "snippet-preview-run");
+      let unavailable = false;
+      relabel = (t) => {
+        body.setAttribute("aria-label", t("snippetPreview.body"));
+        cancel.textContent = t("common.cancel");
+        insert.textContent = t("snippetPreview.insert");
+        run.textContent = t("snippetPreview.run");
+        closed.textContent = unavailable ? t("snippetPreview.unavailable") : "";
+      };
+      relabel(language.t);
 
       const cancelPreview = () => {
         if (dialog !== current || !close()) return;
@@ -94,8 +109,8 @@ export function createSnippetPreview(
         if (dialog !== current || target.live()) return;
         insert.disabled = true;
         run.disabled = true;
-        closed.textContent =
-          "This snippet's terminal closed. Nothing will be sent.";
+        unavailable = true;
+        relabel?.(language.t);
       };
       stopWatching = target.onUnavailable(refresh);
 
@@ -121,6 +136,7 @@ export function createSnippetPreview(
     // Owner disposal removes the preview without delivering or moving focus.
     dispose() {
       disposed = true;
+      unbindLabels();
       keyboard.dispose();
       close();
     },

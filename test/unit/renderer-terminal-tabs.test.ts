@@ -464,9 +464,11 @@ describe("renderer Terminal Tabs fatal Surface isolation", () => {
     harness.tabs.handleCommand({ action: "new" });
     await vi.waitFor(() => expect(harness.surfaces).toHaveLength(2));
 
-    harness.mountedSurfaceOptions[1]!.onFatalError?.("backend lost");
+    harness.mountedSurfaceOptions[1]!.onFatalError?.({ kind: "backend-loss" });
 
-    expect(onFatalError).toHaveBeenCalledExactlyOnceWith("backend lost");
+    expect(onFatalError).toHaveBeenCalledExactlyOnceWith({
+      kind: "backend-loss",
+    });
     // Failure disposal belongs to the Surface, preserving its failure reason
     // rather than racing it with ordinary tab-close disposal.
     expect(harness.surfaces[1]!.dispose).not.toHaveBeenCalled();

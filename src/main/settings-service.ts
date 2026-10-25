@@ -19,6 +19,7 @@ import {
   type SettingsSnapshot,
 } from "../shared/settings";
 import type { UserConfiguration } from "../shared/user-configuration";
+import type { SettingsMessage } from "../shared/settings-messages";
 import type { UserConfigurationReloadOutcome } from "./user-configuration-reloader";
 import {
   DEFAULT_USER_CONFIGURATION,
@@ -45,7 +46,7 @@ interface CurrentDocument {
   readonly text: string | null;
   readonly document?: Record<string, unknown>;
   readonly configuration?: UserConfiguration;
-  readonly problem?: string;
+  readonly problem?: SettingsMessage;
 }
 
 const encoder = new TextEncoder();
@@ -92,10 +93,9 @@ export function createSettingsService(options: {
       return {
         revision: "unreadable",
         text: null,
-        problem:
-          cause instanceof SettingsSymlinkError
-            ? cause.message
-            : "config.json could not be read",
+        problem: {
+          kind: cause instanceof SettingsSymlinkError ? "symlink" : "read",
+        },
       };
     }
     const revision = revisionOf(bytes);
@@ -106,17 +106,17 @@ export function createSettingsService(options: {
       return {
         revision,
         text: null,
-        problem: "config.json is not valid UTF-8",
+        problem: { kind: "utf8" },
       };
     }
     let document: unknown;
     try {
       document = JSON.parse(text);
     } catch {
-      return { revision, text, problem: "config.json is not valid JSON" };
+      return { revision, text, problem: { kind: "json" } };
     }
     if (!isRecord(document))
-      return { revision, text, problem: "config.json must hold an object" };
+      return { revision, text, problem: { kind: "object" } };
     const load = await loadUserConfiguration({
       ...options.loadOptions,
       read: fixedRead(bytes),
@@ -140,8 +140,7 @@ export function createSettingsService(options: {
 
   const conflict = async (): Promise<SettingsResult> => ({
     status: "conflict",
-    message:
-      "config.json changed since this edit started. Copy your draft, reload the file and apply your edits again.",
+    message: { kind: "conflict" },
     snapshot: snapshotOf(await readCurrent()),
   });
 
@@ -178,10 +177,9 @@ export function createSettingsService(options: {
     } catch (cause) {
       return {
         status: "failed",
-        message:
-          cause instanceof SettingsSymlinkError
-            ? cause.message
-            : "config.json could not be written. Nothing was changed.",
+        message: {
+          kind: cause instanceof SettingsSymlinkError ? "symlink" : "write",
+        },
         snapshot: snapshotOf(await readCurrent()),
       };
     }
@@ -193,8 +191,7 @@ export function createSettingsService(options: {
     } catch {
       application = {
         applied: false,
-        notice:
-          "Unexpected application failure. Some settings may already be active; choose View -> Reload User Configuration again.",
+        notice: { kind: "application" },
       };
     }
     return {
@@ -217,7 +214,7 @@ export function createSettingsService(options: {
         if (current.problem && !current.document)
           return {
             status: "rejected",
-            message: `${current.problem}. Fix it in the Config File page first.`,
+            message: current.problem,
             snapshot: snapshotOf(current),
           };
         const document = structuredClone(current.document ?? { version: 1 });
@@ -230,8 +227,7 @@ export function createSettingsService(options: {
         if (current.revision !== revision)
           return {
             status: "conflict",
-            message:
-              "config.json changed since this draft was opened. Copy your draft, reload the file and apply your edits again.",
+            message: { kind: "conflict" },
             snapshot: snapshotOf(current),
           };
         return commit(text, current);
@@ -275,6 +271,7 @@ function settingsValues(
 ): SettingsSnapshot["values"] {
   const theme = isRecord(document?.theme) ? document.theme.path : undefined;
   return {
+    language: configuration.language,
     confirmClose: configuration.confirmClose,
     logLevel: configuration.logLevel,
     windowsShell: configuration.windowsShell ?? "",
@@ -342,9 +339,7 @@ function revisionOf(bytes: Uint8Array): string {
 
 class SettingsSymlinkError extends Error {
   constructor() {
-    super(
-      "config.json is a symlink. Edit its target manually, then reload User Configuration; Settings does not write through symlinks.",
-    );
+    super("Settings does not write through configuration symlinks");
   }
 }
 

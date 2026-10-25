@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi } from "vitest";
+import { surfaceLabels } from "../../src/renderer/renderer-language";
 import { mountTerminalWindowPage } from "../../src/renderer/terminal-window-host";
 import { TERMINAL_TAB_DRAG_DATA_TYPE } from "../../src/renderer/terminal-tabs";
 import { DEFAULT_TERMINAL_THEME } from "../../src/shared/terminal-theme";
@@ -189,6 +190,7 @@ describe("renderer Terminal Window page host", () => {
         onFatalError: expect.any(Function) as (message: string) => void,
         background: "host",
         focus: false,
+        labels: surfaceLabels("en-US"),
         appearance: {
           fontSize: 19,
           lineHeight: 1.2,
