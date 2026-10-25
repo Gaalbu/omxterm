@@ -1,4 +1,7 @@
-import type { TerminalFontZoom } from "../shared/terminal-contract";
+import type {
+  TerminalContextMenuRequest,
+  TerminalFontZoom,
+} from "../shared/terminal-contract";
 import type { LocalImageActivation } from "../shared/local-image";
 import type { TerminalFontInput } from "./terminal-font-stack";
 import type {
@@ -37,7 +40,8 @@ export interface TerminalClipboard {
   writeText(text: string): Promise<void>;
   readText(): Promise<string>;
   confirmPaste(text: string): Promise<boolean>;
-  requestContextMenu(): void;
+  // The Surface sends no request; a pane host may add one.
+  requestContextMenu(request?: TerminalContextMenuRequest): void;
 }
 
 export interface TerminalAppearance {

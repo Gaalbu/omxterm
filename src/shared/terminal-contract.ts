@@ -287,6 +287,24 @@ export function isTerminalClipboardAction(
   return value === "copy" || value === "paste" || value === "select-all";
 }
 
+// A split Terminal Pane's context menu also offers Close Pane. Single panes
+// and the Snippets field send no request.
+export interface TerminalContextMenuRequest {
+  readonly closePane: true;
+}
+
+export function isTerminalContextMenuRequest(
+  value: unknown,
+): value is TerminalContextMenuRequest {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    !Array.isArray(value) &&
+    Object.keys(value).length === 1 &&
+    (value as { closePane?: unknown }).closePane === true
+  );
+}
+
 export function isClipboardText(value: unknown): value is string {
   return typeof value === "string";
 }

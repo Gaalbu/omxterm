@@ -217,6 +217,7 @@ export function createTerminalTabs(
     removePane: (pane, notify) => panes.removePane(pane, notify),
     notifyEmpty,
     focus: (pane, unchanged) => focusPane(pane, options, true, unchanged),
+    focusClicked: (pane) => panes.focusPane(pane.tab, pane, true),
   });
 
   const panes = createPaneOperations({
