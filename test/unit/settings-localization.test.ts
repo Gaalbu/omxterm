@@ -86,6 +86,45 @@ it.each(["en-US", "pt-BR"] as const)(
   },
 );
 
+it.each(["en-US", "pt-BR"] as const)(
+  "keeps autonyms, exact option values and the %s selection while relabeling",
+  async (initial) => {
+    const language = createRendererLanguage(initial);
+    const view = await open(
+      {
+        snapshot: vi.fn(async () => ({
+          ...base,
+          values: { ...base.values, language: initial },
+        })),
+      },
+      language,
+    );
+    const select = view.query<HTMLSelectElement>("select");
+    const options = [...select.options];
+    const assertOptions = () => {
+      expect(select.options).toHaveLength(options.length);
+      for (const [index, option] of [...select.options].entries())
+        expect(option).toBe(options[index]);
+      expect(
+        [...select.options].map((option) => [option.value, option.textContent]),
+      ).toEqual([
+        ["en-US", "English (United States)"],
+        ["pt-BR", "Português (Brasil)"],
+      ]);
+      expect(select.value).toBe(initial);
+    };
+    select.focus();
+    assertOptions();
+    language.set(initial === "en-US" ? "pt-BR" : "en-US");
+    assertOptions();
+    expect(document.activeElement).toBe(select);
+    expect(view.bridge.snapshot).toHaveBeenCalledOnce();
+    expect(view.bridge.change).not.toHaveBeenCalled();
+    expect(view.bridge.saveText).not.toHaveBeenCalled();
+    view.dialog.dispose();
+  },
+);
+
 it("relabels raw pending, result, deferral and error identity with newer typing kept", async () => {
   const language = createRendererLanguage();
   const pending = deferred<SettingsResult>();

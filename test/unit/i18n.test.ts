@@ -63,6 +63,13 @@ describe("message catalogs", () => {
     },
   );
 
+  it("names each Settings language in itself in every catalog", () => {
+    for (const catalog of Object.values(MESSAGE_CATALOGS)) {
+      expect(catalog["settings.english"]).toBe("English (United States)");
+      expect(catalog["settings.portuguese"]).toBe("Português (Brasil)");
+    }
+  });
+
   it("accepts only the exact supported language tags", () => {
     expect(DEFAULT_LANGUAGE).toBe("en-US");
     for (const language of SUPPORTED_LANGUAGES)

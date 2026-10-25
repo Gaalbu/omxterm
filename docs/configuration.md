@@ -35,7 +35,7 @@ You can find them in:
 
 ## Settings
 
-Choose **Settings…** in the OMXTerm application menu. **General → Language** selects **English (en-US)** or **Brazilian Portuguese (pt-BR)**; it defaults to en-US and is never inferred from the system. A successful save/reload updates the menu and all open windows immediately, including Settings and snippet preview labels. Open editors keep their drafts, selected page, focus, selection/caret, scroll and pending saves; an open preview keeps its captured terminal and disabled state if that terminal ended. JSON, paths, snippet contents and diagnostic detail remain literal.
+Choose **Settings…** in the OMXTerm application menu. **General → Language** selects **English (United States)** (`en-US`) or **Português (Brasil)** (`pt-BR`), always listed by their own names; it defaults to en-US and is never inferred from the system. A successful save/reload updates the menu and all open windows immediately, including Settings and snippet preview labels. Open editors keep their drafts, selected page, focus, selection/caret, scroll and pending saves; an open preview keeps its captured terminal and disabled state if that terminal ended. JSON, paths, snippet contents and diagnostic detail remain literal.
 
 Each change you make to a control is checked and saved to `config.json` right away, then applied; the status line tells you what happened (examples below use English):
 

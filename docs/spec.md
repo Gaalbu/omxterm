@@ -1235,9 +1235,11 @@ but inert: terminal-directed actions and tab navigation are ignored,
 application Copy, Paste and Select All edit its focused field and never reach
 the terminal, and closing returns focus to the selected terminal. Settings has
 no default shortcut. Its General-page language selector uses exact en-US/pt-BR
-values and the same validated save/reload route as other live controls. All
-Settings text, options, placeholders, accessibility labels and visible statuses
-relabel in place, preserving draft bytes/revisions, focused control, caret,
+values and the same validated save/reload route as other live controls. Its
+options keep the self-names **English (United States)** and **Português (Brasil)**
+regardless of the current interface language. All Settings text, options,
+placeholders, accessibility labels and visible statuses relabel in place,
+preserving draft bytes/revisions, focused control, caret,
 selection, scroll, selected page and pending operations. Relabeling performs no
 read/save or value adoption/synchronization. Bounded app-owned Settings/reload
 message identities cross IPC separately from literal validator/warning detail,

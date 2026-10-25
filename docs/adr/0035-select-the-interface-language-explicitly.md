@@ -33,7 +33,9 @@ Document language, accessible names, resize value text and already-visible
 application notices follow the same live binding.
 
 Settings exposes the same exact language tags through a live General-page
-selector; removing the preference still inherits en-US. It shares main's strict
+selector. Options keep their self-names, **English (United States)** and
+**Português (Brasil)**, in every interface language; removing the preference
+still inherits en-US. It shares main's strict
 validation, serialized writes/reloads and setting lifetimes. Settings pages,
 controls, choices, placeholders, accessibility labels and existing statuses
 relabel without building/adopting/filling the editor or initiating a read/save.
