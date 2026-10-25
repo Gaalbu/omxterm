@@ -198,7 +198,8 @@ export async function exerciseTerminalPopup(options: PopupOptions) {
   });
   const nullable = await open(options, window, 1);
   assert.equal(nullable.menu.items[5]!.label, "Fechar Painel");
-  assert.equal(nullable.menu.items[5]!.accelerator, undefined);
+  // Electron's constructed MenuItem exposes an unset accelerator as null.
+  assert.equal(nullable.menu.items[5]!.accelerator, null);
   await dismiss(nullable);
   options.configure({
     language: "en-US",
