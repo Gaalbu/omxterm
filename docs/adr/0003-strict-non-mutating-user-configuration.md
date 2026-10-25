@@ -62,13 +62,21 @@ the entry or inventing a target-following policy.
 
 Graphical responses reconcile only controls whose submitted edit still owns
 the field; unrelated or newer typing remains local. Queued changes retain
-pending feedback until all requested changes settle. Raw Save and Reload File
-allow only one pending raw operation at a time, while typing remains usable.
+pending feedback until all requested changes settle. Graphical requests are
+submitted immediately to the existing main-process queue, not retained in a
+view-local queue. Closing does not cancel requested writes; a reopened view's
+read follows the writes already requested, while removed views still ignore
+late results. Raw Save and Reload File allow only one pending raw operation at
+a time, while typing remains usable.
 Their responses cannot replace newer typing or a closed/reopened view. After a
 successful raw save, newer typing keeps the revision of the submitted bytes as
 its base, so a subsequent external edit still conflicts. A saved snapshot
 represents those submitted bytes, not later disk contents observed during
-application.
+application. Its text/document use the loader's UTF-8 decoding semantics
+(including removal of a leading BOM), while its revision hashes the exact saved
+bytes. Snapshot decoding/parsing is completed before persistence; raw Save
+still writes the submitted text, including an accepted BOM, without a new
+normalization or validation policy.
 
 A successful write is followed by the ordinary manual reload. The editor
 reports what actually happened: saved and applied, saved but not applied (with

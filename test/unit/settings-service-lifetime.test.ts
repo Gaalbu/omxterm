@@ -157,6 +157,58 @@ it.each(["win32", "linux"])(
   },
 );
 
+it("saves BOM-prefixed raw JSON with the loader's decoding semantics and a usable byte revision", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "omxterm-settings-bom-"));
+  roots.push(root);
+  const loadOptions = loadOptionsFor(root);
+  const initial = await loadUserConfiguration(loadOptions);
+  const apply = vi.fn();
+  const reloader = createUserConfigurationReloader({
+    initial: { configuration: initial.configuration, userFileErrors: [] },
+    load: () => loadUserConfiguration(loadOptions),
+    apply,
+  });
+  const service = createSettingsService({
+    loadOptions,
+    reload: reloader.reload,
+  });
+  const text = '\uFEFF{"version":1,"logLevel":"debug"}';
+  const result = await service.saveText(text, "absent");
+  expect(result).toMatchObject({
+    status: "saved",
+    application: { applied: true },
+    snapshot: {
+      text: '{"version":1,"logLevel":"debug"}',
+      values: { logLevel: "debug" },
+    },
+  });
+  expect(
+    await readFile(path.join(root, "omxterm", "config.json"), "utf8"),
+  ).toBe(text);
+  expect(reloader.current().configuration.logLevel).toBe("debug");
+  expect(apply).toHaveBeenCalledOnce();
+  expect((await service.snapshot()).revision).toBe(result.snapshot.revision);
+  expect(
+    await service.saveText(
+      '\uFEFF{"version":1,"logLevel":"invalid"}',
+      result.snapshot.revision,
+    ),
+  ).toMatchObject({ status: "rejected" });
+  expect(
+    await readFile(path.join(root, "omxterm", "config.json"), "utf8"),
+  ).toBe(text);
+  expect(apply).toHaveBeenCalledOnce();
+  expect(
+    await service.saveText(
+      '{"version":1,"logLevel":"error"}',
+      result.snapshot.revision,
+    ),
+  ).toMatchObject({
+    status: "saved",
+    snapshot: { values: { logLevel: "error" } },
+  });
+});
+
 function loadOptionsFor(root: string) {
   return {
     environment: { XDG_CONFIG_HOME: root },

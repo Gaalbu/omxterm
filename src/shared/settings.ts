@@ -91,7 +91,7 @@ export interface SettingsSnapshot {
   readonly platform: string;
   // A digest of config.json's bytes, or "absent" when there is no file yet.
   readonly revision: string;
-  // The document text, or null when there is no file yet.
+  // Decoded UTF-8 text (leading BOM omitted), or null when there is no file yet.
   readonly text: string | null;
   // The values each control shows: the file's own entries, falling back to
   // the effective defaults for omitted fields.

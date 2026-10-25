@@ -226,7 +226,6 @@ function buildSettingsView(
     problem.hidden = next.problem === undefined;
     for (const sync of syncs) sync();
   };
-  let queue = Promise.resolve();
   let pending = 0;
   const completed = (text: string, error: boolean) => {
     pending -= 1;
@@ -235,23 +234,23 @@ function buildSettingsView(
   const change = (path: SettingsPath, value: unknown, settled: () => void) => {
     pending += 1;
     report("Saving…", false);
-    queue = queue
-      .then(() => bridge.change({ path, value }))
-      .then(
-        (result) => {
-          if (!live()) return;
-          settled();
-          adopt(result.snapshot);
-          const message = describeSettingsResult(result);
-          completed(message.text, message.error);
-        },
-        () => {
-          if (!live()) return;
-          settled();
-          completed("Not saved: the request failed.", true);
-          for (const sync of syncs) sync();
-        },
-      );
+    // Main already serializes saves and reads. Submit deliberate changes now,
+    // so a reopened view's snapshot cannot overtake work held by a removed view.
+    void bridge.change({ path, value }).then(
+      (result) => {
+        if (!live()) return;
+        settled();
+        adopt(result.snapshot);
+        const message = describeSettingsResult(result);
+        completed(message.text, message.error);
+      },
+      () => {
+        if (!live()) return;
+        settled();
+        completed("Not saved: the request failed.", true);
+        for (const sync of syncs) sync();
+      },
+    );
   };
   const value = (path: SettingsPath) => snapshot?.values[path];
 

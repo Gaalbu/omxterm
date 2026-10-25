@@ -75,10 +75,10 @@ export function createSettingsService(options: {
     return run;
   };
 
-  const validate = async (text: string) => {
+  const validate = async (bytes: Uint8Array) => {
     const load = await loadUserConfiguration({
       ...options.loadOptions,
-      read: fixedRead(encoder.encode(text)),
+      read: fixedRead(bytes),
     });
     return load;
   };
@@ -149,13 +149,29 @@ export function createSettingsService(options: {
     text: string,
     current: CurrentDocument,
   ): Promise<SettingsResult> => {
-    const candidate = await validate(text);
+    const bytes = encoder.encode(text);
+    const candidate = await validate(bytes);
     if (candidate.fallback)
       return {
         status: "rejected",
         message: describe(candidate.fallback.error),
         snapshot: snapshotOf(await readCurrent()),
       };
+    // Build the response before writing, using the same UTF-8 decoding as the
+    // loader/read snapshots (including BOM removal). Its revision still names
+    // the exact submitted bytes; parsing cannot fail after persistence.
+    const decoded = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+    const savedSnapshot = snapshotOf({
+      revision: revisionOf(bytes),
+      text: decoded,
+      document: JSON.parse(decoded) as Record<string, unknown>,
+      configuration: candidate.configuration,
+    });
+    const lifetimes = changedLifetimes(
+      current.configuration ?? DEFAULT_USER_CONFIGURATION,
+      candidate.configuration,
+      options.loadOptions.platform ?? process.platform,
+    );
     try {
       if (!(await files.replace(configurationPath, text, current.revision)))
         return conflict();
@@ -185,18 +201,9 @@ export function createSettingsService(options: {
       status: "saved",
       // This snapshot belongs to the bytes we saved, not an external edit that
       // might arrive while reload applies. New typing must retain that base.
-      snapshot: snapshotOf({
-        revision: revisionOf(encoder.encode(text)),
-        text,
-        document: JSON.parse(text) as Record<string, unknown>,
-        configuration: candidate.configuration,
-      }),
+      snapshot: savedSnapshot,
       application,
-      lifetimes: changedLifetimes(
-        current.configuration ?? DEFAULT_USER_CONFIGURATION,
-        candidate.configuration,
-        options.loadOptions.platform ?? process.platform,
-      ),
+      lifetimes,
     };
   };
 

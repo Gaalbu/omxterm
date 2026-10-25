@@ -1164,9 +1164,14 @@ changes without retry; it is not a cross-process atomic compare-and-swap.
 Settings preserves configuration symlinks, including dangling links, by refusing
 writes and directing the user to manual editing and reload. Pending graphical
 responses retain newer or unrelated field drafts, and saving feedback remains
-pending until queued changes settle. Raw operations are single-flight while
-typing remains usable; newer edits retain the saved bytes' revision as their
-base and are explicitly reported as not saved. Closed views ignore late results.
+pending until queued changes settle. Graphical requests go directly to main's
+serialized service, so a reopened view reads after already-requested writes
+rather than overtaking undispatched work in a removed view. Raw operations are
+single-flight while typing remains usable; newer edits retain the saved bytes'
+revision as their base and are explicitly reported as not saved. Snapshot text uses the same
+UTF-8 decoding as the loader (omitting a leading BOM), while revisions identify
+the exact persisted bytes; snapshot parsing happens before writing. Closed
+views ignore late results.
 The status line distinguishes saved and applied, saved but not applied (even
 when reload throws after persistence), new-window/session-only settings, and
 settings that need a restart for open tabs. Both save routes include returned
