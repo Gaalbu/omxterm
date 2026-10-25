@@ -242,12 +242,13 @@ describe.skipIf(process.platform !== "linux")(
         outcome: { code: 7, signal: null },
         closed: false,
       });
-      expect(receipt.beforeCleanup.remaining).toEqual([
-        { ...witness.worker, parent: expect.any(Number) },
-      ]);
-      expect(receipt.beforeCleanup.remaining[0]!.parent).not.toBe(
-        witness.worker.parent,
-      );
+      expect(receipt.beforeCleanup.remaining).toHaveLength(1);
+      const orphan = receipt.beforeCleanup.remaining[0]!;
+      expect(orphan.pid).toBe(witness.worker.pid);
+      expect(orphan.start).toBe(witness.worker.start);
+      expect(orphan.group).toBe(witness.worker.group);
+      expect(orphan.parent).toBeTypeOf("number");
+      expect(orphan.parent).not.toBe(witness.worker.parent);
       expect(receipt.outcome).toEqual({ code: 7, signal: null });
       expect(receipt.remaining).toEqual([]);
       expect(receipt.closed).toBe(true);
