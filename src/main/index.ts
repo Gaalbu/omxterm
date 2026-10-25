@@ -16,8 +16,8 @@ import { terminalIpc } from "../shared/terminal-ipc";
 import {
   terminalActionInvocations,
   terminalApplicationMenuTemplate,
-  terminalClipboardContextMenuTemplate,
 } from "./application-menu";
+import { terminalContextMenuTemplate } from "./terminal-context-menu";
 import * as applicationAbout from "./application-about";
 import { startApplicationSettings } from "./application-settings";
 import { deliverKeybindsFromKeyEvents } from "./keybind-delivery";
@@ -301,28 +301,13 @@ app
                 ),
               confirmPaste: () => nativeDialogs.confirmPaste(window),
               showClipboardContextMenu(request) {
-                const send = (action: "copy" | "paste" | "select-all") =>
-                  window.webContents.send(terminalIpc.clipboardAction, action);
                 Menu.buildFromTemplate(
-                  terminalClipboardContextMenuTemplate(
-                    {
-                      copy: () => send("copy"),
-                      paste: () => send("paste"),
-                      selectAll: () => send("select-all"),
-                      // The renderer focused the clicked pane first, so
-                      // View -> Pane -> Close Pane closes that pane.
-                      ...(request?.closePane
-                        ? {
-                            closePane: {
-                              click: () =>
-                                void terminalApplication!.closeSelectedPane(),
-                              accelerator:
-                                configurationReloader.current().configuration
-                                  .keybinds.closePane,
-                            },
-                          }
-                        : {}),
-                    },
+                  terminalContextMenuTemplate(
+                    window,
+                    terminalApplication!,
+                    request,
+                    configurationReloader.current().configuration.keybinds
+                      .closePane,
                     currentTranslator().t,
                   ),
                 ).popup({ window });
@@ -363,8 +348,11 @@ app
           showSessionFailure: nativeDialogs.sessionFailure,
           sendFontZoom: (window, command) =>
             window.webContents.send(terminalIpc.fontZoom, command),
-          sendClipboardAction: (window, action) =>
-            window.webContents.send(terminalIpc.clipboardAction, action),
+          sendClipboardAction: (window, action, target) =>
+            window.webContents.send(
+              terminalIpc.clipboardAction,
+              target ? { action, target } : action,
+            ),
           sendFind: notifyWindow(terminalIpc.find),
           sendTitleBarToggle: notifyWindow(terminalIpc.titleBarToggle),
           sendTabBarToggle: notifyWindow(terminalIpc.tabBarToggle),

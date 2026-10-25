@@ -1,3 +1,4 @@
+import type { TerminalContextMenuTarget } from "../shared/terminal-contract";
 import {
   MAX_PANES_PER_TAB,
   MIN_PANE_COLUMNS,
@@ -35,6 +36,9 @@ import {
 // session start and the last-tab lifecycle; panes own split, focus and size.
 export function createPaneOperations(deps: {
   readonly selectedTab: () => TerminalTab | undefined;
+  readonly takeContextMenuPane: (
+    target: TerminalContextMenuTarget,
+  ) => TerminalPane | undefined;
   readonly removeTab: (tab: TerminalTab, notify?: boolean) => void;
   readonly createAdapter: CreatePaneAdapter;
   readonly mountPane: (pane: TerminalPane) => Promise<void>;
@@ -203,10 +207,16 @@ export function createPaneOperations(deps: {
           operations.equalize();
           return;
         case "close-pane":
-          closePane(deps.selectedTab()?.focused);
+          closePane(
+            command.target
+              ? deps.takeContextMenuPane(command.target)
+              : deps.selectedTab()?.focused,
+          );
           return;
         case "prepare-close-pane":
-          pendingClose = deps.selectedTab()?.focused;
+          pendingClose = command.target
+            ? deps.takeContextMenuPane(command.target)
+            : deps.selectedTab()?.focused;
           return;
         case "resolve-close-pane": {
           const target = pendingClose;

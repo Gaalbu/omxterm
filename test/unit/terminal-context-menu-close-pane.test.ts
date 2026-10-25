@@ -6,6 +6,7 @@ import { terminalIpc } from "../../src/shared/terminal-ipc";
 const electron = vi.hoisted(() => ({
   bridge: undefined as TerminalBridge | undefined,
   send: vi.fn(),
+  listeners: new Map<string, (_event: unknown, payload: unknown) => void>(),
 }));
 
 vi.mock("electron", () => ({
@@ -18,7 +19,14 @@ vi.mock("electron", () => ({
   ipcRenderer: {
     send: electron.send,
     invoke: vi.fn(),
-    on: vi.fn(),
+    on: vi.fn(
+      (
+        channel: string,
+        listener: (_event: unknown, payload: unknown) => void,
+      ) => {
+        electron.listeners.set(channel, listener);
+      },
+    ),
     removeListener: vi.fn(),
   },
 }));
@@ -28,6 +36,12 @@ beforeAll(async () => {
 });
 
 const forgedOffers = [
+  { closePane: true },
+  { sessionId: "s1", menuId: 0 },
+  { sessionId: "s1", menuId: 1.5 },
+  { sessionId: "s1", menuId: Number.MAX_SAFE_INTEGER + 1 },
+  { sessionId: "foreign", menuId: 1 },
+  { sessionId: "s1", menuId: 1, closePane: false },
   { closePane: false },
   { closePane: "yes" },
   { closePane: true, extra: 1 },
@@ -35,13 +49,67 @@ const forgedOffers = [
 ];
 
 describe("Close Pane context menu offer", () => {
+  it("accepts only exact bounded popup targets on the existing tab-command channel", () => {
+    const listener = vi.fn();
+    electron.bridge!.onTabCommand(listener);
+    const deliver = electron.listeners.get(terminalIpc.tabCommand)!;
+    const target = { sessionId: "s1", menuId: 1 };
+    deliver({}, { action: "close-pane", target });
+    expect(listener).toHaveBeenLastCalledWith({ action: "close-pane", target });
+    deliver({}, { action: "prepare-close-pane", target });
+    expect(listener).toHaveBeenLastCalledWith({
+      action: "prepare-close-pane",
+      target,
+    });
+    listener.mockClear();
+    for (const invalid of [
+      { action: "close-pane", target: { ...target, extra: true } },
+      { action: "prepare-close-pane", target: { ...target, menuId: 0 } },
+      { action: "close-pane", target: { ...target, sessionId: "foreign" } },
+      { action: "resolve-close-pane", confirmed: true, target },
+    ])
+      deliver({}, invalid);
+    expect(listener).not.toHaveBeenCalled();
+    deliver({}, { action: "close-pane" });
+    expect(listener).toHaveBeenCalledExactlyOnceWith({ action: "close-pane" });
+  });
+
+  it("delivers only bounded clipboard action notifications through preload", () => {
+    const listener = vi.fn();
+    electron.bridge!.onClipboardAction(listener);
+    const deliver = electron.listeners.get(terminalIpc.clipboardAction)!;
+    deliver({}, "paste");
+    expect(listener).toHaveBeenLastCalledWith("paste");
+    deliver({}, { action: "copy", target: { sessionId: "s1", menuId: 1 } });
+    expect(listener).toHaveBeenLastCalledWith("copy", {
+      sessionId: "s1",
+      menuId: 1,
+    });
+    listener.mockClear();
+    for (const invalid of [
+      { action: "delete", target: { sessionId: "s1", menuId: 1 } },
+      { action: "paste", target: { sessionId: "s1", menuId: -1 } },
+      { action: "paste", target: { sessionId: "s1", menuId: 1, extra: true } },
+      { action: "copy", target: { sessionId: "s1", menuId: 1 }, extra: true },
+      { action: "paste" },
+    ])
+      deliver({}, invalid);
+    expect(listener).not.toHaveBeenCalled();
+  });
+
   it("leaves preload only with no request or the exact offer", () => {
     const bridge = electron.bridge!;
     const channel = terminalIpc.clipboardContextMenu;
     bridge.requestClipboardContextMenu();
     expect(electron.send).toHaveBeenLastCalledWith(channel);
-    bridge.requestClipboardContextMenu({ closePane: true });
+    bridge.requestClipboardContextMenu({
+      sessionId: "s1",
+      menuId: 1,
+      closePane: true,
+    });
     expect(electron.send).toHaveBeenLastCalledWith(channel, {
+      sessionId: "s1",
+      menuId: 1,
       closePane: true,
     });
     electron.send.mockClear();
@@ -72,8 +140,14 @@ describe("Close Pane context menu offer", () => {
 
     requests.showClipboardContextMenu();
     expect(showClipboardContextMenu).toHaveBeenLastCalledWith();
-    requests.showClipboardContextMenu({ closePane: true });
+    requests.showClipboardContextMenu({
+      sessionId: "s1",
+      menuId: 1,
+      closePane: true,
+    });
     expect(showClipboardContextMenu).toHaveBeenLastCalledWith({
+      sessionId: "s1",
+      menuId: 1,
       closePane: true,
     });
   });

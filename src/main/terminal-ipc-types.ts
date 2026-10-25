@@ -2,6 +2,7 @@ import type {
   TerminalExit,
   TerminalSessionId,
   TerminalContextMenuRequest,
+  TerminalContextMenuTarget,
 } from "../shared/terminal-contract";
 import type { TerminalRendererConfiguration } from "../shared/user-configuration";
 import type { TerminalSnippetsResponse } from "../shared/terminal-snippets";
@@ -109,6 +110,7 @@ export interface TerminalIpcController {
   applyConfiguration(configuration: TerminalRendererConfiguration): void;
   applyFullScreen(fullScreen: boolean): void;
   hasBusySelectedSession(): boolean;
+  claimContextMenuTarget(target: TerminalContextMenuTarget): boolean;
   hasBusyFocusedSession(): boolean;
   hasBusySession(): boolean;
   dispose(): void;

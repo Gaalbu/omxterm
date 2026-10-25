@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { expect, it, vi } from "vitest";
 import { mountTerminalWindowPage } from "../../src/renderer/terminal-window-host";
+import type { TerminalContextMenuTarget } from "../../src/shared/terminal-contract";
 import type {
   SettingsChange,
   SettingsResult,
@@ -25,7 +26,11 @@ it("owns input while open: blocks terminal actions and edits its own field", asy
   const hasFocus = vi.spyOn(document, "hasFocus").mockReturnValue(true);
   let openSettings!: () => void;
   let openAbout!: () => void;
-  let clipboardAction!: (action: "copy" | "paste" | "select-all") => void;
+  let clipboardAction!: (
+    action: "copy" | "paste" | "select-all",
+    target?: TerminalContextMenuTarget,
+  ) => void;
+  const readClipboard = vi.fn(async () => "Installed Mono");
   let find!: () => void;
   let tabCommand!: (command: { action: "new" }) => void;
   const createAdapter = vi.fn(() => ({
@@ -70,7 +75,7 @@ it("owns input while open: blocks terminal actions and edits its own field", asy
       createAdapter,
       mount: async () => surface,
       clipboard: {
-        readText: vi.fn(async () => "Installed Mono"),
+        readText: readClipboard,
         writeText: vi.fn(async () => {}),
         confirmPaste: vi.fn(async () => true),
         requestContextMenu: vi.fn(),
@@ -120,6 +125,11 @@ it("owns input while open: blocks terminal actions and edits its own field", asy
       .find((row) => row.textContent?.startsWith("Font family"))!
       .querySelector("input")!;
     family.focus();
+    // A retained terminal popup must not migrate into a modal's text field.
+    clipboardAction("paste", { sessionId: "s1", menuId: 1 });
+    await Promise.resolve();
+    expect(readClipboard).not.toHaveBeenCalled();
+    expect(family.value).toBe("");
     clipboardAction("paste");
     find();
     tabCommand({ action: "new" });

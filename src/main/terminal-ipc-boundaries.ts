@@ -132,7 +132,7 @@ export function clipboardRequests(
     showClipboardContextMenu(payload?: unknown) {
       if (payload === undefined) options.showClipboardContextMenu();
       else if (isTerminalContextMenuRequest(payload))
-        options.showClipboardContextMenu({ closePane: true });
+        options.showClipboardContextMenu({ ...payload });
       else reject("clipboard", "invalid-payload");
     },
   };

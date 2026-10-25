@@ -1,4 +1,7 @@
-import type { TerminalSessionId } from "../shared/terminal-contract";
+import type {
+  TerminalContextMenuTarget,
+  TerminalSessionId,
+} from "../shared/terminal-contract";
 import type {
   TerminalSurface,
   TerminalSurfaceConfiguration,
@@ -31,6 +34,9 @@ export function createPaneMount(deps: {
   readonly notifyEmpty: (reason?: "rendering-failure") => void;
   readonly focus: (pane: TerminalPane, unchangedFocus: boolean) => void;
   readonly focusClicked: (pane: TerminalPane) => void;
+  readonly captureContextMenuTarget: (
+    pane: TerminalPane,
+  ) => TerminalContextMenuTarget | undefined;
 }) {
   const { document, options } = deps;
   return async (pane: TerminalPane): Promise<void> => {
@@ -55,20 +61,21 @@ export function createPaneMount(deps: {
     const clipboard = deps.surfaceOptions().clipboard;
     const paneSurfaceOptions: TerminalSurfaceOptions = {
       ...deps.surfaceOptions(),
-      // The context menu acts on the focused pane, so a right-click focuses
-      // its own pane first; a split pane's menu also offers Close Pane.
+      // Focus before capturing this pane and its live Surface for one popup;
+      // a split pane's menu also offers Close Pane.
       ...(clipboard
         ? {
             clipboard: {
               ...clipboard,
               requestContextMenu() {
-                if (deps.disposed() || pane.removed) return;
+                if (deps.disposed() || pane.removed || pane.ended) return;
                 deps.focusClicked(pane);
-                clipboard.requestContextMenu(
-                  tabPanes(pane.tab).length > 1
-                    ? { closePane: true }
-                    : undefined,
-                );
+                const target = deps.captureContextMenuTarget(pane);
+                if (!target) return;
+                clipboard.requestContextMenu({
+                  ...target,
+                  ...(tabPanes(pane.tab).length > 1 ? { closePane: true } : {}),
+                });
               },
             },
           }

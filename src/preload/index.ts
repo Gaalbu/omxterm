@@ -11,6 +11,7 @@ import {
   isBoundedTerminalPayload,
   isNonemptyClipboardText,
   isTerminalClipboardAction,
+  isTerminalContextMenuClipboardAction,
   isTerminalContextMenuRequest,
   isTerminalFontZoom,
   isTerminalSessionExit,
@@ -358,11 +359,13 @@ const terminal: TerminalBridge = {
     }
     if (!isTerminalContextMenuRequest(request))
       throw new TypeError("Invalid context menu request");
-    ipcRenderer.send(terminalIpc.clipboardContextMenu, { closePane: true });
+    ipcRenderer.send(terminalIpc.clipboardContextMenu, { ...request });
   },
   onClipboardAction(listener) {
     const handler = (_event: Electron.IpcRendererEvent, action: unknown) => {
       if (isTerminalClipboardAction(action)) listener(action);
+      else if (isTerminalContextMenuClipboardAction(action))
+        listener(action.action, action.target);
     };
     ipcRenderer.on(terminalIpc.clipboardAction, handler);
     return () =>

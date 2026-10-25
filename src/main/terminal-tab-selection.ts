@@ -44,6 +44,9 @@ export function createTabSelection<State>(options: {
       });
       return states.some(options.isBusy);
     },
+    isFocusedSession(sessionId: TerminalSessionId) {
+      return focused === sessionId && options.routed(sessionId) !== undefined;
+    },
     hasBusyFocusedSession() {
       if (tab === undefined) return options.hasBusySession();
       const state = focused === null ? undefined : options.current(focused);
