@@ -19,8 +19,11 @@ and non-grid space, including padding and scrollbar overhead. Every divider,
 including internal subtree and additional n-ary dividers, consumes space. Unknown
 geometry refuses a split, and a tab holds at most 16 panes. A refused split
 creates no Adapter/session. Dividers are pointer- and keyboard-operable separators
-limited by the same uncapped subtree minima. A later resize or zoom that cannot
-fit every minimum keeps sessions and layout rather than closing panes or raising
+limited by the same uncapped subtree minima with all internal weights retained:
+along the split axis, divide each child's requirement by its weight and take the
+maximum, then add internal dividers; across the axis, take the maximum. Resizing
+an ancestor never silently rebalances its descendants. A later resize or zoom
+that cannot fit every minimum keeps sessions and layout rather than closing panes or raising
 the window's minimum size; impossible divider moves retain existing proportions. Maximizing a pane is outside this slice.
 
 Exactly one pane per tab is focused. It receives keyboard input and every
@@ -42,7 +45,11 @@ that directory still exists; otherwise it starts in the home directory, like a
 new tab. Main reads OSC 7 from the PTY output it already relays, accepts only an
 empty, `localhost` or local host name and a local absolute path (a drive path on
 Windows; UNC and device paths are rejected), and never logs, persists or sends
-the directory. OMXTerm injects nothing to make shells report it (ADR 0013). A
+the directory. CAN/SUB cancellation discards an unfinished report and resumes
+scanning subsequent output without accepting the cancelled URI. Overflow still
+invalidates an older cwd regardless of chunk boundaries; an in-bound cancellation
+alone leaves the last completed report unchanged. OMXTerm injects nothing to
+make shells report it (ADR 0013). A
 remote shell that reports no host name, or this machine's name, is
 indistinguishable from a local one, and program output can also emit the
 sequence; either can only choose an existing local start directory, never run

@@ -186,23 +186,39 @@ it("clamps pointer and keyboard dividers to asymmetric mixed-metric subtree mini
   viewport.width = 1200;
   divider.focus();
   keyboard("ArrowLeft");
-  // C needs 300px, D 400px and their internal divider 4px. The root's
-  // distributable space is 1196px, not 1200px. B independently needs 200px.
-  expect(weights()[0]).toBeCloseTo(704 / 1196);
-  expect(weights()[1]).toBeCloseTo(492 / 1196);
-  expect(divider.getAttribute("aria-valuenow")).toBe("59");
+  // C needs 300px and D 400px, but their retained halves each need 400px.
+  // With the internal divider, the subtree needs 804px, not the 704px sum.
+  // Root distributable space is 1196px; B independently needs 200px.
+  expect(weights()[0]).toBeCloseTo(804 / 1196);
+  expect(weights()[1]).toBeCloseTo(392 / 1196);
+  const innerShares = () =>
+    [
+      ...root.querySelectorAll<HTMLElement>(
+        '[data-direction="column"] [data-direction="row"] > main',
+      ),
+    ].map((pane) => Number(pane.style.flexGrow));
+  expect(innerShares()).toEqual([0.5, 0.5]);
+  const leftWidth = weights()[0]! * 1196;
+  expect(
+    Math.floor(((leftWidth - 4) * innerShares()[0]!) / 15),
+  ).toBeGreaterThanOrEqual(20);
+  expect(
+    Math.floor(((leftWidth - 4) * innerShares()[1]!) / 20),
+  ).toBeGreaterThanOrEqual(20);
+  expect(divider.getAttribute("aria-valuenow")).toBe("67");
   expect(document.activeElement).toBe(divider);
-  pointer("pointerdown", 704);
+  pointer("pointerdown", 804);
   pointer("pointermove", 1000, 8); // A second pointer cannot resize this drag.
-  expect(weights()[0]).toBeCloseTo(704 / 1196);
+  expect(weights()[0]).toBeCloseTo(804 / 1196);
   pointer("pointermove", -1000);
   pointer("pointerup", -1000);
-  expect(weights()[0]).toBeCloseTo(704 / 1196);
+  expect(weights()[0]).toBeCloseTo(804 / 1196);
   pointer("pointermove", 1100); // Ended drag is inert.
-  expect(weights()[0]).toBeCloseTo(704 / 1196);
+  expect(weights()[0]).toBeCloseTo(804 / 1196);
   keyboard("ArrowRight");
   const retained = weights();
-  viewport.width = 800; // 704+200 no longer fits in 796px.
+  expect(innerShares()).toEqual([0.5, 0.5]);
+  viewport.width = 800; // 804+200 no longer fits in 796px.
   keyboard("ArrowLeft");
   pointer("pointerdown", 600);
   pointer("pointermove", 100);

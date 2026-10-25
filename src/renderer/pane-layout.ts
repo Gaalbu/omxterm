@@ -150,7 +150,8 @@ export function resizeSplit<Pane>(
   return { ...layout, weights };
 }
 
-// The smallest extent a subtree can take along `axis`, given one pane's.
+// The smallest extent preserving every descendant's current weight. An
+// ancestor resize cannot redistribute space inside a retained child split.
 export function minimumExtent<Pane>(
   layout: PaneLayout<Pane>,
   axis: SplitAxis,
@@ -163,7 +164,9 @@ export function minimumExtent<Pane>(
     minimumExtent(child, axis, pane, divider),
   );
   return layout.direction === axis
-    ? extents.reduce((sum, extent) => sum + extent, 0) +
+    ? Math.max(
+        ...extents.map((extent, index) => extent / layout.weights[index]!),
+      ) +
         divider * (extents.length - 1)
     : Math.max(...extents);
 }

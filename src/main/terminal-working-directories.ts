@@ -85,7 +85,10 @@ export function createWorkingDirectoryTracker(
           }
           return;
         }
-        record(sessionId, text.slice(body, end.index));
+        if (!end.cancelled) record(sessionId, text.slice(body, end.index));
+        // Overflow invalidates cwd before cancellation, regardless of chunking.
+        else if (end.index - body > MAX_WORKING_DIRECTORY_REPORT_LENGTH)
+          directories.delete(sessionId);
         from = end.index + end.length;
       }
     },
@@ -105,16 +108,27 @@ export function createWorkingDirectoryTracker(
   };
 }
 
-// BEL or ST ends an OSC sequence.
+// BEL/ST completes a report; CAN/SUB cancels it without recording its URI.
 function terminator(
   text: string,
   from: number,
-): { readonly index: number; readonly length: number } | undefined {
-  const bel = text.indexOf("\u0007", from);
-  const st = text.indexOf("\u001b\\", from);
-  if (bel < 0 && st < 0) return undefined;
-  if (st < 0 || (bel >= 0 && bel < st)) return { index: bel, length: 1 };
-  return { index: st, length: 2 };
+):
+  | {
+      readonly index: number;
+      readonly length: number;
+      readonly cancelled: boolean;
+    }
+  | undefined {
+  const ending = /[\u0007\u0018\u001a]|\u001b\\/gu;
+  ending.lastIndex = from;
+  const match = ending.exec(text);
+  return match
+    ? {
+        index: match.index,
+        length: match[0].length,
+        cancelled: match[0] === "\u0018" || match[0] === "\u001a",
+      }
+    : undefined;
 }
 
 // The longest end of `text` that could begin an introducer in the next chunk.
