@@ -530,7 +530,11 @@ exact configured installed family through the Electron main process and gives
 Restty only bounded bytes for that validated active family, followed by the
 licensed bundled FiraCode regular/bold, DejaVu Sans Mono regular/bold and
 JetBrainsMono Nerd Font Mono faces, then representative locally installed
-operating-system fallback faces. When a family is explicitly configured, the
+operating-system fallback faces. On Linux, those native candidates are, in order,
+`Noto Color Emoji`, `Noto Sans CJK SC`, `DejaVu Sans Mono`, and
+`Source Han Sans CN`. Each is optional, requires an exact installed regular
+family match, and shares the existing bounded fallback-byte budget; no fonts are
+automatically installed. When a family is explicitly configured, the
 bundled bold faces are omitted: the configured family keeps precedence for
 regular, bold, italic and bold-italic text. Main loads available real style
 faces from that same installed family, validates their identity and style, and
