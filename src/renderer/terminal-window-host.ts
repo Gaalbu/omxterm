@@ -1,11 +1,8 @@
 import { mountWindowChrome, type WindowChromeBridge } from "./window-chrome";
 import { mountAboutDialog } from "./about/about-dialog";
-import {
-  surfaceLabels,
-  windowLanguage,
-  type RendererLanguage,
-} from "./renderer-language";
+import { surfaceLabels, windowLanguage } from "./renderer-language";
 import { DEFAULT_LANGUAGE } from "../shared/i18n";
+import { bindTerminalWindowLanguage } from "./terminal-window-language";
 import type { AboutBridge } from "../shared/about";
 import type { TerminalSessionAdapter } from "../terminal-surface/terminal-session-adapter";
 import {
@@ -77,6 +74,7 @@ interface TerminalWindowPageOptions {
     listener: (configuration: TerminalRendererConfiguration) => void,
   ) => () => void;
   readonly userFileErrorBanner?: HTMLElement;
+  readonly surfaceFailureBanner?: HTMLElement;
   readonly clipboard?: TerminalClipboard;
   readonly subscribeToClipboardActions?: (
     listener: (action: "copy" | "paste" | "select-all") => void,
@@ -163,6 +161,12 @@ export function mountTerminalWindowPage(
   }
 
   const language = windowLanguage(options.configuration);
+  const pageLabels = bindTerminalWindowLanguage(
+    page.document,
+    elements.tabStrip,
+    language,
+    options,
+  );
   const surfaceOptions: TerminalSurfaceOptions = {
     ...activeSurfaceConfiguration,
     background: "host",
@@ -188,9 +192,7 @@ export function mountTerminalWindowPage(
           },
         }
       : {}),
-    ...(options.onSurfaceFailure
-      ? { onFatalError: options.onSurfaceFailure }
-      : {}),
+    ...pageLabels.surfaceOptions,
   };
 
   const tabs: TerminalTabs = createTerminalTabs(
@@ -278,6 +280,7 @@ export function mountTerminalWindowPage(
     removeFileDrops();
     removeGuardedActionListeners?.();
     removeConfigurationUpdateListener?.();
+    pageLabels.dispose();
     removeTabCommandListener?.();
     removeTabTitleListener?.();
     removeSnippetsToggleListener?.();

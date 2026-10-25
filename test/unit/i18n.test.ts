@@ -25,6 +25,7 @@ import {
   translatorFor,
   type Message,
   type MessageKey,
+  type PluralMessage,
 } from "../../src/shared/i18n";
 import { englishMessages } from "../../src/shared/locales/en-US";
 import { DEFAULT_TERMINAL_KEYBINDS } from "../../src/shared/terminal-keybinds";
@@ -47,6 +48,16 @@ describe("message catalogs", () => {
         expect(typeof message, key).toBe(typeof englishMessages[key]);
         for (const text of forms(message))
           expect(text?.trim().length, key).toBeGreaterThan(0);
+        const source: Message = englishMessages[key];
+        if (typeof message !== "string" && typeof source !== "string") {
+          expect(Object.keys(message).sort(), key).toEqual(
+            Object.keys(source).sort(),
+          );
+          for (const form of Object.keys(source) as Array<keyof PluralMessage>)
+            expect(messageParameters(message[form]!), `${key}.${form}`).toEqual(
+              messageParameters(source[form]!),
+            );
+        }
       }
       expect(Object.keys(catalog).sort()).toEqual([...keys].sort());
     },

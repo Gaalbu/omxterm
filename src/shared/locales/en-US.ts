@@ -109,6 +109,13 @@ export const englishMessages = {
   "chrome.closeWindow": "Close Window",
 
   "terminal.surface": "Terminal Surface",
+  "terminal.tabs": "Terminal Tabs",
+  "terminal.userFileErrors": "User File Errors",
+  "terminal.surfaceFailure": "Terminal Surface Failure",
+  "terminal.initializationFailure":
+    "Failed to initialize the OMXTerm Terminal Surface: {detail}",
+  "terminal.backendLost":
+    "The OMXTerm Terminal Surface rendering backend was lost",
   "search.region": "Search terminal scrollback",
   "search.placeholder": "Find in scrollback",
   "search.clear": "Clear",
@@ -139,6 +146,7 @@ export const englishMessages = {
     "Could not preview this image. The file may be unavailable, invalid or over the static PNG/JPEG limits (64 MiB, 8192 per side, 32 million pixels).",
 
   "panel.resize": "Resize auxiliary panel",
+  "panel.width": "{width} pixels wide",
   "panel.close": "Close auxiliary panel",
   "panel.tooNarrow": "Widen the window to open {view}",
   "snippets.title": "Snippets",

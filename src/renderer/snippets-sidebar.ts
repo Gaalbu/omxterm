@@ -25,6 +25,7 @@ export function createSnippetsView(
   let renderGeneration = 0;
   let snippets: readonly TerminalSnippet[] = [];
   let loading = false;
+  let transportFailure = false;
   let retainedScroll = 0;
   const search = document.createElement("input");
   search.type = "search";
@@ -92,6 +93,7 @@ export function createSnippetsView(
     search.placeholder = t("snippets.searchPlaceholder");
     search.setAttribute("aria-label", t("snippets.search"));
     status.textContent = statusText(t);
+    if (transportFailure) error.textContent = t("snippets.loadError");
   });
   const restoreScroll = () => {
     results.scrollTop = Math.min(
@@ -115,28 +117,27 @@ export function createSnippetsView(
       active = true;
       const activation = ++generation;
       loading = true;
+      transportFailure = false;
       snippets = [];
       error.hidden = true;
       error.textContent = "";
       render();
-      const settle = (response: TerminalSnippetsResponse) => {
+      const settle = (response: TerminalSnippetsResponse, failed = false) => {
         if (disposed || !active || activation !== generation) return;
         loading = false;
-        snippets = response.error ? [] : response.snippets;
-        error.hidden = response.error === undefined;
-        error.textContent = response.error ?? "";
+        transportFailure = failed;
+        snippets = response.error || failed ? [] : response.snippets;
+        error.hidden = !failed && response.error === undefined;
+        error.textContent = failed
+          ? language.t("snippets.loadError")
+          : (response.error ?? "");
         render();
         restoreScroll();
       };
       // Also contain a synchronous loader failure; never render raw rejection text.
       void Promise.resolve()
         .then(options.loadSnippets)
-        .then(settle, () =>
-          settle({
-            snippets: [],
-            error: language.t("snippets.loadError"),
-          }),
-        );
+        .then(settle, () => settle({ snippets: [] }, true));
     },
     deactivate() {
       if (!active) return;

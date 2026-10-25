@@ -25,11 +25,16 @@ Main reads the language from the active configuration each time it builds a
 menu or opens a native dialog. Renderers receive it in the renderer
 configuration and relabel existing elements in place, so a User Configuration
 Reload changes the language without recreating tabs, Surfaces or sessions. The
-Terminal Surface receives its labels through its configuration and imports no
-catalog.
+Terminal Surface receives its labels through its configuration, including replay
+after a pending mount, and imports no catalog. It reports structured failure
+identity and separate diagnostic detail; the window host translates and retains
+the visible notice until teardown, including after initial mount rejection.
+Document language, accessible names, resize value text and already-visible
+application notices follow the same live binding.
 
 These stay English: the validator's diagnostic detail inside a translated reload
-notice, failures reported before the configuration loads, Operational Events and
+notice, technical cause detail inside a translated Surface failure notice,
+failures reported before the configuration loads, Operational Events and
 logs ([ADR 0004](0004-log-the-operational-envelope-not-terminal-payload.md)), `snippets.yaml`
 diagnostics, and text owned by the operating system, Electron or Restty that
 OMXTerm does not set.

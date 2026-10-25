@@ -50,6 +50,7 @@ import type {
   TerminalFontInputLease,
   TerminalSurface,
   TerminalSurfaceConfiguration,
+  TerminalSurfaceFailure,
   TerminalSurfaceLabels,
   TerminalSurfaceOptions,
 } from "./terminal-surface";
@@ -221,10 +222,10 @@ export async function mountResttyTerminalSurface(
     removeRuntimeListener = undefined;
     visibleLinkController = undefined;
   };
-  const fail = (message: string) => {
+  const fail = (failure: TerminalSurfaceFailure) => {
     if (isInactive()) return;
     try {
-      options.onFatalError?.(message);
+      options.onFatalError?.(failure);
     } finally {
       dispose("rendering-failure");
     }
@@ -318,7 +319,7 @@ export async function mountResttyTerminalSurface(
       "webglcontextlost",
       (event) => {
         event.preventDefault();
-        fail("The OMXTerm Terminal Surface rendering backend was lost");
+        fail({ kind: "backend-loss" });
       },
       { once: true },
     );
@@ -453,11 +454,11 @@ function resolveTheme(theme = DEFAULT_TERMINAL_THEME): TerminalTheme {
 
 function throwInitializationFailure(
   cause: unknown,
-  fail: (message: string) => void,
+  fail: (failure: TerminalSurfaceFailure) => void,
 ): never {
   const detail = cause instanceof Error ? cause.message : String(cause);
   try {
-    fail(`Failed to initialize the OMXTerm Terminal Surface: ${detail}`);
+    fail({ kind: "initialization", detail });
   } catch (cleanupError) {
     throw new AggregateError(
       [cause, cleanupError],

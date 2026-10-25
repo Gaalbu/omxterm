@@ -119,6 +119,13 @@ export const brazilianPortugueseMessages: Readonly<
   "chrome.closeWindow": "Fechar Janela",
 
   "terminal.surface": "Superfície do terminal",
+  "terminal.tabs": "Abas do terminal",
+  "terminal.userFileErrors": "Erros nos arquivos do usuário",
+  "terminal.surfaceFailure": "Falha na superfície do terminal",
+  "terminal.initializationFailure":
+    "Falha ao inicializar a superfície do terminal do OMXTerm: {detail}",
+  "terminal.backendLost":
+    "O backend de renderização da superfície do terminal do OMXTerm foi perdido",
   "search.region": "Buscar no histórico do terminal",
   "search.placeholder": "Buscar no histórico",
   "search.clear": "Limpar",
@@ -149,6 +156,7 @@ export const brazilianPortugueseMessages: Readonly<
     "Não foi possível pré-visualizar esta imagem. O arquivo pode estar indisponível, ser inválido ou passar dos limites de PNG/JPEG estáticos (64 MiB, 8192 por lado, 32 milhões de pixels).",
 
   "panel.resize": "Redimensionar painel auxiliar",
+  "panel.width": "{width} pixels de largura",
   "panel.close": "Fechar painel auxiliar",
   "panel.tooNarrow": "Alargue a janela para abrir {view}",
   "snippets.title": "Snippets",

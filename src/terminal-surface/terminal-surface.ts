@@ -68,6 +68,12 @@ export interface TerminalFontInputLease {
   release(): void;
 }
 
+// The host localizes the application-owned frame; technical cause detail stays
+// diagnostic text. Keep identity after disposal so visible notices can relabel.
+export type TerminalSurfaceFailure =
+  | { readonly kind: "initialization"; readonly detail: string }
+  | { readonly kind: "backend-loss" };
+
 export interface TerminalSurfaceOptions {
   readonly labels?: TerminalSurfaceLabels;
   // Standalone Surfaces focus their initial pane by default. Window/tab owners
@@ -96,7 +102,7 @@ export interface TerminalSurfaceOptions {
   };
   readonly onExternalLink?: (url: string) => void;
   readonly onLocalImageActivation?: (source: LocalImageActivation) => void;
-  readonly onFatalError?: (message: string) => void;
+  readonly onFatalError?: (failure: TerminalSurfaceFailure) => void;
 }
 
 export { mountResttyTerminalSurface as mountTerminalSurface } from "./restty-terminal-surface";

@@ -521,6 +521,7 @@ function completeConfiguration(
   )
     return undefined;
   return {
+    ...(options.labels ? { labels: options.labels } : {}),
     appearance: {
       fontSize: options.appearance.fontSize,
       lineHeight: options.appearance.lineHeight,

@@ -905,7 +905,14 @@ Panel and Snippets Sidebar, Local Image Preview, About, and the Scrollback
 Search controls. Main resolves it from the active configuration whenever it
 builds a menu or opens a dialog; renderers relabel existing elements in place,
 so a User Configuration Reload changes it without recreating tabs, Surfaces or
-sessions. The validator's diagnostic detail inside a reload notice, failures
+sessions, including when a Surface is still mounting. The document's accessibility
+language, application-owned accessible names and resize value text follow the same
+choice. Visible generic Snippets errors, narrow-window notices and renderer
+Surface failure notices relabel without rereading data or resetting their lifetime.
+A Surface reports failure identity and separate technical cause detail to its host;
+the host retains and translates the notice until window teardown, even after
+initial mount rejection. The validator's diagnostic detail inside a reload notice,
+technical cause detail inside a translated Surface failure notice, failures
 reported before configuration loads, Operational Events, `snippets.yaml`
 diagnostics, and operating-system, Electron or Restty text that OMXTerm does not
 set remain English. Terminal Payload is never translated.

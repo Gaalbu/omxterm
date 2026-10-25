@@ -12,6 +12,7 @@ export type Translate = Translator["t"];
 // main. Bound labels apply now and again after each change, so switching
 // language never recreates tabs, Surfaces or sessions.
 export interface RendererLanguage {
+  readonly language: SupportedLanguage;
   readonly t: Translate;
   set(language: SupportedLanguage | undefined): void;
   bind(apply: (t: Translate) => void): () => void;
@@ -23,6 +24,9 @@ export function createRendererLanguage(
   let translator = translatorFor(initial);
   const bindings = new Set<(t: Translate) => void>();
   return {
+    get language() {
+      return translator.language;
+    },
     get t() {
       return translator.t;
     },
