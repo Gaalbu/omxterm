@@ -40,11 +40,13 @@ Choose **Settings…** in the OMXTerm application menu. Each change you make to 
 - **Saved.** The change is active.
 - **Saved. New tabs use it.** or **It applies to new windows.** Open tabs and windows keep their current value.
 - **Saved… restart OMXTerm to apply it to open tabs.** Font family and line height apply to new tabs immediately and to open tabs after a restart.
+- **Saved to config.json, but it could not be applied: …** The file was written, but reload failed; some settings may already be active. Fix the reported problem and reload again.
 - **Not saved: …** The value was rejected (for example, a font that isn't installed); your file is unchanged.
+- **Saving…** One or more graphical changes are still pending. An earlier result does not mark a later change completed.
 
-Clearing a text or number field removes that entry from `config.json`, so the default applies again. Settings changes only the field you edited and keeps the rest of your file, including edits you make in another editor while it's open. It rewrites the file with two-space indentation.
+Clearing a text or number field removes that entry from `config.json`, so the default applies again. Settings changes only the field you edited and keeps the rest of your file, including edits you make in another editor while it's open. It rewrites the file with two-space indentation. If it detects an external edit during validation or write preparation, it refuses the change and asks you to reload instead of overwriting it. Settings does not write through a `config.json` symlink (including a dangling link); edit its target manually, then reload User Configuration.
 
-The **Config File** page shows `config.json` with an explicit **Save**. If the file changes on disk while you edit there, your draft is kept and saving it is refused until you choose **Reload File**, so nothing is overwritten by accident. Shortcuts, transparency, blur and snippets are still edited in the files.
+The **Config File** page shows `config.json` with an explicit **Save**, using the same application and deferred-setting feedback as graphical changes. If the file changes on disk while you edit there, your draft is kept and saving it is refused until you choose **Reload File**. Save and Reload File are disabled while a raw request is pending; you can keep typing, and newer text is kept but is not included in the earlier Save. Reload File replaces your draft only if you have not typed again during its read. Shortcuts, transparency, blur and snippets are still edited in the files.
 
 ## Add one display change
 

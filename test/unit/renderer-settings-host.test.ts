@@ -1,7 +1,11 @@
 // @vitest-environment jsdom
 import { expect, it, vi } from "vitest";
 import { mountTerminalWindowPage } from "../../src/renderer/terminal-window-host";
-import type { SettingsSnapshot } from "../../src/shared/settings";
+import type {
+  SettingsChange,
+  SettingsResult,
+  SettingsSnapshot,
+} from "../../src/shared/settings";
 
 const snapshot: SettingsSnapshot = {
   configurationPath: "/synthetic/omxterm/config.json",
@@ -43,6 +47,18 @@ it("owns input while open: blocks terminal actions and edits its own field", asy
     selectAll: vi.fn(),
     find: vi.fn(),
   };
+  const change = vi.fn(
+    async (change: SettingsChange): Promise<SettingsResult> => ({
+      status: "saved",
+      snapshot: {
+        ...snapshot,
+        revision: "saved",
+        values: { ...snapshot.values, [change.path]: change.value },
+      },
+      application: { applied: true, notices: [] },
+      lifetimes: ["restart"],
+    }),
+  );
   const tabStrip = document.createElement("nav");
   const tabsContainer = document.createElement("main");
   document.body.replaceChildren(tabStrip, tabsContainer);
@@ -60,7 +76,7 @@ it("owns input while open: blocks terminal actions and edits its own field", asy
       },
       settings: {
         snapshot: vi.fn(async () => snapshot),
-        change: vi.fn(),
+        change,
         saveText: vi.fn(),
         onOpen: (listener) => {
           openSettings = listener;
@@ -107,6 +123,10 @@ it("owns input while open: blocks terminal actions and edits its own field", asy
     find();
     tabCommand({ action: "new" });
     await vi.waitFor(() => expect(family.value).toBe("Installed Mono"));
+    expect(change).toHaveBeenCalledExactlyOnceWith({
+      path: "font.family",
+      value: "Installed Mono",
+    });
     expect(surface.paste).not.toHaveBeenCalled();
     expect(surface.find).not.toHaveBeenCalled();
     expect(createAdapter).toHaveBeenCalledOnce();

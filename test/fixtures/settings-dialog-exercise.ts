@@ -153,7 +153,8 @@ async function exerciseSettingsDialog(
   };
 }
 
-// Runs one settings exercise and always releases its IPC and profile.
+// Runs one settings exercise and always unregisters its Settings IPC handlers.
+// The outer fixture supervisor owns profile cleanup.
 export async function runSettingsExercise(
   ...options: Parameters<typeof createSettingsExercise>
 ): Promise<SettingsEvidence> {

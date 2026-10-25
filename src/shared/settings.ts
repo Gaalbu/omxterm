@@ -109,6 +109,8 @@ export type SettingsResult =
       readonly status: "saved";
       readonly snapshot: SettingsSnapshot;
       readonly application: SettingsApplication;
+      // Deferred lifetimes of effective values changed by this saved candidate.
+      readonly lifetimes: readonly Exclude<SettingsLifetime, "live">[];
     }
   | {
       readonly status: "rejected" | "conflict" | "failed";
@@ -190,6 +192,13 @@ export function isSettingsResult(value: unknown): value is SettingsResult {
     return (
       typeof application === "object" &&
       application !== null &&
+      Array.isArray(result.lifetimes) &&
+      result.lifetimes.length <= 3 &&
+      result.lifetimes.every(
+        (lifetime: unknown) =>
+          typeof lifetime === "string" &&
+          ["new-tabs", "new-windows", "restart"].includes(lifetime),
+      ) &&
       (application.applied === true
         ? Array.isArray(application.notices) &&
           application.notices.every((notice) => isBoundedText(notice))

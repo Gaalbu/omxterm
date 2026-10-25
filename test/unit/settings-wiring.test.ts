@@ -20,6 +20,7 @@ function wiring() {
       status: "saved" as const,
       snapshot,
       application: { applied: true as const, notices: [] },
+      lifetimes: [],
     })),
     saveText: vi.fn(async () => ({
       status: "conflict" as const,
@@ -140,6 +141,29 @@ describe("settings preload bridge", () => {
       text: "{}",
       revision: "absent",
     });
+  });
+
+  it("validates deferred-lifetime metadata before delivering a saved response", async () => {
+    const saved = {
+      status: "saved",
+      snapshot,
+      application: { applied: true, notices: ["warning"] },
+      lifetimes: ["new-tabs", "new-windows", "restart"],
+    };
+    await expect(bridge(saved).value.saveText("{}", "absent")).resolves.toEqual(
+      saved,
+    );
+    for (const lifetimes of [
+      undefined,
+      "restart",
+      ["unknown"],
+      [1],
+      ["restart", "restart", "restart", "restart"],
+    ]) {
+      await expect(
+        bridge({ ...saved, lifetimes }).value.saveText("{}", "absent"),
+      ).rejects.toThrow("Invalid settings response");
+    }
   });
 
   it("delivers an early open request once and ignores payloads", () => {

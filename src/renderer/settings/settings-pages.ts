@@ -164,7 +164,7 @@ export function renderControl(
   document: Document,
   control: Control,
   value: (path: SettingsPath) => unknown,
-  change: (path: SettingsPath, value: unknown) => void,
+  change: (path: SettingsPath, value: unknown, settled: () => void) => void,
   syncs: (() => void)[],
 ): HTMLElement {
   const row = document.createElement("label");
@@ -172,6 +172,19 @@ export function renderControl(
   const caption = document.createElement("span");
   caption.textContent = control.label;
   let input: HTMLInputElement | HTMLSelectElement;
+  let generation = 0;
+  let dirty = false;
+  const edited = () => {
+    generation += 1;
+    dirty = true;
+  };
+  const commit = (next: unknown) => {
+    edited();
+    const submitted = generation;
+    change(control.path, next, () => {
+      if (generation === submitted) dirty = false;
+    });
+  };
   if (control.kind === "choice") {
     const select = document.createElement("select");
     for (const [optionValue, label] of control.options) {
@@ -180,20 +193,18 @@ export function renderControl(
       option.textContent = label;
       select.append(option);
     }
-    select.addEventListener("change", () => change(control.path, select.value));
+    select.addEventListener("change", () => commit(select.value));
     syncs.push(() => {
-      select.value = String(value(control.path) ?? "");
+      if (!dirty) select.value = String(value(control.path) ?? "");
     });
     input = select;
   } else {
     const field = document.createElement("input");
     if (control.kind === "toggle") {
       field.type = "checkbox";
-      field.addEventListener("change", () =>
-        change(control.path, field.checked),
-      );
+      field.addEventListener("change", () => commit(field.checked));
       syncs.push(() => {
-        field.checked = value(control.path) === true;
+        if (!dirty) field.checked = value(control.path) === true;
       });
     } else {
       field.type = control.kind === "number" ? "number" : "text";
@@ -203,7 +214,9 @@ export function renderControl(
         field.max = String(control.max);
         field.step = String(control.step ?? 1);
       } else field.placeholder = control.placeholder;
+      field.addEventListener("input", edited);
       const sync = () => {
+        if (dirty) return;
         const current = value(control.path);
         field.value = current === undefined ? "" : String(current);
       };
@@ -212,13 +225,15 @@ export function renderControl(
         const next =
           text === "" ? null : control.kind === "number" ? Number(text) : text;
         if (next !== null && !SETTINGS_FIELDS[control.path].accepts(next)) {
+          dirty = false;
+          generation += 1;
           sync();
           field.setCustomValidity("Out of range");
           field.reportValidity();
           field.setCustomValidity("");
           return;
         }
-        change(control.path, next);
+        commit(next);
       });
       syncs.push(sync);
     }

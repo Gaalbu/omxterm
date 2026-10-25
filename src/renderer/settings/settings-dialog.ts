@@ -1,5 +1,4 @@
 import {
-  SETTINGS_FIELDS,
   type SettingsBridge,
   type SettingsPath,
   type SettingsResult,
@@ -19,18 +18,23 @@ const LIFETIME_NOTES = {
 } as const;
 
 // Describes what a result actually did, never more: saved is not applied.
-export function describeSettingsResult(
-  result: SettingsResult,
-  path?: SettingsPath,
-): { readonly text: string; readonly error: boolean } {
+export function describeSettingsResult(result: SettingsResult): {
+  readonly text: string;
+  readonly error: boolean;
+} {
   if (result.status !== "saved") return { text: result.message, error: true };
   if (!result.application.applied)
     return {
       text: `Saved to config.json, but it could not be applied: ${result.application.notice}`,
       error: true,
     };
-  const note = path ? LIFETIME_NOTES[SETTINGS_FIELDS[path].lifetime] : "";
-  return { text: `Saved.${note}`, error: false };
+  const note = result.lifetimes
+    .map((lifetime) => LIFETIME_NOTES[lifetime])
+    .join("");
+  const notices = result.application.notices
+    .map((notice) => ` ${notice}`)
+    .join("");
+  return { text: `Saved.${note}${notices}`, error: false };
 }
 
 // Save-on-change dialog and controls adapted from ruscher/omxterm PR #622 at
@@ -165,11 +169,24 @@ async function editField(
     if (text) await clipboard?.writeText(text).catch(() => undefined);
     return;
   }
+  const previous = field.value;
   const text = await clipboard?.readText().catch(() => "");
-  if (!text || field.ownerDocument.activeElement !== field) return;
+  if (
+    !text ||
+    !field.isConnected ||
+    field.ownerDocument.activeElement !== field ||
+    field.value !== previous ||
+    field.selectionStart !== start ||
+    field.selectionEnd !== end
+  )
+    return;
   if (start === null || end === null) field.value = text;
   else field.setRangeText(text, start, end, "end");
   field.dispatchEvent(new Event("input", { bubbles: true }));
+  // Programmatic application Paste does not produce a native change event.
+  // Graphical controls commit deliberately here; raw JSON remains explicit Save.
+  if (field instanceof HTMLInputElement)
+    field.dispatchEvent(new Event("change", { bubbles: true }));
 }
 
 function buildSettingsView(
@@ -210,20 +227,28 @@ function buildSettingsView(
     for (const sync of syncs) sync();
   };
   let queue = Promise.resolve();
-  const change = (path: SettingsPath, value: unknown) => {
+  let pending = 0;
+  const completed = (text: string, error: boolean) => {
+    pending -= 1;
+    report(pending > 0 ? `Saving…${error ? ` ${text}` : ""}` : text, error);
+  };
+  const change = (path: SettingsPath, value: unknown, settled: () => void) => {
+    pending += 1;
     report("Saving…", false);
     queue = queue
       .then(() => bridge.change({ path, value }))
       .then(
         (result) => {
           if (!live()) return;
+          settled();
           adopt(result.snapshot);
-          const message = describeSettingsResult(result, path);
-          report(message.text, message.error);
+          const message = describeSettingsResult(result);
+          completed(message.text, message.error);
         },
         () => {
           if (!live()) return;
-          report("Not saved: the request failed.", true);
+          settled();
+          completed("Not saved: the request failed.", true);
           for (const sync of syncs) sync();
         },
       );

@@ -2,6 +2,7 @@ import { createHash, randomBytes } from "node:crypto";
 import {
   chmod,
   mkdir,
+  lstat,
   readFile,
   rename,
   rm,
@@ -9,11 +10,13 @@ import {
   writeFile,
 } from "node:fs/promises";
 import path from "node:path";
-import type {
-  SettingsChange,
-  SettingsPath,
-  SettingsResult,
-  SettingsSnapshot,
+import {
+  SETTINGS_FIELDS,
+  type SettingsLifetime,
+  type SettingsChange,
+  type SettingsPath,
+  type SettingsResult,
+  type SettingsSnapshot,
 } from "../shared/settings";
 import type { UserConfiguration } from "../shared/user-configuration";
 import type { UserConfigurationReloadOutcome } from "./user-configuration-reloader";
@@ -26,8 +29,9 @@ import {
 
 export interface SettingsFiles {
   read(filePath: string): Promise<Uint8Array>;
-  // Replaces filePath atomically with text, keeping an existing file's mode.
-  replace(filePath: string, text: string): Promise<void>;
+  // Prepare text, then check the revision immediately before atomic replacement.
+  // False means a concurrent edit was detected; no replacement was performed.
+  replace(filePath: string, text: string, revision: string): Promise<boolean>;
 }
 
 export interface SettingsService {
@@ -76,7 +80,7 @@ export function createSettingsService(options: {
       ...options.loadOptions,
       read: fixedRead(encoder.encode(text)),
     });
-    return load.fallback ? describe(load.fallback.error) : undefined;
+    return load;
   };
 
   const readCurrent = async (): Promise<CurrentDocument> => {
@@ -88,10 +92,13 @@ export function createSettingsService(options: {
       return {
         revision: "unreadable",
         text: null,
-        problem: "config.json could not be read",
+        problem:
+          cause instanceof SettingsSymlinkError
+            ? cause.message
+            : "config.json could not be read",
       };
     }
-    const revision = createHash("sha256").update(bytes).digest("hex");
+    const revision = revisionOf(bytes);
     let text: string;
     try {
       text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
@@ -131,28 +138,65 @@ export function createSettingsService(options: {
     ...(current.problem ? { problem: current.problem } : {}),
   });
 
-  const commit = async (text: string): Promise<SettingsResult> => {
-    const invalid = await validate(text);
-    if (invalid !== undefined)
+  const conflict = async (): Promise<SettingsResult> => ({
+    status: "conflict",
+    message:
+      "config.json changed since this edit started. Copy your draft, reload the file and apply your edits again.",
+    snapshot: snapshotOf(await readCurrent()),
+  });
+
+  const commit = async (
+    text: string,
+    current: CurrentDocument,
+  ): Promise<SettingsResult> => {
+    const candidate = await validate(text);
+    if (candidate.fallback)
       return {
         status: "rejected",
-        message: invalid,
+        message: describe(candidate.fallback.error),
         snapshot: snapshotOf(await readCurrent()),
       };
     try {
-      await files.replace(configurationPath, text);
-    } catch {
+      if (!(await files.replace(configurationPath, text, current.revision)))
+        return conflict();
+    } catch (cause) {
       return {
         status: "failed",
-        message: "config.json could not be written. Nothing was changed.",
+        message:
+          cause instanceof SettingsSymlinkError
+            ? cause.message
+            : "config.json could not be written. Nothing was changed.",
         snapshot: snapshotOf(await readCurrent()),
       };
     }
-    const application = await options.reload();
+    // Persistence already succeeded. Exceptional consumer/transport failure
+    // cannot turn it into a "not saved" response or imply rollback.
+    let application: UserConfigurationReloadOutcome;
+    try {
+      application = await options.reload();
+    } catch {
+      application = {
+        applied: false,
+        notice:
+          "Unexpected application failure. Some settings may already be active; choose View -> Reload User Configuration again.",
+      };
+    }
     return {
       status: "saved",
-      snapshot: snapshotOf(await readCurrent()),
+      // This snapshot belongs to the bytes we saved, not an external edit that
+      // might arrive while reload applies. New typing must retain that base.
+      snapshot: snapshotOf({
+        revision: revisionOf(encoder.encode(text)),
+        text,
+        document: JSON.parse(text) as Record<string, unknown>,
+        configuration: candidate.configuration,
+      }),
       application,
+      lifetimes: changedLifetimes(
+        current.configuration ?? DEFAULT_USER_CONFIGURATION,
+        candidate.configuration,
+        options.loadOptions.platform ?? process.platform,
+      ),
     };
   };
 
@@ -171,7 +215,7 @@ export function createSettingsService(options: {
           };
         const document = structuredClone(current.document ?? { version: 1 });
         setField(document, change.path, change.value);
-        return commit(`${JSON.stringify(document, null, 2)}\n`);
+        return commit(`${JSON.stringify(document, null, 2)}\n`, current);
       }),
     saveText: (text, revision) =>
       serialize(async () => {
@@ -183,7 +227,7 @@ export function createSettingsService(options: {
               "config.json changed since this draft was opened. Copy your draft, reload the file and apply your edits again.",
             snapshot: snapshotOf(current),
           };
-        return commit(text);
+        return commit(text, current);
       }),
   };
 }
@@ -265,22 +309,71 @@ function isNotFound(cause: unknown): boolean {
   );
 }
 
+// Compare validated effective values, not document spelling: removing an entry
+// can change its lifetime, while explicitly writing its default may be a no-op.
+function changedLifetimes(
+  before: UserConfiguration,
+  after: UserConfiguration,
+  platform: string,
+): Exclude<SettingsLifetime, "live">[] {
+  const previous = settingsValues(before, undefined);
+  const next = settingsValues(after, undefined);
+  return [
+    ...new Set(
+      (Object.keys(SETTINGS_FIELDS) as SettingsPath[])
+        .filter((field) => field !== "windowsShell" || platform === "win32")
+        .filter((field) => previous[field] !== next[field])
+        .map((field) => SETTINGS_FIELDS[field].lifetime)
+        .filter((lifetime) => lifetime !== "live"),
+    ),
+  ];
+}
+
+function revisionOf(bytes: Uint8Array): string {
+  return createHash("sha256").update(bytes).digest("hex");
+}
+
+class SettingsSymlinkError extends Error {
+  constructor() {
+    super(
+      "config.json is a symlink. Edit its target manually, then reload User Configuration; Settings does not write through symlinks.",
+    );
+  }
+}
+
 export const nodeSettingsFiles: SettingsFiles = {
-  read: (filePath) => readFile(filePath),
-  async replace(filePath, text) {
+  async read(filePath) {
+    if ((await lstat(filePath)).isSymbolicLink())
+      throw new SettingsSymlinkError();
+    return readFile(filePath);
+  },
+  async replace(filePath, text, revision) {
     await mkdir(path.dirname(filePath), { recursive: true });
     const mode = await stat(filePath).then(
       (stats) => stats.mode & 0o777,
       () => undefined,
     );
     const temporary = `${filePath}.${randomBytes(6).toString("hex")}.tmp`;
+    let replaced = false;
     try {
       await writeFile(temporary, text, { encoding: "utf8", flag: "wx" });
       if (mode !== undefined) await chmod(temporary, mode);
+      const latest = await nodeSettingsFiles
+        .read(filePath)
+        .then(revisionOf, (cause: unknown) => {
+          if (isNotFound(cause)) return "absent";
+          throw cause;
+        });
+      // This closes validation/preparation races, not arbitrary cross-process
+      // compare-and-swap: an external writer can still race this final rename.
+      if (latest !== revision) return false;
       await rename(temporary, filePath);
-    } catch (cause) {
-      await rm(temporary, { force: true });
-      throw cause;
+      replaced = true;
+      return true;
+    } finally {
+      // A successful rename already consumed the temporary entry. No later
+      // cleanup failure may turn a persisted write into a failed result.
+      if (!replaced) await rm(temporary, { force: true });
     }
   },
 };

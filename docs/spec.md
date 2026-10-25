@@ -1158,9 +1158,20 @@ applies. The **Config File** page shows the document with an explicit **Save**
 and **Reload File**. Writes follow ADR 0003: full startup validation before an
 atomic replacement, a field-scoped change that keeps every other entry, a raw
 save refused when the file changed since its draft was loaded, and a dirty draft
-never replaced by other changes. The status line distinguishes saved and
-applied, saved but not applied (with the reload's reason), new-window-only
-settings, and settings that need a restart for open tabs. While Settings is
+never replaced by other changes or late Save/Reload File responses. A final
+revision/presence comparison after write preparation rejects detected external
+changes without retry; it is not a cross-process atomic compare-and-swap.
+Settings preserves configuration symlinks, including dangling links, by refusing
+writes and directing the user to manual editing and reload. Pending graphical
+responses retain newer or unrelated field drafts, and saving feedback remains
+pending until queued changes settle. Raw operations are single-flight while
+typing remains usable; newer edits retain the saved bytes' revision as their
+base and are explicitly reported as not saved. Closed views ignore late results.
+The status line distinguishes saved and applied, saved but not applied (even
+when reload throws after persistence), new-window/session-only settings, and
+settings that need a restart for open tabs. Both save routes include returned
+notices and deferred lifetimes of changed effective values, not no-op spelling
+changes. While Settings is
 open it owns modal input like About, and the auxiliary panel stays visible
 but inert: terminal-directed actions and tab navigation are ignored,
 application Copy, Paste and Select All edit its focused field and never reach

@@ -261,7 +261,11 @@ describe("settings file helpers", () => {
     roots.push(root);
     const file = path.join(root, "config.json");
     await writeFile(file, "{}", { mode: 0o600 });
-    await nodeSettingsFiles.replace(file, '{ "version": 1 }\n');
+    await nodeSettingsFiles.replace(
+      file,
+      '{ "version": 1 }\n',
+      "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+    );
     expect(await readFile(file, "utf8")).toBe('{ "version": 1 }\n');
     if (process.platform !== "win32")
       expect((await stat(file)).mode & 0o777).toBe(0o600);

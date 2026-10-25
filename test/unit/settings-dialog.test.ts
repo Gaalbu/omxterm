@@ -6,97 +6,185 @@ import {
 } from "../../src/renderer/settings/settings-dialog";
 import type {
   SettingsBridge,
-  SettingsChange,
   SettingsResult,
   SettingsSnapshot,
 } from "../../src/shared/settings";
 
-const base: SettingsSnapshot = {
-  configurationPath: "/synthetic/omxterm/config.json",
-  platform: "linux",
-  revision: "r1",
-  text: '{\n  "version": 1\n}\n',
-  values: {
-    confirmClose: true,
-    logLevel: "info",
-    "font.family": "",
-    "font.size": 16,
-    "font.lineHeight": 1,
-    "font.ligatures": true,
-    "theme.path": "",
-    "scrollback.lines": 10_000,
-    "terminal.padding.top": 0,
-    "terminal.padding.right": 8,
-    "terminal.padding.bottom": 8,
-    "terminal.padding.left": 8,
-    "window.showTitleBar": true,
-    "window.showTabBar": true,
-    "window.alwaysOnTop": false,
-  },
-};
+import {
+  base,
+  button,
+  deferred,
+  installSettingsDom,
+  open,
+  saved,
+} from "../fixtures/settings-dialog-dom";
 
-beforeAll(() => {
-  HTMLDialogElement.prototype.showModal = function () {
-    this.setAttribute("open", "");
-  };
-  HTMLDialogElement.prototype.close = function () {
-    this.removeAttribute("open");
-  };
-});
+beforeAll(installSettingsDom);
 
 afterEach(() => {
   document.body.replaceChildren();
 });
 
-function saved(
-  snapshot: SettingsSnapshot,
-  application: Extract<SettingsResult, { status: "saved" }>["application"] = {
-    applied: true,
-    notices: [],
-  },
-): SettingsResult {
-  return { status: "saved", snapshot, application };
-}
+it("keeps typing after raw submission and saves the newer draft from the submitted base", async () => {
+  const pending = deferred<SettingsResult>();
+  const view = await open({ saveText: vi.fn(() => pending.promise) });
+  const editor = view.query<HTMLTextAreaElement>("textarea");
+  const submitted = '{"version":1,"logLevel":"debug"}';
+  const newer = '{"version":1,"logLevel":"error"}';
+  editor.value = submitted;
+  editor.dispatchEvent(new Event("input"));
+  button("Save").click();
+  button("Save").click();
+  editor.value = newer;
+  editor.dispatchEvent(new Event("input"));
+  pending.resolve(saved({ ...base, text: submitted, revision: "r2" }));
+  await view.settle();
+  expect(editor.value).toBe(newer);
+  expect(
+    view.query(".settings-config-file [role=status]").textContent,
+  ).toContain("Newer edits are not saved.");
+  expect(view.bridge.saveText).toHaveBeenCalledOnce();
+  button("Save").click();
+  expect(view.bridge.saveText).toHaveBeenLastCalledWith(newer, "r2");
+});
 
-async function open(overrides: Partial<SettingsBridge> = {}) {
-  const bridge: SettingsBridge = {
-    snapshot: vi.fn(async () => base),
-    change: vi.fn(async (change: SettingsChange) =>
+it("keeps the raw draft until Reload File completes and retains typing during that read", async () => {
+  const pending = deferred<SettingsSnapshot>();
+  const view = await open({
+    snapshot: vi
+      .fn()
+      .mockResolvedValueOnce(base)
+      .mockReturnValue(pending.promise),
+  });
+  const editor = view.query<HTMLTextAreaElement>("textarea");
+  editor.value = "draft A";
+  editor.dispatchEvent(new Event("input"));
+  button("Reload File").click();
+  view.field("Font size").value = "18";
+  view.field("Font size").dispatchEvent(new Event("change"));
+  await view.settle();
+  expect(editor.value).toBe("draft A");
+  expect(button("Save").disabled).toBe(true);
+  editor.value = "draft B";
+  editor.dispatchEvent(new Event("input"));
+  pending.resolve({ ...base, revision: "external", text: "external bytes" });
+  await view.settle();
+  expect(editor.value).toBe("draft B");
+  button("Save").click();
+  expect(view.bridge.saveText).toHaveBeenLastCalledWith("draft B", "r1");
+});
+
+it.each(["saved", "rejected", "transport"])(
+  "preserves same-field and unrelated typing after an older graphical %s result",
+  async (outcome) => {
+    const pending = deferred<SettingsResult>();
+    const view = await open({ change: vi.fn(() => pending.promise) });
+    const size = view.field("Font size");
+    size.value = "18";
+    size.dispatchEvent(new Event("change"));
+    await view.settle();
+    const family = view.field("Font family");
+    family.value = "Typing another font";
+    family.dispatchEvent(new Event("input"));
+    size.value = "19";
+    size.dispatchEvent(new Event("input"));
+    if (outcome === "transport") pending.reject(new Error("transport"));
+    else
+      pending.resolve(
+        outcome === "saved"
+          ? saved({ ...base, values: { ...base.values, "font.size": 18 } })
+          : { status: "rejected", snapshot: base, message: "invalid font" },
+      );
+    await view.settle();
+    expect(family.value).toBe("Typing another font");
+    expect(size.value).toBe("19");
+  },
+);
+
+it.each(["saved", "rejected", "transport"])(
+  "shows pending feedback after the earlier queued change is %s",
+  async (outcome) => {
+    const first = deferred<SettingsResult>();
+    const second = deferred<SettingsResult>();
+    const view = await open({
+      change: vi
+        .fn()
+        .mockReturnValueOnce(first.promise)
+        .mockReturnValueOnce(second.promise),
+    });
+    view.field("Font size").value = "18";
+    view.field("Font size").dispatchEvent(new Event("change"));
+    view.field("Font family").value = "Installed Mono";
+    view.field("Font family").dispatchEvent(new Event("change"));
+    await view.settle();
+    if (outcome === "transport") first.reject(new Error("transport"));
+    else
+      first.resolve(
+        outcome === "saved"
+          ? saved(base)
+          : { status: "rejected", snapshot: base, message: "invalid" },
+      );
+    await view.settle();
+    expect(view.bridge.change).toHaveBeenCalledTimes(2);
+    expect(view.status()).toContain("Saving…");
+    expect(view.status()).not.toContain("Saved.");
+    expect(view.field("Font family").value).toBe("Installed Mono");
+    second.resolve(
       saved({
         ...base,
-        values: { ...base.values, [change.path]: change.value as unknown },
+        values: { ...base.values, "font.family": "Installed Mono" },
       }),
-    ),
-    saveText: vi.fn(async () => saved({ ...base, revision: "r2" })),
-    onOpen: () => () => {},
-    ...overrides,
-  };
-  const focusTerminal = vi.fn();
-  const onActivityChange = vi.fn();
-  const dialog = createSettingsDialog(document, bridge, {
-    focusTerminal,
-    onActivityChange,
+    );
+    await view.settle();
+    expect(view.status()).toBe("Saved.");
+  },
+);
+
+it.each([
+  ["Font family", "Installed Mono", "font.family", "Installed Mono"],
+  ["Font size", "20", "font.size", 20],
+] as const)(
+  "commits application Paste in %s without saving raw keystrokes",
+  async (label, pasted, path, value) => {
+    const view = await open();
+    const field = view.field(label);
+    field.focus();
+    if (label === "Font family") field.select();
+    view.dialog.editClipboard("paste", {
+      readText: async () => pasted,
+      writeText: async () => {},
+    });
+    await view.settle();
+    expect(view.bridge.change).toHaveBeenCalledExactlyOnceWith({ path, value });
+    const editor = view.query<HTMLTextAreaElement>("textarea");
+    editor.focus();
+    view.dialog.editClipboard("paste", {
+      readText: async () => "raw draft",
+      writeText: async () => {},
+    });
+    await view.settle();
+    expect(editor.value).toContain("raw draft");
+    expect(view.bridge.saveText).not.toHaveBeenCalled();
+    expect(view.bridge.change).toHaveBeenCalledOnce();
+  },
+);
+
+it("ignores a clipboard read after the focused field's draft or selection changes", async () => {
+  const pending = deferred<string>();
+  const view = await open();
+  const family = view.field("Font family");
+  family.focus();
+  view.dialog.editClipboard("paste", {
+    readText: () => pending.promise,
+    writeText: async () => {},
   });
-  await dialog.open();
-  const query = <Element extends HTMLElement>(selector: string) =>
-    document.querySelector<Element>(selector)!;
-  const field = (label: string) =>
-    [...document.querySelectorAll("label")]
-      .find((row) => row.textContent?.startsWith(label))!
-      .querySelector<HTMLInputElement & HTMLSelectElement>("input, select")!;
-  const status = () => query(".settings-status").textContent;
-  const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
-  return {
-    bridge,
-    dialog,
-    focusTerminal,
-    onActivityChange,
-    query,
-    field,
-    status,
-    settle,
-  };
-}
+  family.value = "New typing";
+  family.dispatchEvent(new Event("input"));
+  pending.resolve("stale clipboard");
+  await view.settle();
+  expect(family.value).toBe("New typing");
+  expect(view.bridge.change).not.toHaveBeenCalled();
+});
 
 describe("settings dialog", () => {
   it("opens with tabs reflecting the snapshot and returns focus on close", async () => {
@@ -190,16 +278,44 @@ describe("settings dialog", () => {
     expect(
       describeSettingsResult(
         saved(base, { applied: false, notice: "reload failed" }),
-        "font.size",
       ),
     ).toEqual({
       text: "Saved to config.json, but it could not be applied: reload failed",
       error: true,
     });
-    expect(describeSettingsResult(saved(base), "font.size")).toEqual({
+    expect(describeSettingsResult(saved(base))).toEqual({
       text: "Saved.",
       error: false,
     });
+  });
+
+  it("shows application warnings and deferrals for raw saves", () => {
+    expect(
+      describeSettingsResult(
+        saved(base, {
+          applied: true,
+          notices: [
+            "Restart OMXTerm for existing fonts.",
+            "A shortcut shadows terminal input.",
+          ],
+        }),
+      ),
+    ).toEqual({
+      text: "Saved. Restart OMXTerm for existing fonts. A shortcut shadows terminal input.",
+      error: false,
+    });
+  });
+
+  it("describes raw deferred lifetimes without treating a no-op as deferred", () => {
+    expect(
+      describeSettingsResult({
+        ...saved(base),
+        lifetimes: ["new-tabs", "new-windows", "restart"],
+      }).text,
+    ).toBe(
+      "Saved. New tabs use it. It applies to new windows. New tabs use it; restart OMXTerm to apply it to open tabs.",
+    );
+    expect(describeSettingsResult(saved(base)).text).toBe("Saved.");
   });
 
   it("keeps a dirty JSON draft across other changes and saves it explicitly", async () => {

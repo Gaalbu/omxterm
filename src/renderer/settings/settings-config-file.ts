@@ -31,6 +31,12 @@ export function renderConfigFile(
   actions.append(save, revert);
   let draftRevision: string | undefined;
   let dirty = false;
+  let generation = 0;
+  let pending = false;
+  const busy = (value: boolean) => {
+    pending = value;
+    save.disabled = revert.disabled = value;
+  };
   const fill = () => {
     const current = snapshot();
     if (!current) return;
@@ -47,28 +53,55 @@ export function renderConfigFile(
   };
   syncs.push(fill);
   editor.addEventListener("input", () => {
+    generation += 1;
     dirty = true;
   });
   revert.addEventListener("click", () => {
-    dirty = false;
-    message.textContent = "";
-    void bridge.snapshot().then((next) => {
-      if (live()) adopt(next);
-    });
+    if (pending) return;
+    const submitted = generation;
+    busy(true);
+    message.textContent = "Reloading…";
+    void bridge.snapshot().then(
+      (next) => {
+        if (!live()) return;
+        busy(false);
+        if (generation === submitted) dirty = false;
+        message.textContent = "";
+        adopt(next);
+      },
+      () => {
+        if (!live()) return;
+        busy(false);
+        message.textContent =
+          "The file could not be reloaded. Your draft is kept.";
+      },
+    );
   });
   save.addEventListener("click", () => {
     const revision = draftRevision ?? snapshot()?.revision;
-    if (!revision) return;
+    if (!revision || pending) return;
+    const submitted = generation;
+    busy(true);
     message.textContent = "Saving…";
     void bridge.saveText(editor.value, revision).then(
       (result) => {
         if (!live()) return;
-        if (result.status === "saved") dirty = false;
+        busy(false);
+        if (result.status === "saved") {
+          dirty = generation !== submitted;
+          draftRevision = result.snapshot.revision;
+        }
         adopt(result.snapshot);
-        message.textContent = describeSettingsResult(result).text;
+        message.textContent =
+          describeSettingsResult(result).text +
+          (result.status === "saved" && dirty
+            ? " Newer edits are not saved."
+            : "");
       },
       () => {
-        if (live()) message.textContent = "Not saved: the request failed.";
+        if (!live()) return;
+        busy(false);
+        message.textContent = "Not saved: the request failed.";
       },
     );
   });
