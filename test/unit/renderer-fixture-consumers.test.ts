@@ -72,6 +72,13 @@ function cancellationControls(result: Renderer) {
     fatals: 0,
   });
   expect(result.globals.releaseCancelledInitialization).toBeTypeOf("function");
+  const host = result.globals.__omxtermInitializationHost as {
+    isReady(): boolean;
+    wait(): Promise<void>;
+  };
+  expect(host.isReady()).toBe(false);
+  expect(host.wait).toBeTypeOf("function");
+  expect(result.onTabCommand).not.toHaveBeenCalled();
 }
 function pendingControls(result: Renderer) {
   expect(result.globals.pendingTabHeld).toBe(false);

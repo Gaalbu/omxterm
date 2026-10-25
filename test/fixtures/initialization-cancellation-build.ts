@@ -43,7 +43,9 @@ export async function buildFixture(
           build({
             absWorkingDir: projectRoot,
             bundle: true,
-            entryPoints: ["src/renderer/index.ts"],
+            entryPoints: [
+              "test/fixtures/initialization-cancellation-renderer.ts",
+            ],
             format: "iife",
             platform: "browser",
             loader: { ".ttf": "binary" },

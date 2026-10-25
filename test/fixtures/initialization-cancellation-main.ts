@@ -14,6 +14,7 @@ import { spawnFixturePty } from "./native-fixture-pty";
 import { nativeFixturePlatform } from "./restty-host-platform";
 import { createResttyHostSessions } from "./restty-host-sessions";
 import { recordInitializationStage } from "./initialization-cancellation-diagnostics";
+import { startCancellationTab } from "./initialization-cancellation-readiness";
 
 const root = __dirname;
 const boundary = process.argv.includes("--fixture-boundary=fonts")
@@ -189,7 +190,9 @@ async function run() {
     "A native program ready",
   );
   stage("a-ready", "complete");
-  application.newTabInSelectedWindow();
+  await startCancellationTab(window.webContents, () =>
+    application.newTabInSelectedWindow(),
+  );
   stage("b-held", "begin");
   await owner.waitFor(
     async () =>

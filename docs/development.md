@@ -279,9 +279,17 @@ bundle/control checks, including deliberately stale-importer negative controls.
 
 Session-selection notifications describe ownership, not Surface adoption or host
 command readiness: panes may report a started session before their mount returns.
-The tab-removal and startup-title fixture entries observe successful registration
-of the actual host tab-command callback through their supplied bridge; their
-independent arrival observers never establish readiness. Tab-removal retains its
+The tab-removal, startup-title and initialization-cancellation fixture entries
+observe successful registration of the actual host tab-command callback through
+their supplied bridge; independent arrival observers never establish readiness.
+Initialization cancellation waits for that receipt before requesting B, not just
+A's native-child readiness. Its headless held-mount control executes the emitted
+entry and production preload, proves an early New command is lost without replay,
+and then verifies the fenced command reaches the host. Run
+`node node_modules/vitest/vitest.mjs run test/unit/initialization-readiness.test.ts test/unit/renderer-fixture-consumers.test.ts`
+for the ordering and stale-importer negative controls. This is fixture ordering
+evidence, not a diagnosis of a historical native timeout or native cancellation
+acceptance. Tab-removal retains its
 held-Surface, early-command and held-renderer controls and original deadlines.
 Headless emitted-entry/production-callback coverage:
 `node node_modules/vitest/vitest.mjs run test/unit/tab-removal-host-readiness.test.ts`.
