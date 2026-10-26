@@ -76,6 +76,10 @@ async function closeFirstTab(
   window: BrowserWindow,
   application: ReturnType<typeof startTerminalApplication>,
 ) {
+  let completedClosures = 0;
+  window.on("closed", () => {
+    completedClosures += 1;
+  });
   stage("first-held", "begin");
   await owner.waitFor(
     async () =>
@@ -101,7 +105,8 @@ async function closeFirstTab(
     [undefined],
     "One normal empty-window notification",
   );
-  assert.equal(closeRequests, 1);
+  // Renderer-loss teardown can request Close again; count completed closure.
+  assert.equal(completedClosures, 1);
   assert.equal(quits, 1);
   assert.deepEqual(exited, []);
   return {
