@@ -321,11 +321,14 @@ null and omitted paint, both pane axes and the panel, pointer/keyboard PTY resiz
 foreground focus during drag, light/dark defaults and a positive transparency
 request with blur disabled. Windows retains its documented opaque fallback for
 that request; macOS/Linux use the requested tint opacity. A Chromium pixel sample
-verifies the inset top marker above opaque first-row cell paint. Keyboard modality uses synthetic input plus programmatic separator
-focus, ordered after the owned renderer consumes the actual trusted Shift-Tab
-down/up pair and its default focus movement. Consumption and the strict
-`:focus-visible` oracle share the existing response budget; no CSS modality flag
-is forced. This is not physical tab traversal or OS-compositor pixel parity.
+verifies exact opaque accent/red pixels at the top/bottom of the returned image.
+Dimensions and BGRA bytes come from the same NativeImage representation: its
+pixel dimensions can differ from the requested 1×3 DIP rectangle at high DPI.
+No resizing or color tolerance is applied. Keyboard modality uses synthetic input
+plus programmatic separator focus, ordered after the owned renderer consumes the
+actual trusted Shift-Tab down/up pair and its default focus movement. Consumption
+and the strict `:focus-visible` oracle share the existing response budget; no CSS
+modality flag is forced. This is not physical tab traversal or OS-compositor pixel parity.
 
 The `application-about` startup fixture stops before its first window. Its
 `published-failure` control publishes the real observation, requests normal Quit
