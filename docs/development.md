@@ -533,6 +533,19 @@ recovery, exact output, closed streams and no remaining actors after recovery,
 and the original settlement-timeout failure. Cleanup never supplies a substitute
 native outcome or turns that intentional failure into verifier success.
 
+Only those notification-order cases hold the verifier's test clock at launch
+until the actual native exit emission is captured, then advance it to the same
+250 ms expiry. One independent 3-second wall-clock guard bounds readiness and
+capture together; this is event ordering, not native 250 ms latency
+qualification. Recovery closes the deferral gate before releasing any captured
+notification, so genuinely later arrivals pass through. Real time is restored
+before recovery timing and on setup/capture failure, before joining cleanup.
+An independent retirement timer shares that wall deadline, so a missing capture
+or recovery transition cannot leave an asynchronous join on a frozen clock. Portable real-Node
+controls cover late delivery, capture-gated expiry and wall-guard retirement,
+not Linux ownership qualification. The other real 250 ms negative controls and
+production deadlines remain unchanged.
+
 Positive generated-actor tests share the existing 3-second readiness/setup
 allowance with their readiness polling; their outer test guards also allow all
 three native controls and bounded recovery. This is not a 250 ms native-latency
