@@ -543,7 +543,9 @@ before recovery timing and on setup/capture failure, before joining cleanup.
 An independent retirement timer shares that wall deadline, so a missing capture
 or recovery transition cannot leave an asynchronous join on a frozen clock. Portable real-Node
 controls cover late delivery, capture-gated expiry and wall-guard retirement,
-not Linux ownership qualification. The other real 250 ms negative controls and
+not Linux ownership qualification. The no-capture control awaits actual clock
+restoration by that watchdog before asserting retirement; elapsed wall time
+alone is not its completion receipt. The other real 250 ms negative controls and
 production deadlines remain unchanged.
 
 Positive generated-actor tests share the existing 3-second readiness/setup

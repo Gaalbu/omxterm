@@ -195,11 +195,14 @@ function holdWrapperExpiryUntilExit() {
   exitView.onCapture = () => {
     now = started + 250;
   };
-  exitView.restoreClock = () => {
-    clearTimeout(guard);
-    clock.mockRestore();
-  };
-  return { expiry: started + 250, wallDeadline };
+  const retired = new Promise<void>((resolve) => {
+    exitView.restoreClock = () => {
+      clearTimeout(guard);
+      clock.mockRestore();
+      resolve();
+    };
+  });
+  return { expiry: started + 250, wallDeadline, retired };
 }
 // Three controls, preflight/signaling/recovery bounds, and witness cleanup.
 const nativeOutcomeGuardMs = 4 * positiveSetupBudgetMs + 3 * 2_000;
@@ -478,21 +481,18 @@ it(
   "retires the frozen wrapper clock on the independent wall guard when capture never arrives",
   async () => {
     exitView.defer = true;
-    const { expiry, wallDeadline } = holdWrapperExpiryUntilExit();
+    const { expiry, retired } = holdWrapperExpiryUntilExit();
     try {
       expect(Date.now()).toBe(expiry - 250);
-      await expect(until(() => false, wallNow, wallDeadline)).rejects.toThrow(
-        "Acquisition fixture deadline exceeded",
-      );
-      expect(wallNow()).toBeGreaterThanOrEqual(wallDeadline);
+      await retired;
       // Retirement cannot depend on reaching finally after a blocked join.
       expect(Date.now).toBe(wallNow);
       expect(exitView.defer).toBe(false);
       expect(exitView.received).toBeUndefined();
+      expect(exitView.release).toBeUndefined();
     } finally {
       exitView.retire();
     }
-    expect(exitView.release).toBeUndefined();
   },
   nativeOutcomeGuardMs,
 );
