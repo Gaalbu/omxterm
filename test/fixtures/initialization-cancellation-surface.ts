@@ -3,6 +3,7 @@ import {
   cancellationEvidence,
   fontBoundary,
   holdInitialization,
+  heldSurfaceNumber,
 } from "./initialization-cancellation-runtime";
 let mounts = 0;
 export const mountResttyTerminalSurface: typeof mountRealSurface = async (
@@ -10,8 +11,8 @@ export const mountResttyTerminalSurface: typeof mountRealSurface = async (
   adapter,
   options = {},
 ) => {
-  const second = ++mounts === 2;
-  if (!second) return mountRealSurface(container, adapter, options);
+  const targeted = ++mounts === heldSurfaceNumber;
+  if (!targeted) return mountRealSurface(container, adapter, options);
   const acquire = options.acquireFontInputs!;
   try {
     return await mountRealSurface(container, adapter, {

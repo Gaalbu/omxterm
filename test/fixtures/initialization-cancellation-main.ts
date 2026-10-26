@@ -17,6 +17,7 @@ import { recordInitializationStage } from "./initialization-cancellation-diagnos
 import { startCancellationTab } from "./initialization-cancellation-readiness";
 
 const root = __dirname;
+const firstTab = process.argv.includes("--fixture-tab=first");
 const boundary = process.argv.includes("--fixture-boundary=fonts")
   ? "fonts"
   : "runtime";
@@ -37,6 +38,7 @@ const inputs: string[][] = [];
 const exited: number[] = [];
 let quits = 0;
 let closeRequests = 0;
+const emptyReasons: Array<"rendering-failure" | undefined> = [];
 const owner = createResttyHostSessions({
   app,
   spawn: spawnFixturePty,
@@ -67,6 +69,52 @@ function launchRequest() {
       process.platform === "win32"
         ? ["-NoLogo", "-NoProfile", "-Command", script]
         : ["-c", script],
+  };
+}
+
+async function closeFirstTab(
+  window: BrowserWindow,
+  application: ReturnType<typeof startTerminalApplication>,
+) {
+  let completedClosures = 0;
+  window.on("closed", () => {
+    completedClosures += 1;
+  });
+  stage("first-held", "begin");
+  await owner.waitFor(
+    async () =>
+      (await window.webContents.executeJavaScript(
+        "globalThis.cancellationEvidence.held === true && globalThis.__omxtermInitializationHost.isReady()",
+      )) as boolean,
+    "First Surface held at real initialization boundary with host registered",
+  );
+  stage("first-held", "complete");
+  assert.equal(sessions.length, 0, "No first-tab PTY before close");
+  stage("first-close", "begin");
+  await application.closeSelectedTab();
+  stage("first-close", "complete");
+  stage("first-closed", "begin");
+  await owner.waitFor(
+    () => window.isDestroyed() && quits === 1,
+    "First pending tab closes its window and requests normal Quit",
+  );
+  stage("first-closed", "complete");
+  assert.equal(sessions.length, 0, "No native session created");
+  assert.deepEqual(
+    emptyReasons,
+    [undefined],
+    "One normal empty-window notification",
+  );
+  // Renderer-loss teardown can request Close again; count completed closure.
+  assert.equal(completedClosures, 1);
+  assert.equal(quits, 1);
+  assert.deepEqual(exited, []);
+  return {
+    firstTab: true,
+    heldBeforePty: true,
+    zeroPtys: true,
+    normalWindowDestruction: true,
+    quitRequests: 1,
   };
 }
 
@@ -131,7 +179,10 @@ async function run() {
             },
           };
         },
-        onTabsEmpty: lifecycle.onTabsEmpty,
+        onTabsEmpty(reason) {
+          emptyReasons.push(reason);
+          lifecycle.onTabsEmpty(reason);
+        },
         onSessionStartError: lifecycle.onSessionStartError,
         onSessionExit: lifecycle.onSessionExit,
         onSessionStarted() {},
@@ -154,7 +205,7 @@ async function run() {
         sessionActivity: controller,
         load: () =>
           window.loadFile(path.join(root, "renderer", "index.html"), {
-            query: { boundary },
+            query: { boundary, tab: firstTab ? "first" : "second" },
           }),
       };
     },
@@ -184,6 +235,17 @@ async function run() {
   stage("window-load", "complete");
   window.show();
   window.focus();
+  if (firstTab) {
+    const result = await closeFirstTab(window, application);
+    router.dispose();
+    writeSync(
+      1,
+      "__OMXTERM_CANCELLATION_RESULT__" + JSON.stringify(result) + "\n",
+    );
+    stage("complete", "begin");
+    await owner.complete(0);
+    return;
+  }
   stage("a-ready", "begin");
   await owner.waitFor(
     () => outputs[0]?.join("").includes("READY") ?? false,

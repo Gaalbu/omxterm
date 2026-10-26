@@ -14,13 +14,10 @@ import {
   type TerminalSurfaceOptions,
 } from "../terminal-surface/terminal-surface";
 import type {
-  TerminalClipboardAction,
-  TerminalFontZoom,
   TerminalSessionId,
   TerminalTabCommand,
 } from "../shared/terminal-contract";
 import type { TerminalRendererConfiguration } from "../shared/user-configuration";
-import type { TerminalBridge } from "../shared/terminal-bridge";
 import type { TerminalSnippetsResponse } from "../shared/terminal-snippets";
 import type { TerminalTheme } from "../shared/terminal-theme";
 import type { TerminalFontData } from "../shared/terminal-font-data";
@@ -44,6 +41,10 @@ import type {
 } from "../shared/local-image";
 import { createTerminalFontGenerationOwner } from "./terminal-font-generations";
 import { applyWindowTheme } from "./terminal-window-theme";
+import {
+  subscribeToGuardedActions,
+  type TerminalWindowActionSubscriptions,
+} from "./terminal-window-actions";
 
 type MountTerminalSurface = (
   container: HTMLElement,
@@ -56,7 +57,7 @@ export interface TerminalWindowPageElements {
   readonly tabsContainer: HTMLElement;
 }
 
-interface TerminalWindowPageOptions {
+interface TerminalWindowPageOptions extends TerminalWindowActionSubscriptions {
   readonly about?: AboutBridge;
   readonly settings?: SettingsBridge;
   readonly createAdapter: (
@@ -72,22 +73,16 @@ interface TerminalWindowPageOptions {
   readonly mount?: MountTerminalSurface;
   readonly onSurfaceFailure?: (message: string) => void;
   readonly loadFontData?: (family?: string) => Promise<TerminalFontData>;
-  readonly subscribeToFontZoom?: (
-    listener: (command: TerminalFontZoom) => void,
-  ) => () => void;
   readonly subscribeToConfigurationUpdates?: (
     listener: (configuration: TerminalRendererConfiguration) => void,
   ) => () => void;
   readonly userFileErrorBanner?: HTMLElement;
   readonly surfaceFailureBanner?: HTMLElement;
   readonly clipboard?: TerminalClipboard;
-  readonly subscribeToClipboardActions?: TerminalBridge["onClipboardAction"];
   readonly droppedFilePathInsertion?: (files: readonly File[]) => string;
   readonly subscribeToTabCommands?: (
     listener: (command: TerminalTabCommand) => void,
   ) => () => void;
-  readonly subscribeToTabBarToggle?: (listener: () => void) => () => void;
-  readonly subscribeToFind?: (listener: () => void) => () => void;
   readonly subscribeToTabTitles?: (
     listener: (sessionId: TerminalSessionId, title: string) => void,
   ) => () => void;
@@ -282,7 +277,7 @@ export function mountTerminalWindowPage(
   const dispose = () => {
     if (disposed) return;
     disposed = true;
-    page.removeEventListener("pagehide", onPageHide);
+    page.removeEventListener("pagehide", dispose);
     page.removeEventListener("focus", onPageFocus);
     removeFileDrops();
     removeGuardedActionListeners?.();
@@ -304,9 +299,7 @@ export function mountTerminalWindowPage(
     tabs.dispose();
     fontGenerations?.dispose();
   };
-  const onPageHide = () => dispose();
-
-  page.addEventListener("pagehide", onPageHide, { once: true });
+  page.addEventListener("pagehide", dispose, { once: true });
   page.addEventListener("focus", onPageFocus);
 
   removeConfigurationUpdateListener = options.subscribeToConfigurationUpdates?.(
@@ -347,40 +340,45 @@ export function mountTerminalWindowPage(
     tabs.setSessionTitle(sessionId, title),
   );
 
-  const ready = tabs.ready.then(() => {
-    if (disposed) return;
-    removeGuardedActionListeners = subscribeToGuardedActions(
-      options,
-      tabs,
-      previewActive,
-      (action) => dialogs?.editClipboard(action, options.clipboard),
-      (action) => auxiliaryPanel?.clipboardAction(action) ?? false,
-    );
-    removeTabCommandListener = options.subscribeToTabCommands?.((command) => {
-      if (previewActive() && MODAL_COMPETING_TAB_ACTIONS.has(command.action))
-        return;
-      tabs.handleCommand(command);
-    });
-    if (options.snippets) {
-      const snippets = options.snippets;
-      const mounted = mountSnippetsPanel(page.document, snippets, {
+  // Command reception must not wait for the first Surface's mount settlement.
+  // Pending tabs already own cancellation; unavailable Surface actions are no-ops.
+  try {
+    (() => {
+      removeGuardedActionListeners = subscribeToGuardedActions(
+        options,
         tabs,
-        language,
-        clipboard: options.clipboard,
-        blocked: previewActive,
-        onPreviewActivity: onOverlayActivity,
-      });
-      const panel = mounted.panel;
-      auxiliaryPanel = panel;
-      snippetPreview = mounted.preview;
-      panel.setBlocked(previewActive());
-      removeSnippetsToggleListener = snippets.subscribeToToggle(() =>
-        panel.toggle("snippets"),
+        previewActive,
+        (action) => dialogs?.editClipboard(action, options.clipboard),
+        (action) => auxiliaryPanel?.clipboardAction(action) ?? false,
       );
-    }
-  });
+      removeTabCommandListener = options.subscribeToTabCommands?.((command) => {
+        if (previewActive() && MODAL_COMPETING_TAB_ACTIONS.has(command.action))
+          return;
+        tabs.handleCommand(command);
+      });
+      if (options.snippets) {
+        const snippets = options.snippets;
+        const { panel, preview } = mountSnippetsPanel(page.document, snippets, {
+          tabs,
+          language,
+          clipboard: options.clipboard,
+          blocked: previewActive,
+          onPreviewActivity: onOverlayActivity,
+        });
+        auxiliaryPanel = panel;
+        snippetPreview = preview;
+        panel.setBlocked(previewActive());
+        removeSnippetsToggleListener = snippets.subscribeToToggle(() =>
+          panel.toggle("snippets"),
+        );
+      }
+    })();
+  } catch (error) {
+    dispose();
+    throw error;
+  }
 
-  return { ready, dispose };
+  return { ready: tabs.ready, dispose };
 }
 
 // Closure preparation/resolution and failure acknowledgement are deliberately
@@ -394,39 +392,6 @@ const MODAL_COMPETING_TAB_ACTIONS = new Set<TerminalTabCommand["action"]>([
   "focus-pane",
   "equalize-panes",
 ]);
-
-// Terminal-directed actions are ignored while a preview or About owns input.
-function subscribeToGuardedActions(
-  options: TerminalWindowPageOptions,
-  tabs: TerminalTabs,
-  blocked: () => boolean,
-  editBlocked: (action: TerminalClipboardAction) => void,
-  panelClipboard: (action: TerminalClipboardAction) => boolean,
-): () => void {
-  const removals = [
-    options.subscribeToFontZoom?.((command) => {
-      if (!blocked()) tabs.zoom(command);
-    }),
-    // While an overlay owns input, editing goes to its focused field, never
-    // to the terminal.
-    options.subscribeToClipboardActions?.((action, target) => {
-      // A terminal popup never migrates into panel or modal editing.
-      if (target) {
-        if (!blocked()) tabs.clipboardAction(action, target);
-      } else if (blocked()) editBlocked(action);
-      else if (!panelClipboard(action)) tabs.clipboardAction(action);
-    }),
-    options.subscribeToTabBarToggle?.(() => {
-      if (!blocked()) tabs.toggleTabBar();
-    }),
-    options.subscribeToFind?.(() => {
-      if (!blocked()) tabs.find();
-    }),
-  ];
-  return () => {
-    for (const remove of removals) remove?.();
-  };
-}
 
 function installFileDrops(
   document: Document,

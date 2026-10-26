@@ -68,13 +68,14 @@ export function headlessInitializationSurface(
 
 export async function initializationReadinessScene(
   boundary: "fonts" | "runtime" = "runtime",
+  holdHostRegistration = false,
 ) {
   const root = await mkdtemp(path.join(tmpdir(), "omxterm-init-ready-"));
   let setupWindow: (Window & typeof globalThis) | undefined;
   try {
     await buildFixture(root);
     const dom = new JSDOM(await readFile("src/renderer/index.html", "utf8"), {
-      url: `https://fixture.invalid/?boundary=${boundary}`,
+      url: `https://fixture.invalid/?boundary=${boundary}${holdHostRegistration ? "&holdHostRegistration" : ""}`,
       runScripts: "outside-only",
     });
     const window = dom.window;
@@ -148,6 +149,9 @@ export async function initializationReadinessScene(
         return ipc.listenerCount(terminalIpc.tabCommand);
       },
       release,
+      releaseRegistration() {
+        window.eval("globalThis.__omxtermInitializationHost.release()");
+      },
       send(command: TerminalTabCommand) {
         ipc.emit(terminalIpc.tabCommand, {}, command);
       },

@@ -13,7 +13,11 @@ interface Context {
   readonly sessionCount: () => number;
   readonly readiness: ReturnType<typeof createTabRemovalReadiness>;
   readonly mark: (
-    name: "early-command-observed" | "readiness-pending" | "surface-released",
+    name:
+      | "early-command-observed"
+      | "readiness-pending"
+      | "host-ready-surface-pending"
+      | "surface-released",
   ) => void;
 }
 interface SurfaceControlState {
@@ -73,21 +77,26 @@ export async function initialTabRemovalReadiness(
       completed = true;
     });
   void gate.catch(() => {});
-  if (control === "held-surface") {
+  if (control === "held-surface" || control === "held-registration") {
     await waitFor(
       "control-held-surface",
       async () =>
         (await controlState(renderer)).heldSurface &&
         context.selected() === "s1",
     );
+    if (control === "held-surface") await gate;
     await step("control-held-surface", async () => {
       const state = await controlState(renderer);
       assert.equal(context.selected(), "s1");
-      assert.equal(state.hostReady, false);
-      assert.equal(completed, false);
+      assert.equal(state.hostReady, control === "held-surface");
+      assert.equal(completed, control === "held-surface");
       assert.equal(context.sessionCount(), 1);
       assert.equal(state.newCommands, 0);
-      context.mark("readiness-pending");
+      context.mark(
+        control === "held-surface"
+          ? "host-ready-surface-pending"
+          : "readiness-pending",
+      );
     });
     await releaseSurface(renderer, context);
   }

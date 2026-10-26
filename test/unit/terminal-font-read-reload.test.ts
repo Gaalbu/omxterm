@@ -365,7 +365,7 @@ function fixture(initialFamily?: string) {
 
 async function concurrentRace() {
   const app = fixture();
-  await app.host.ready; // Avoid the separate first-tab command readiness bug.
+  await app.host.ready;
   const original = runtime.instances[0];
   await app.reload(A);
   const gate = holdRead();

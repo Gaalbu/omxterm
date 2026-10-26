@@ -23,7 +23,12 @@ const control = process.argv
   ?.slice("--tab-removal-control=".length);
 assert.ok(
   control === undefined ||
-    ["held-surface", "early-command", "held-renderer"].includes(control),
+    [
+      "held-surface",
+      "held-registration",
+      "early-command",
+      "held-renderer",
+    ].includes(control),
   "Unknown tab removal control",
 );
 
@@ -75,6 +80,7 @@ const markControl = (
     | "held-renderer-boundary"
     | "early-command-observed"
     | "readiness-pending"
+    | "host-ready-surface-pending"
     | "surface-released",
 ) => writeSync(1, `${TAB_REMOVAL_CONTROL_PREFIX}${name}\n`);
 function fail(error: unknown) {

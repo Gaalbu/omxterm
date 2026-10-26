@@ -20,27 +20,28 @@ Object.assign(globalThis, {
   cancellationEvidence,
   releaseCancelledInitialization: release,
 });
-export const fontBoundary =
-  new URLSearchParams(location.search).get("boundary") === "fonts";
+const parameters = new URLSearchParams(location.search);
+export const fontBoundary = parameters.get("boundary") === "fonts";
+export const heldSurfaceNumber = parameters.get("tab") === "first" ? 1 : 2;
 export async function holdInitialization() {
   cancellationEvidence.held = true;
   await gate;
 }
 let instances = 0;
 
-// Hold the real B runtime's readiness continuation, after actual font/core/WebGL
+// Hold the targeted runtime's readiness continuation, after actual font/core/WebGL
 // initialization and before the production Surface can request a native PTY.
 export class PatchedRestty extends RealRestty {
-  private readonly second: boolean;
+  private readonly targeted: boolean;
   constructor(options: PatchedResttyConfig) {
     super(options);
-    this.second = ++instances === 2;
+    this.targeted = ++instances === heldSurfaceNumber;
     const destroy = this.destroy.bind(this);
     this.destroy = () => {
-      if (this.second) cancellationEvidence.destroyed += 1;
+      if (this.targeted) cancellationEvidence.destroyed += 1;
       destroy();
     };
-    if (!this.second) return;
+    if (!this.targeted) return;
     const pane = super.getActivePane()!;
     const init = pane.runtime.lifecycle.init.bind(pane.runtime.lifecycle);
     pane.runtime.lifecycle.init = async () => {

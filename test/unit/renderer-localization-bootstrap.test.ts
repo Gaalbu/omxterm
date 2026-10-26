@@ -49,6 +49,7 @@ it("keeps the production failure notice subscribed until page teardown after ini
       onTitleBarToggle: subscribe,
       onLocalImageOpen: subscribe,
       onTabTitle: subscribe,
+      onSnippetsToggle: subscribe,
       windowChrome: vi.fn(),
       notifyTabsEmpty: vi.fn(),
       start,
