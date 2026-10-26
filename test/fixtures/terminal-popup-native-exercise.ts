@@ -49,24 +49,47 @@ export async function submitPopupCalibrationKey(
   key: "F5" | "F6",
   signal: AbortSignal,
 ) {
-  const operation = execute(
-    "/usr/bin/xdotool",
-    ["key", "--clearmodifiers", key],
-    {
+  signal.throwIfAborted();
+  // Standard X11/evdev keycodes bypass libxdo's named-key modifier map.
+  // The actual owned, unmodified F6 receipt still verifies this assumption.
+  const keycode = key === "F5" ? "71" : "72";
+  async function submit(action: "key" | "keyup", commandSignal?: AbortSignal) {
+    const operation = execute("/usr/bin/xdotool", [action, keycode], {
       timeout: POPUP_INPUT_ADMISSION_MS,
       maxBuffer: 1024,
-      signal,
-    },
-  );
-  // Abort/error is not process settlement. Keep the observer's suppression until
-  // the actual command and its streams close, before its owner can retire.
-  const closed = new Promise<void>((resolve) => {
-    operation.child.once("close", () => resolve());
-  });
+      ...(commandSignal ? { signal: commandSignal } : {}),
+    });
+    // Abort/error is not process settlement. Keep the observer's suppression
+    // until the actual command and its streams close, including cleanup.
+    const closed = new Promise<void>((resolve) => {
+      operation.child.once("close", () => resolve());
+    });
+    try {
+      await operation;
+    } finally {
+      await closed;
+    }
+  }
+  let failure: { error: unknown } | undefined;
   try {
-    await operation;
+    await submit("key", signal);
+  } catch (error) {
+    failure = { error };
+    throw error;
   } finally {
-    await closed;
+    // An interrupted key command can leave its key down even after close.
+    // Release only the attempted calibration key, independently of its abort.
+    try {
+      await submit("keyup");
+    } catch (error) {
+      if (failure)
+        throw new AggregateError(
+          [failure.error, error],
+          "Native popup calibration submission and key release failed",
+          { cause: failure.error },
+        );
+      throw error;
+    }
   }
 }
 const panes = ".terminal-tab:not([hidden]) .terminal-surface";

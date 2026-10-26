@@ -2,12 +2,13 @@ import type { EventEmitter } from "node:events";
 import { afterEach, expect, it, vi } from "vitest";
 import { submitPopupCalibrationKey } from "../fixtures/terminal-popup-native-exercise";
 
-const port = vi.hoisted(() => ({
-  calls: [] as unknown[][],
-  child: undefined as EventEmitter | undefined,
-  resolve: undefined as (() => void) | undefined,
-  reject: undefined as ((error: Error) => void) | undefined,
-}));
+interface Command {
+  readonly args: unknown[];
+  readonly child: EventEmitter;
+  readonly resolve: () => void;
+  readonly reject: (error: Error) => void;
+}
+const port = vi.hoisted(() => ({ commands: [] as Command[] }));
 vi.mock("electron", () => ({
   BrowserWindow: {},
   clipboard: {},
@@ -24,14 +25,16 @@ vi.mock("node:child_process", async () => {
       },
       {
         [promisify.custom]: (...args: unknown[]) => {
-          port.calls.push(args);
-          const child = (port.child = new EventEmitter());
+          const child = new EventEmitter();
+          let resolve!: () => void;
+          let reject!: (error: Error) => void;
           const operation = new Promise<{ stdout: string; stderr: string }>(
-            (resolve, reject) => {
-              port.resolve = () => resolve({ stdout: "", stderr: "" });
-              port.reject = reject;
+            (done, fail) => {
+              resolve = () => done({ stdout: "", stderr: "" });
+              reject = fail;
             },
           );
+          port.commands.push({ args, child, resolve, reject });
           return Object.assign(operation, { child });
         },
       },
@@ -39,33 +42,154 @@ vi.mock("node:child_process", async () => {
   };
 });
 afterEach(() => {
-  port.calls.length = 0;
+  port.commands.length = 0;
   vi.useRealTimers();
 });
 
-it("submits a literal bounded calibration command and joins actual close after command success", async () => {
-  vi.useFakeTimers();
-  const controller = new AbortController();
-  let settled = false;
-  const run = submitPopupCalibrationKey("F5", controller.signal).then(() => {
-    settled = true;
-  });
-  expect(port.calls).toEqual([
-    [
+it.each([
+  ["F5", "71"],
+  ["F6", "72"],
+] as const)(
+  "submits numeric modifier-free %s, then releases only its key after actual command/stream close",
+  async (key, code) => {
+    vi.useFakeTimers();
+    const controller = new AbortController();
+    let settled = false;
+    const run = submitPopupCalibrationKey(key, controller.signal).then(() => {
+      settled = true;
+    });
+    const submission = port.commands[0]!;
+    expect(submission.args).toEqual([
       "/usr/bin/xdotool",
-      ["key", "--clearmodifiers", "F5"],
+      ["key", code],
       { timeout: 5_000, maxBuffer: 1024, signal: controller.signal },
-    ],
-  ]);
-  port.resolve!();
-  await vi.advanceTimersByTimeAsync(0);
-  expect(settled).toBe(false);
-  expect(port.child!.listenerCount("close")).toBe(1);
-  port.child!.emit("close", 0, null);
-  await run;
-  expect(settled).toBe(true);
-  expect(port.child!.listenerCount("close")).toBe(0);
+    ]);
+    submission.resolve();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(settled).toBe(false);
+    expect(port.commands).toHaveLength(1);
+    expect(submission.child.listenerCount("close")).toBe(1);
+    submission.child.emit("close", 0, null);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(submission.child.listenerCount("close")).toBe(0);
+    expect(port.commands).toHaveLength(2);
+    const cleanup = port.commands[1]!;
+    expect(cleanup.args).toEqual([
+      "/usr/bin/xdotool",
+      ["keyup", code],
+      { timeout: 5_000, maxBuffer: 1024 },
+    ]);
+    cleanup.resolve();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(settled).toBe(false);
+    cleanup.child.emit("close", 0, null);
+    await run;
+    expect(settled).toBe(true);
+    expect(cleanup.child.listenerCount("close")).toBe(0);
+    expect(port.commands).toHaveLength(2);
+  },
+);
+
+it.each(["success", "error", "abort"] as const)(
+  "joins both command outcomes as well as stream closure when close arrives first (%s)",
+  async (outcome) => {
+    vi.useFakeTimers();
+    const controller = new AbortController();
+    const failure = new Error("synthetic command failure");
+    let settled = false;
+    const result = submitPopupCalibrationKey("F6", controller.signal)
+      .catch((error: unknown) => error)
+      .finally(() => {
+        settled = true;
+      });
+    const submission = port.commands[0]!;
+    submission.child.emit("exit", outcome === "success" ? 0 : 1, null);
+    submission.child.emit("close", outcome === "success" ? 0 : 1, null);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(port.commands).toHaveLength(1);
+    expect(settled).toBe(false);
+    if (outcome === "abort") controller.abort();
+    if (outcome === "success") submission.resolve();
+    else submission.reject(failure);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(port.commands).toHaveLength(2);
+    const cleanup = port.commands[1]!;
+    expect(cleanup.args).toEqual([
+      "/usr/bin/xdotool",
+      ["keyup", "72"],
+      { timeout: 5_000, maxBuffer: 1024 },
+    ]);
+    cleanup.child.emit("close", 0, null);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(settled).toBe(false);
+    cleanup.resolve();
+    expect(await result).toBe(outcome === "success" ? undefined : failure);
+    expect(settled).toBe(true);
+    expect(port.commands).toHaveLength(2);
+    expect(submission.child.listenerCount("close")).toBe(0);
+    expect(cleanup.child.listenerCount("close")).toBe(0);
+  },
+);
+
+it("does not inject or release any key for an already-aborted signal", async () => {
+  const controller = new AbortController();
+  const reason = new Error("synthetic pre-abort");
+  controller.abort(reason);
+  const result = submitPopupCalibrationKey("F5", controller.signal).catch(
+    (error: unknown) => error,
+  );
+  expect(port.commands).toHaveLength(0);
+  expect(await result).toBe(reason);
 });
+
+it.each([false, true])(
+  "reports cleanup failure after joining its streams, preserving an earlier submission error (%s)",
+  async (submissionFailed) => {
+    vi.useFakeTimers();
+    const controller = new AbortController();
+    const primary = new Error("synthetic command failure");
+    const release = new Error("synthetic keyup timeout");
+    let settled = false;
+    const result = submitPopupCalibrationKey("F5", controller.signal).catch(
+      (error: unknown) => {
+        settled = true;
+        return error;
+      },
+    );
+    const submission = port.commands[0]!;
+    if (submissionFailed) submission.reject(primary);
+    else submission.resolve();
+    submission.child.emit("exit", submissionFailed ? 1 : 0, null);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(port.commands).toHaveLength(1);
+    expect(settled).toBe(false);
+    submission.child.emit("close", submissionFailed ? 1 : 0, null);
+    await vi.advanceTimersByTimeAsync(0);
+    const cleanup = port.commands[1]!;
+    expect(cleanup.args).toEqual([
+      "/usr/bin/xdotool",
+      ["keyup", "71"],
+      { timeout: 5_000, maxBuffer: 1024 },
+    ]);
+    cleanup.reject(release);
+    cleanup.child.emit("exit", null, "SIGTERM");
+    await vi.advanceTimersByTimeAsync(0);
+    expect(settled).toBe(false);
+    cleanup.child.emit("close", null, "SIGTERM");
+    const error = await result;
+    if (submissionFailed) {
+      expect(error).toBeInstanceOf(AggregateError);
+      expect((error as AggregateError).errors).toEqual([primary, release]);
+      expect((error as AggregateError).cause).toBe(primary);
+    } else {
+      expect(error).toBe(release);
+    }
+    expect(settled).toBe(true);
+    expect(port.commands).toHaveLength(2);
+    expect(submission.child.listenerCount("close")).toBe(0);
+    expect(cleanup.child.listenerCount("close")).toBe(0);
+  },
+);
 
 it("does not mistake abort/error notification for actual native-command settlement", async () => {
   vi.useFakeTimers();
@@ -76,13 +200,28 @@ it("does not mistake abort/error notification for actual native-command settleme
     settled = true;
   });
   const rejected = expect(run).rejects.toBe(failure);
-  expect(port.calls[0]![1]).toEqual(["key", "--clearmodifiers", "F6"]);
+  const submission = port.commands[0]!;
+  expect(submission.args[1]).toEqual(["key", "72"]);
   controller.abort();
-  port.reject!(failure);
+  submission.reject(failure);
   await vi.advanceTimersByTimeAsync(0);
   expect(settled).toBe(false);
-  port.child!.emit("close", null, "SIGTERM");
+  submission.child.emit("close", null, "SIGTERM");
+  await vi.advanceTimersByTimeAsync(0);
+  const cleanup = port.commands[1]!;
+  expect(cleanup.args).toEqual([
+    "/usr/bin/xdotool",
+    ["keyup", "72"],
+    { timeout: 5_000, maxBuffer: 1024 },
+  ]);
+  expect(settled).toBe(false);
+  cleanup.resolve();
+  await vi.advanceTimersByTimeAsync(0);
+  expect(settled).toBe(false);
+  cleanup.child.emit("close", 0, null);
   await rejected;
+  expect(cleanup.child.listenerCount("close")).toBe(0);
+  expect(port.commands).toHaveLength(2);
   expect(settled).toBe(true);
-  expect(port.child!.listenerCount("close")).toBe(0);
+  expect(submission.child.listenerCount("close")).toBe(0);
 });

@@ -185,6 +185,9 @@ it.each([
   { key: "F6", code: "Unidentified" },
   { isAutoRepeat: true },
   { control: true },
+  { alt: true },
+  { meta: true },
+  { shift: true },
 ])(
   "rejects wrong key identity/modifiers rather than recording input payload (%j)",
   async (overrides) => {

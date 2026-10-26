@@ -214,9 +214,10 @@ oracles; the existing fixture supervisor still requires actual child exits and
 clean ownership settlement.
 
 **Native-input prerequisite:** use an idle, explicitly provisioned input-capable
-X11/XWayland desktop where these commands cannot create an unowned pending
-permission request. Xwayland's portal-backed XTEST may return command success
-while RemoteDesktop Start is still pending; those resources belong to Xwayland,
+X11/XWayland desktop with the standard X11/evdev F5=71 and F6=72 keycode
+mapping, where these commands cannot create an unowned pending permission
+request. Xwayland's portal-backed XTEST may return command success while
+RemoteDesktop Start is still pending; those resources belong to Xwayland,
 not the Electron fixture supervisor. A portal flag's presence or absence alone
 neither proves nor refutes admission. An already admitted portal session or a
 provisioned direct XTEST lane may work; provision/authorize it separately using
@@ -231,19 +232,30 @@ OMXTERM_TEST_PROVISIONED_NATIVE_INPUT=1 npm test -- test/integration/terminal-po
 ```
 
 The declaration is only a safety prerequisite, not proof of capability. Before
-opening the first popup, the fixture sends exactly one standard F5 warmup and
-one F6 proof, with a fixed five-second admission budget and bounded command
-submission. A cold EI fallback can discard the triggering warmup; it does not
-justify repeated attempts or sleeps. Admission requires the actual focused,
-live owned window's recognized F6 press and completed native submission, never
-xdotool exit, listener registration or menu-show/mapping timing. Preventing a
+opening the first popup, the fixture sends exactly one F5 warmup and one F6
+proof, using literal numeric keycodes 71 and 72 with a fixed five-second admission
+budget and bounded command submission. Numeric keycodes bypass libxdo's named-key
+modifier mapping (older libxdo can select Alt-modified F5/F6); calibration does not
+use `--clearmodifiers`, manipulate unowned modifiers, change keymaps or upgrade
+tools. The standard mapping is an assumption, not admission: the strict real,
+unmodified F6 receipt remains the verifier. A cold EI fallback can discard the
+triggering warmup; it does not justify repeated attempts or sleeps. Admission
+requires the actual focused, live owned window's recognized F6 press and completed
+native submission, never xdotool exit, listener registration or menu-show/mapping
+timing. Preventing a
 press can omit its release, so no release is invented as an admission requirement;
 calibration events and late releases remain suppressed before renderer/PTY
 delivery until owner retirement. Wrong owner/key, submission, receipt timeout
-and retirement have distinct fixed failure categories. Commands are joined and
-owned listeners/timers retire on closure. Original popup/outer deadlines and
-Home/Down/Return activation, exact clicked-child Paste, empty alternate child and
-both intended retarget-negative oracles remain required.
+and retirement have distinct fixed failure categories. After each attempted
+calibration command and its streams settle, a `finally` cleanup sends only that
+numeric key's `keyup`, with its own five-second command timeout and without the
+possibly aborted admission signal. Cleanup's command and stream closure are
+also joined before returning; cleanup failure fails submission, retaining any
+primary command error. An already-aborted signal sends neither command nor
+cleanup. This teardown allowance does not extend the five-second admission
+deadline or retry proof. Owned listeners/timers retire on closure. Original
+popup/outer deadlines and Home/Down/Return activation, exact clicked-child Paste,
+empty alternate child and both intended retarget-negative oracles remain required.
 
 A failed case blocks further popup-case injection in that invocation (failure,
 not a green skip). Stop and inspect the lane, including external portal state;
