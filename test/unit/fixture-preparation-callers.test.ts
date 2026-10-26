@@ -201,7 +201,10 @@ const ordinaryCases = ordinaryCallers
   .flatMap((caller) =>
     Array.from({ length: caller.cases }, (_, index) => ({ ...caller, index })),
   )
-  .concat([{ name: "window-chrome", cases: 5, index: 4, allocations: 1 }]);
+  .concat([
+    { name: "window-chrome", cases: 6, index: 4, allocations: 1 },
+    { name: "window-chrome", cases: 6, index: 5, allocations: 1 },
+  ]);
 it.each(ordinaryCases)(
   "$name callback $index joins preparation and actual context before native handoff",
   async ({ name, cases, index }) => {

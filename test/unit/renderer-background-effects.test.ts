@@ -1,5 +1,9 @@
 // @vitest-environment jsdom
 import { expect, it, vi } from "vitest";
+import { EventEmitter } from "node:events";
+import { createWindowBackgroundEffects } from "../../src/main/window-background-effects";
+import { createRendererConfigurationState } from "../../src/main/terminal-renderer-configuration";
+import { DEFAULT_USER_CONFIGURATION } from "../../src/main/user-configuration";
 import { mountTerminalWindowPage } from "../../src/renderer/terminal-window-host";
 import { DEFAULT_TERMINAL_THEME } from "../../src/shared/terminal-theme";
 import type { TerminalRendererConfiguration } from "../../src/shared/user-configuration";
@@ -95,6 +99,63 @@ it("paints live background transparency without replacing or reconfiguring its S
   expect(surface.dispose).not.toHaveBeenCalled();
   host.dispose();
 });
+
+it.each([
+  ["win32", 0, "1"],
+  ["darwin", 0.25, "0.75"],
+  ["linux", 0.25, "0.75"],
+] as const)(
+  "paints the appearance fixture's blur-disabled request using effective transparency on %s",
+  async (platform, effectiveTransparency, opacity) => {
+    const requested = Object.freeze({
+      ...DEFAULT_USER_CONFIGURATION,
+      blur: false,
+      transparency: 0.25,
+    });
+    const nativeWindow = Object.assign(new EventEmitter(), {
+      show() {},
+      isVisible: () => true,
+      isDestroyed: () => false,
+      getNativeWindowHandle: () => Buffer.alloc(8),
+      setVibrancy: vi.fn(),
+      setBackgroundMaterial: vi.fn(),
+      setBackgroundColor: vi.fn(),
+    });
+    const effects = createWindowBackgroundEffects(nativeWindow, {
+      platform,
+      windowsVersion: "10.0.26200",
+    });
+    const rendererRequest = { ...configuration, transparency: 0.25 };
+    const state = createRendererConfigurationState(
+      configuration,
+      false,
+      { mainFrame: {}, isDestroyed: () => false, send: vi.fn() },
+      effects.transparency,
+    );
+    const { host, surface, update } = harness(state.effective());
+    await host.ready;
+    try {
+      surface.applyConfiguration.mockClear();
+      // Match the native fixture's effects-before-snapshot reload ordering.
+      effects.apply(requested);
+      state.apply(rendererRequest);
+      const snapshot = state.effective();
+      update(snapshot);
+      expect(snapshot.transparency).toBe(effectiveTransparency);
+      expect(
+        document.documentElement.style.getPropertyValue(
+          "--terminal-background-opacity",
+        ),
+      ).toBe(opacity);
+      expect(requested).toMatchObject({ blur: false, transparency: 0.25 });
+      expect(state.current().transparency).toBe(0.25);
+      expect(surface.applyConfiguration).not.toHaveBeenCalled();
+    } finally {
+      host.dispose();
+      effects.dispose();
+    }
+  },
+);
 
 it("applies the native title inset and a non-black theme to the page and mount options", async () => {
   const theme = {

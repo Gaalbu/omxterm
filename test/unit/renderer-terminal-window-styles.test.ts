@@ -93,6 +93,15 @@ describe("Pane and auxiliary separator presentation", () => {
     expect(declaration(line, "width")).toBe("1px");
     expect(declaration(line, "inset")).toBe("0 auto 0 50%");
     expect(declaration(line, "pointer-events")).toBe("none");
+    expect(
+      declaration(ruleBody(".terminal-pane-divider"), "--separator-color"),
+    ).toBe("var(--terminal-pane-divider-color)");
+    expect(
+      declaration(ruleBody(".auxiliary-separator"), "--separator-color"),
+    ).toBe("var(--auxiliary-panel-divider-color)");
+    expect(declaration(line, "background")).toContain(
+      "var( --separator-color,",
+    );
     expect(foregroundMix(declaration(line, "background"))).toBe(0.18);
     const horizontal = ruleBody(
       '.terminal-pane-split[data-direction="column"] > .terminal-pane-divider::before',
@@ -101,6 +110,9 @@ describe("Pane and auxiliary separator presentation", () => {
     expect(declaration(horizontal, "width")).toBe("auto");
     expect(declaration(horizontal, "inset")).toBe("50% 0 auto");
     const hover = ruleBody(".terminal-pane-divider:hover::before");
+    expect(declaration(hover, "background")).toContain(
+      "var( --separator-color,",
+    );
     expect(foregroundMix(declaration(hover, "background"))).toBe(0.45);
     for (const selector of [
       ".terminal-pane-divider.dragging::before",
@@ -117,10 +129,15 @@ describe("Pane and auxiliary separator presentation", () => {
       ).toBe("none");
       expect(
         declaration(
-          ruleBody(`${selector}:focus-visible:not(.dragging)::before`),
+          ruleBody(`${selector}:focus-visible::before`),
           "background",
         ),
       ).toBe("var(--terminal-foreground, #e6e6e6)");
+      expect(
+        terminalWindowCss.indexOf(`${selector}:focus-visible::before`),
+      ).toBeGreaterThan(
+        terminalWindowCss.indexOf(`${selector}.dragging::before`),
+      );
     }
   });
 

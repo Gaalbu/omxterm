@@ -106,18 +106,21 @@ succeeds ([ADR 0025](adr/0025-use-restty-as-the-terminal-surface.md)).
   zoom that cannot fit every minimum keeps every session and the layout; an
   impossible divider move retains the existing proportions. Dividers paint a
   1 px line within the existing 4 px resize target/allocation; hover and drag
-  share a neutral highlight, and keyboard focus highlights the line rather than
-  outlining the target.
+  share a neutral highlight by default, independently overridable through theme
+  appearance. Keyboard-visible focus always paints the line in theme foreground
+  rather than outlining the target, including during drag and with decorative
+  paint disabled.
   Exactly one pane per tab is focused: it receives keyboard input and every
   terminal-directed action and supplies the tab and window title. In a split tab,
   its only focus marker is a 1 px top line inset horizontally by that Surface's
   left/right padding, with no side/bottom ring or dimming of other panes. It is
   a non-intercepting overlay above terminal canvas contents, including opaque
   first-row backgrounds at zero top padding, locally stacked below app overlays.
-  The marker uses the theme's cyan; if its contrast against the configured opaque
-  background is below 3:1, the theme foreground replaces it only when that
-  improves contrast. This is not a universal accessibility guarantee: a custom
-  palette can leave both colors below 3:1, transparency/blur changes the visible
+  By default the marker uses the theme's cyan; if its contrast against the
+  configured opaque background is below 3:1, the theme foreground replaces it only
+  when that improves contrast. An explicit `appearance.activePaneHighlight` hex
+  color is used exactly, without that substitution; null hides the marker. This
+  is not a universal accessibility guarantee: a custom palette can leave both colors below 3:1, transparency/blur changes the visible
   background, and the marker remains only 1 px high. Clicking a pane focuses it, and
   switching tabs restores each tab's focused pane. A new pane starts the Default
   Shell in its source pane's last OSC 7-reported local directory when the shell
@@ -484,8 +487,10 @@ succeeds ([ADR 0025](adr/0025-use-restty-as-the-terminal-surface.md)).
   dragging captures the pointer, grows the right panel when moving left and
   coalesces painting per animation frame. Up, cancel, lost capture, hide, switch,
   overlay activity and disposal end dragging at the last valid width. The
-  separator paints the same 1 px line and hover/drag/keyboard-focus states as
-  pane dividers while keeping its 6 px target/allocation. The
+  separator paints a 1 px line with the same default hover/drag and independent
+  keyboard-focus states as pane dividers, while keeping its 6 px target/allocation.
+  Its decorative color/null choice is separate from pane dividers; the panel
+  never gains an active-pane highlight. The
   focusable vertical separator exposes current/min/max pixels and readable value
   text. Left/Right grow/shrink by 10 px; Home/End choose current limits. Resize
   keys are consumed only on the separator. Width preference survives hiding,
@@ -1196,20 +1201,35 @@ resolved from the directory containing `config.json`. OMXTerm does not expand
 `~`, environment variables, shell syntax, or URLs. Symlinks are accepted only
 when their final target is a readable regular file. The Electron main process
 reads and resolves the selected path through the complete User Configuration
-loading boundary and sends only validated, typed palette data — plus bounded
+loading boundary and sends only validated, typed theme data — plus bounded
 user-file notice state — through the existing configuration boundary.
 `View -> Reload User Configuration` can therefore select a changed path after
 validating the complete document.
 
-A Terminal Theme is strict JSON containing exactly `version`, `name`, and
-`colors`. Version must be `1`. The name is a non-empty printable single line of
-at most 64 Unicode code points. `colors` contains exactly the foreground,
+A Terminal Theme is strict JSON containing required `version`, `name`, and
+`colors`, plus an optional `appearance` object. Version must be `1`. The name is
+a non-empty printable single line of at most 64 Unicode code points. `colors` contains exactly the foreground,
 background, cursor, selection foreground and background, and all 16 normal and
 bright ANSI fields shown in [`omtheme`](omtheme.json). Every color is an exact,
 case-insensitive hexadecimal `#RRGGBB` value. Alpha colors, partial palettes,
 CSS names, functions or variables, inheritance and imports are unsupported.
 Transparency and blur are User Configuration window preferences, not theme
 fields; the Terminal Theme schema has no opacity or tint setting.
+
+The optional version-1 `appearance` object accepts only `paneDivider`,
+`auxiliaryPanelDivider` and `activePaneHighlight`, each independently optional
+and either exact `#RRGGBB` or null. Empty objects are valid; null/arrays for the
+object, unknown keys and other scalar values are rejected. Omitted fields remain
+omitted in validated snapshots and restore application defaults on reload.
+Null hides only that role's decorative paint; layout, hit targets, ARIA semantics,
+keyboard controls and foreground keyboard-visible focus paint remain unchanged.
+Explicit divider colors stay exact at rest, hover and drag; defaults retain the
+18% foreground/background mix at rest and 45% on hover/drag. Foreground focus
+paint takes precedence over both, including during drag. Appearance-only reloads
+repaint window chrome without reconfiguring or refitting the Terminal Surface.
+Palette validation remains complete and non-nullable. Older builds reject this
+optional extension rather than silently ignoring it; no migration is performed.
+Configurable widths and a visual appearance editor are outside this slice.
 
 The latest successfully applied Terminal Theme is the reset baseline for its 16
 ANSI colors. OSC 104 restores that baseline (all entries or only the requested
