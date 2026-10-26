@@ -203,15 +203,19 @@ composition events, stays on the browser text path. The completing Space does
 not become substituted ASCII or a duplicate keyboard-protocol release. Ordinary
 Space uses the existing key encoder, not a new shortcut system.
 
-Restty's parsed output seam owns DA1, DA2, cursor-position and cell-size replies
-once, including split controls. DA2 has its own response. **CPR is currently
-inaccurate for some Unicode and resize sequences:** the prepared OutputFilter
-tracks a UTF-16 cursor hint before writing filtered output to Ghostty. Its hint
-can bypass the actual core position (for example after wide/combining text or
-pending-wrap resize). Fixed-provider capability tests do not cover those
-actual-core sequences;
-[#568](https://github.com/luizomf/omxterm/issues/568) tracks the reproduced
-examples.
+Restty's parsed output seam owns DA1, DA2 and cell-size replies once, including
+split controls. DA2 has its own response. Ghostty owns CPR (`CSI 6 n`) from its
+parser cursor at the query position, including Unicode, pending-wrap resize and
+origin-mode margins. After existing completion, cancellation and budget checks,
+OutputFilter synchronously submits the filtered prefix including each CPR through
+the ordinary controller, draining its core reply before later filter-owned
+replies. The returned suffix excludes that prefix; without a synchronous consumer,
+CPR passes through to core. No JavaScript cursor hint answers CPR and no second
+parser, frame lookup, Surface interface or WASM change is required. Actual-core
+production-ingestion tests cover the original
+[#568](https://github.com/luizomf/omxterm/issues/568) failures, split queries and
+mixed reply ordering, with old-interception and pass-through-only negative
+controls. This is bounded protocol evidence, not universal xterm compatibility.
 
 Ghostty starts in grapheme-cluster mode so emoji-presentation and ZWJ clusters
 occupy one two-column cell. The prepared OutputFilter bounds unfinished OSC/CSI
@@ -243,7 +247,7 @@ trailing-row consumption. Blank non-cursor pins use the destination row start;
 genuine continuation offsets remain. Pending-wrap resize reconciles the next
 insertion position with the remapped last cell: at the new edge wrap remains
 pending, otherwise the next column is selected. Actual-core regressions cover
-these behaviors independently of the inaccurate CPR hint. No renderer coordinate
+these behaviors independently of CPR assertions. No renderer coordinate
 compensation, forced viewport scrolling or clipboard normalization is added.
 
 ## Consequences and qualification

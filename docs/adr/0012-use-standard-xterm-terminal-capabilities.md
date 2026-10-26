@@ -6,11 +6,14 @@ the installed application version. These values describe the new PTY and
 replace misleading inherited values. The rest of the user's environment is
 inherited and remains outside log content.
 
-Restty's parsed output seam answers device attributes, cursor-position reports
-(CPR) and cell-size reports once. Current CPR coordinates can disagree with
-Ghostty after wide/combining text and pending-wrap resize because OutputFilter
-uses a UTF-16 cursor hint before core ingestion. This compatibility bug is
-tracked in [#568](https://github.com/luizomf/omxterm/issues/568).
+Restty's parsed output seam retains device-attribute and cell-size ownership.
+Ghostty answers cursor-position reports (CPR) from its parser cursor, including
+wide/combining text, pending-wrap resize and origin-mode margins. At each parsed
+CPR, the runtime synchronously submits the filtered prefix including the query
+and drains its reply before later filter-owned replies. This removes the
+UTF-16 cursor-hint interception without a second parser, render-frame lookup or
+WASM change. Actual-core ingestion regressions cover the failures reported in
+[#568](https://github.com/luizomf/omxterm/issues/568) and mixed reply ordering.
 See [ADR 0025](0025-use-restty-as-the-terminal-surface.md#keyboard-input-and-terminal-controls).
 
 The standard xterm capability vocabulary describes protocol compatibility.

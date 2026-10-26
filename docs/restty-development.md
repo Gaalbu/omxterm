@@ -19,7 +19,6 @@ The portable Terminal Surface (`src/terminal-surface/`) receives a session Adapt
 
 ### Current runtime limitations
 
-- **Cursor Position Reports (`CSI 6 n`):** The `OutputFilter` answers CPR queries using a retained UTF-16 cursor hint before core write. Wide/combining characters, pending wrap, and resize can cause the reply to differ from Ghostty's actual cursor ([#568](https://github.com/luizomf/omxterm/issues/568)).
 - **Reload application errors:** `user-configuration-reloader.ts` updates the active configuration snapshot before applying consumers sequentially. While validation errors cleanly retain the previous configuration, an unexpected runtime exception during consumer application has no automatic rollback.
 - **First-tab startup commands:** `terminal-window-host.ts` subscribes to tab-level actions after `tabs.ready`; an early `Close Tab` before the first tab finishes initializing can be dropped ([#571](https://github.com/luizomf/omxterm/issues/571)). `Close Window` and `Quit` remain active on separate main-process routes.
 
@@ -43,6 +42,34 @@ The pinned Ghostty core handles Kitty graphics parsing, decoding, placement, and
 - Max image dimensions: 4,194,304 source pixels (Chafa RGBA max: 16,777,216 bytes).
 - Max completed image storage: 64,000,000 bytes per screen (at most one unfinished image per screen).
 - Images stay cell-anchored across resize, font zoom, tab switching, and theme reload, and `CSI 16 t` reports current device-pixel cell metrics.
+
+### Terminal capability replies
+
+Ghostty answers `CSI 6 n` from its parser cursor at the query position, including
+Unicode, pending-wrap resize and origin-mode margins. At the existing completed
+CSI seam, the prepared `OutputFilter` synchronously submits the filtered prefix
+including CPR through the ordinary runtime controller, which drains core replies
+before filtering later DA1/DA2/`CSI 16 t` queries. No render frame or JavaScript
+cursor hint answers CPR. DA1 remains `CSI ? 1 ; 2 c`, DA2 `CSI > 0 ; 0 ; 0 c`,
+and cell-size reports retain their metrics provider.
+
+The private `filterOutput(output, onCoreOutput?)` consumer is synchronous. Each
+committed prefix is excluded from the returned suffix; one-argument consumers
+receive CPR as ordinary core-bound output, not a fabricated reply. This changes
+neither the public Surface interface nor Adapter ACK/lifetime ownership, and
+requires no WASM rebuild.
+
+Headless regressions execute production PTY ingestion and runtime-controller
+functions with the real pinned core, controlled transport/geometry and no frame
+loop. They include every two-chunk boundary of mixed queries, original Unicode
+and resize failures, cancellation/budget checks, and deliberate old-interception
+and pass-through-only negative controls:
+
+```sh
+npx vitest run test/integration/restty-cpr-core.test.ts test/unit/restty-terminal-capabilities.test.ts test/integration/restty-runtime-history.test.ts
+```
+
+These are not DOM Surface, native PTY or graphical qualification.
 
 ### Output flow control
 
@@ -127,7 +154,7 @@ Prepared SHA-256 digests:
 
 | Input                      | SHA-256                                                            |
 | -------------------------- | ------------------------------------------------------------------ |
-| Restty JavaScript runtime  | `3c4dc8554c8ccc91f0b34ebea8a5638fe6592c1a973acc0a64dafcb33ab8387e` |
+| Restty JavaScript runtime  | `f15c6c25cb2efb879b5a00b09640fcdb2d364c8d566237ff5d0ae63975bb3e44` |
 | Embedded-core chunk        | `03d79d4c745e3c74dd90082a100cbf85e5060e23ff9d16fba338b11d2db1e6be` |
 | Event declarations         | `428304b91fffa494abcda7e2ac96fc4d305db9906b1436f07650969840a2fa34` |
 | Tracked WASM core          | `a52f314c2e91e87394e67307d6b0067c8ba28f6b1e31e7587872b9c41ce88c41` |

@@ -40,9 +40,39 @@ describe("Restty terminal capability and mouse ownership", () => {
     feedAtEveryBoundary("\u001b[>c", "\u001b[>0;0;0c");
   });
 
-  it("answers cursor and cell-size reports once across every split", () => {
-    feedAtEveryBoundary("\u001b[6n", "\u001b[7;11R");
+  it("answers cell-size reports once across every split", () => {
     feedAtEveryBoundary("\u001b[16t", "\u001b[6;20;10t");
+  });
+
+  it("passes CPR to core without fabricating a reply for one-argument callers", () => {
+    const sequence = "A中B\u001b[6nZ";
+    for (let split = 0; split <= sequence.length; split++) {
+      const { handler, replies } = createHarness();
+      const output =
+        handler.filterOutput(sequence.slice(0, split)) +
+        handler.filterOutput(sequence.slice(split));
+      expect(output).toBe(sequence);
+      expect(replies).toEqual([]);
+    }
+  });
+
+  it("commits only a completed, accepted CPR prefix through its synchronous consumer", () => {
+    const { handler, replies } = createHarness();
+    // Local private-runtime extension, not a public Surface API.
+    const filter = handler.filterOutput as (
+      output: string,
+      onCoreOutput: (prefix: string) => void,
+    ) => string;
+    const prefixes: string[] = [];
+    const commit = (prefix: string) => prefixes.push(prefix);
+    expect(filter("A中\u001b[6", commit)).toBe("A中");
+    expect(prefixes).toEqual([]);
+    expect(filter("\u0018n\u001b[6\u001an", commit)).toBe("nn");
+    expect(prefixes).toEqual([]);
+    expect(filter("\u001b[" + "1".repeat(10_000_001), commit)).toBe("");
+    expect(filter("6nB\u001b[6nZ", commit)).toBe("Z");
+    expect(prefixes).toEqual(["B\u001b[6n"]);
+    expect(replies).toEqual([]);
   });
 
   it("leaves alternate-screen controls to Ghostty while owning mouse modes and reports", () => {

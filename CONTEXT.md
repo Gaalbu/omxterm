@@ -158,8 +158,10 @@ Surface's memory; they are never persisted, logged or shared with other panes.
 
 **Terminal Capability Identity** — The environment advertised to programs:
 `TERM=xterm-256color`, `COLORTERM=truecolor`, `TERM_PROGRAM=OMXTerm` and the
-running version in `TERM_PROGRAM_VERSION`. Cursor-position replies have known
-Unicode and resize inaccuracies despite this xterm identity.
+running version in `TERM_PROGRAM_VERSION`. Ghostty answers cursor-position
+queries from its parser cursor at each query's stream position, with core and
+filter-owned DA/cell-size replies kept in order without waiting for a render
+frame. This identity is not a guarantee of every xterm extension.
 
 **Shell Integration** — Terminal-specific shell startup hooks. OMXTerm leaves
 shell initialization to the user and injects no hooks.
