@@ -282,6 +282,17 @@ browser, observes focus leaving OMXTerm, then returns focus to the dialog.
 PNG captures. These checks still require an idle unlocked desktop; they do not
 claim physical keyboard navigation or pixel parity across platforms.
 
+On Windows, the real handle-drag no-resize oracle compares exact Win32 physical
+window **and** client sizes before/after input on the same HWND, monitor, DPI and
+restored state. Geometry-read failures, context transitions and one-physical-pixel
+size changes fail; there is no tolerance or retry. Electron's enclosing DIP bounds
+can gain or lose a DIP solely from moving across a fractional-scale rounding
+boundary, so their sizes are not the no-resize oracle. Physical and DIP movement,
+foreground/point ownership, pointer release/restoration and continuity checks are
+still required. Headless validator and caller controls:
+`npm test -- test/unit/window-chrome-drag-geometry.test.ts test/unit/window-chrome-native-drag.test.ts`.
+They do not replace native Windows execution.
+
 The independent Window Chrome feature smoke reuses the real renderer, host,
 Settings service/reloader, owned profiles and native PTY supervisor. Select its
 single literal case on an idle unlocked desktop:
@@ -310,11 +321,14 @@ null and omitted paint, both pane axes and the panel, pointer/keyboard PTY resiz
 foreground focus during drag, light/dark defaults and a positive transparency
 request with blur disabled. Windows retains its documented opaque fallback for
 that request; macOS/Linux use the requested tint opacity. A Chromium pixel sample
-verifies the inset top marker above opaque first-row cell paint. Keyboard modality uses synthetic input plus programmatic separator
-focus, ordered after the owned renderer consumes the actual trusted Shift-Tab
-down/up pair and its default focus movement. Consumption and the strict
-`:focus-visible` oracle share the existing response budget; no CSS modality flag
-is forced. This is not physical tab traversal or OS-compositor pixel parity.
+verifies exact opaque accent/red pixels at the top/bottom of the returned image.
+Dimensions and BGRA bytes come from the same NativeImage representation: its
+pixel dimensions can differ from the requested 1×3 DIP rectangle at high DPI.
+No resizing or color tolerance is applied. Keyboard modality uses synthetic input
+plus programmatic separator focus, ordered after the owned renderer consumes the
+actual trusted Shift-Tab down/up pair and its default focus movement. Consumption
+and the strict `:focus-visible` oracle share the existing response budget; no CSS
+modality flag is forced. This is not physical tab traversal or OS-compositor pixel parity.
 
 The `application-about` startup fixture stops before its first window. Its
 `published-failure` control publishes the real observation, requests normal Quit

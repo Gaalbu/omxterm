@@ -272,7 +272,31 @@ export async function exerciseTheme(
   };
 }
 
-async function assertTopPaint(window: BrowserWindow, selector: string) {
+export function hasThemeTopPaint(
+  { width, height }: { width: number; height: number },
+  pixels: Uint8Array,
+) {
+  const byteLength = width * height * 4;
+  if (
+    !Number.isSafeInteger(width) ||
+    !Number.isSafeInteger(height) ||
+    width < 1 ||
+    height < 2 ||
+    !Number.isSafeInteger(byteLength) ||
+    pixels.length !== byteLength
+  )
+    return false;
+  // NativeImage bitmap is BGRA. Sample the center of the first/last rows,
+  // avoiding fractional-scale blending between the marker and red cell.
+  const top = Math.floor(width / 2) * 4;
+  const bottom = (height - 1) * width * 4 + top;
+  return (
+    [239, 205, 171, 255].every((byte, i) => pixels[top + i] === byte) &&
+    [0, 0, 255, 255].every((byte, i) => pixels[bottom + i] === byte)
+  );
+}
+
+export async function assertTopPaint(window: BrowserWindow, selector: string) {
   const rect = (await window.webContents.executeJavaScript(`(() => {
     const element = document.querySelector(${JSON.stringify(selector)});
     const bounds = element.getBoundingClientRect();
@@ -280,16 +304,11 @@ async function assertTopPaint(window: BrowserWindow, selector: string) {
   })()`)) as { x: number; y: number; width: number; height: number };
   await waitFor(async () => {
     const image = await window.webContents.capturePage(rect);
-    const pixels = image.toBitmap({ scaleFactor: 1 });
-    if (pixels.length !== 12) return false;
-    // NativeImage bitmap is BGRA: inset top marker over an opaque red cell.
-    return (
-      pixels[0] === 239 &&
-      pixels[1] === 205 &&
-      pixels[2] === 171 &&
-      pixels[8] === 0 &&
-      pixels[9] === 0 &&
-      pixels[10] === 255
+    // Select the same representation for dimensions and bytes. Scale factor 1
+    // does not normalize captured device pixels to the requested DIP rectangle.
+    return hasThemeTopPaint(
+      image.getSize(1),
+      image.toBitmap({ scaleFactor: 1 }),
     );
   }, "Chromium pixels show the 1px accent above opaque first-row cell paint");
 }
