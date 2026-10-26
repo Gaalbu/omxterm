@@ -140,7 +140,7 @@ Do not infer full-suite execution coverage from aggregate counters or empty pass
 
 `npm run check:portable` is the baseline for every code change (formatting, lint, typecheck, the default Vitest suite, and an unpackaged build). Two things to know before running it:
 
-- On Linux, run the full suite from an external system terminal, not inside OMXTerm itself. The About integration fixtures can hit a relaunch timeout when nested inside OMXTerm on Fedora and Ubuntu ([#609](https://github.com/luizomf/omxterm/issues/609)).
+- A controlled Fedora reproduction of [#609](https://github.com/luizomf/omxterm/issues/609) traced the nested About relaunch timeout to inherited `APPIMAGE`: development Electron relaunched the outer terminal's AppImage instead of its own executable. Display relaunch now selects `APPIMAGE` only when `APPDIR/omxterm` matches the current executable ([ADR 0020](adr/0020-default-linux-rendering-to-x11.md)); terminal environment propagation is unchanged. This establishes a mechanism for that reproduction, not the cause of every historical Linux or Windows startup failure.
 - Known runtime limitations that tests account for are listed in the [Restty guide](restty-development.md#current-runtime-limitations).
 - Linux runs that include `terminal-popup-native` (including the full suite) need the explicitly provisioned native-input lane described below. Set `OMXTERM_TEST_PROVISIONED_NATIVE_INPUT=1` only after provisioning it. Missing prerequisites fail; they are not skipped as successful qualification.
 
