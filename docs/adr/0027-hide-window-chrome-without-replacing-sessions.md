@@ -6,11 +6,17 @@ Title and tab visibility are independent per-window presentation choices.
 `window.showTitleBar` and `window.showTabBar`, both true by default, initialize
 new windows. Reload updates those defaults without replacing existing choices.
 Menu/keybind toggles affect only the selected window, never configuration or
-session identities. An enabled tab strip needs at least two tabs.
+session identities. An enabled tab strip needs at least two Application Tabs,
+including Settings. Opening Settings never reveals a disabled strip; navigation
+and the Settings menu remain usable. Settings uses its own localized native
+title, isolated from background terminal titles/bells.
 
 macOS uses blended `hiddenInset` chrome and native traffic-light controls.
-Hiding removes the buttons and the 30 px app-owned title inset. Linux and Windows
-use frameless native windows with a 34 px renderer-drawn title/drag row, sanitized
+Hiding removes the buttons and the 30 px app-owned title inset. Terminal and
+Settings content share the same bounded native-title drag hit region, independent
+of live Surface existence. Hidden title/fullscreen reduce its height to zero;
+modal preview ownership suppresses dragging without covering Settings controls.
+Linux and Windows use frameless native windows with a 34 px renderer-drawn title/drag row, sanitized
 selected title and native minimize/maximize/restore/close actions. Colors follow
 the theme and background ownership in
 [ADR 0029](0029-compose-background-effects-with-explicit-cell-identity.md).
@@ -60,7 +66,9 @@ loading or displaying an image and retains focus.
 
 ## Ownership and consequences
 
-Layout changes refit the selected existing Surface and PTY; hidden Surfaces
+Layout changes refit a selected terminal's existing Surface and PTY or retain
+selected Settings controls. Settings reserves the same chrome space once and
+does not change native window bounds/minima. Hidden Surfaces
 retain their last real geometry. The right-side Auxiliary Panel remains below
 full-width chrome; title/tab/fullscreen geometry changes retain its memory-only
 preferred width and focused controls without replacing terminal owners. Theme

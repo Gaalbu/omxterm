@@ -74,6 +74,7 @@ export function renderShortcuts(
     readonly snapshot: () => SettingsSnapshot | undefined;
     readonly platform: string;
     readonly live: () => boolean;
+    readonly interactive: () => boolean;
     readonly report: (key?: MessageKey, error?: boolean) => void;
     readonly changeKeybind: (change: SettingsKeybindChange) => void;
     readonly captureShortcut: (
@@ -111,6 +112,7 @@ export function renderShortcuts(
   const save = (action: TerminalActionName, choice: KeybindChoice) =>
     context.changeKeybind({ action, choice });
   const record = (action: TerminalActionName) => {
+    if (!context.live() || !context.interactive()) return;
     const again = recording === action;
     release();
     if (again) return;
@@ -118,7 +120,8 @@ export function renderShortcuts(
     syncAll();
     context.report("shortcuts.prompt");
     stopCapture = context.captureShortcut((shortcut) => {
-      if (!context.live() || recording !== action) return;
+      if (!context.live() || !context.interactive() || recording !== action)
+        return;
       if ("invalid" in shortcut) {
         context.report("shortcuts.invalid", true);
         return;
@@ -199,7 +202,13 @@ export function renderShortcuts(
       unbind.disabled = keybind?.state === "unbound";
       inherit.disabled = keybind?.state === "inherit";
     });
-    row.append(name, value, state, recordButton, unbind, inherit);
+    const binding = document.createElement("div");
+    binding.className = "settings-shortcut-binding";
+    binding.append(value, state);
+    const actions = document.createElement("div");
+    actions.className = "settings-shortcut-actions";
+    actions.append(recordButton, unbind, inherit);
+    row.append(name, binding, actions);
     panel.append(row);
   }
   context.labels.push((t) => {

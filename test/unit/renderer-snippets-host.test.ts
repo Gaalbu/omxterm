@@ -63,7 +63,7 @@ it.each(["signal", "rendering"] as const)(
   },
 );
 
-it("excludes Settings, About, image and snippet preview symmetrically and keeps Settings clipboard field-only", async () => {
+it("excludes competing modals, deactivates Snippets on Settings, and keeps its clipboard field-only", async () => {
   const f = await fixture();
   f.toggle();
   await vi.waitFor(() =>
@@ -84,7 +84,10 @@ it("excludes Settings, About, image and snippet preview symmetrically and keeps 
   await vi.waitFor(() =>
     expect(document.querySelector(".settings-dialog textarea")).not.toBeNull(),
   );
-  const settings = document.querySelector(".settings-dialog")!;
+  const settings = document.querySelector<HTMLElement>(".settings-dialog")!;
+  settings
+    .querySelector<HTMLButtonElement>("#settings-tab-appearance")!
+    .click();
   const family = settings.querySelector<HTMLInputElement>(
     ".settings-text input",
   )!;
@@ -99,11 +102,33 @@ it("excludes Settings, About, image and snippet preview symmetrically and keeps 
   f.about();
   f.image();
   expect(document.querySelector(".snippet-preview")).toBeNull();
-  expect(document.querySelector(".about-dialog")).toBeNull();
+  expect(document.querySelector(".about-dialog")).not.toBeNull();
+  expect(f.root.hidden).toBe(true);
+  expect(settings.inert).toBe(true);
   expect(f.loadImage).not.toHaveBeenCalled();
+  document.querySelector<HTMLButtonElement>(".about-close")!.click();
+  expect(document.activeElement).toBe(family);
+  f.toggle();
+  expect(f.root.hidden).toBe(true);
   expect(f.transportWrites[0]).not.toHaveBeenCalled();
   f.setLanguage("pt-BR");
   expect(settings.querySelector("h2")!.textContent).toBe("Configurações");
+});
+
+it("deactivates Snippets and restores Settings when selected terminal exit chooses graphical fallback", async () => {
+  const f = await fixture();
+  f.settingsOpen();
+  await vi.waitFor(() =>
+    expect(document.querySelector("#settings-tab-general")).not.toBeNull(),
+  );
+  f.tabCommand({ action: "previous" });
+  f.toggle();
+  expect(f.root.hidden).toBe(false);
+  f.sessionHandlers[0]!.onExit({ exitCode: 0, signal: 0 });
+  expect(f.root.hidden).toBe(true);
+  expect(document.activeElement).toBe(
+    document.querySelector("#settings-tab-general"),
+  );
 });
 
 it("routes native action subscriptions to panel text, retains passive focus, and preserves exact selected injection", async () => {
