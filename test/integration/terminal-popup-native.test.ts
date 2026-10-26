@@ -5,6 +5,11 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { buildFixture } from "../fixtures/window-chrome-build";
 import { runNativeFixture } from "../fixtures/run-native-fixture";
+import {
+  POPUP_INPUT_PROVISIONING_ENV,
+  POPUP_INPUT_RECEIPT_PREFIX,
+  requireProvisionedPopupInput,
+} from "../fixtures/terminal-popup-input-admission";
 
 const executable = createRequire(import.meta.url)("electron") as string;
 const prefix = "__OMXTERM_POPUP_NATIVE__";
@@ -12,11 +17,19 @@ const prefix = "__OMXTERM_POPUP_NATIVE__";
 describe.skipIf(process.platform !== "linux")(
   "native terminal popup ownership with real PTYs",
   () => {
+    // An uncertain input/portal state must not receive the next case's keys.
+    let previousCaseFailed = false;
     it.for(["none", "close-retarget", "clipboard-retarget"])(
       "checks %s routing with settled native ownership",
       { timeout: 120_000 },
       async (control, context) => {
         context.signal.throwIfAborted();
+        requireProvisionedPopupInput(process.env[POPUP_INPUT_PROVISIONING_ENV]);
+        if (previousCaseFailed)
+          throw new Error(
+            "Native popup input lane requires operator inspection after the previous case failed",
+          );
+        previousCaseFailed = true;
         const root = await mkdtemp(
           path.join(tmpdir(), "omxterm-popup-native-"),
         );
@@ -42,6 +55,23 @@ describe.skipIf(process.platform !== "linux")(
                 "test/fixtures/terminal-popup-native-main.ts",
               ),
           });
+          const inputReceipts = execution.stdout
+            .split("\n")
+            .filter((line) => line.startsWith(POPUP_INPUT_RECEIPT_PREFIX));
+          expect(
+            inputReceipts,
+            `Native popup input admission did not complete.\n${execution.stdout}\n${execution.stderr}`,
+          ).toHaveLength(1);
+          expect(
+            JSON.parse(
+              inputReceipts[0]!.slice(POPUP_INPUT_RECEIPT_PREFIX.length),
+            ) as unknown,
+          ).toEqual({
+            warmupSubmitted: true,
+            probeSubmitted: true,
+            ownedWindow: true,
+            keyDown: true,
+          });
           expect(
             execution,
             `${execution.stdout}\n${execution.stderr}`,
@@ -58,6 +88,7 @@ describe.skipIf(process.platform !== "linux")(
                 ? "stale Close Pane must not inspect/confirm the surviving Busy child"
                 : "source popup must not read clipboard after selected-window change",
             );
+            previousCaseFailed = false;
             return;
           }
           const results = execution.stdout
@@ -83,6 +114,7 @@ describe.skipIf(process.platform !== "linux")(
             confirmationAnswers:
               "fixture-controlled; native dialog widgets not exercised",
           });
+          previousCaseFailed = false;
         } finally {
           if (!supervised) await rm(root, { recursive: true, force: true });
         }

@@ -142,6 +142,7 @@ Do not infer full-suite execution coverage from aggregate counters or empty pass
 
 - On Linux, run the full suite from an external system terminal, not inside OMXTerm itself. The About integration fixtures can hit a relaunch timeout when nested inside OMXTerm on Fedora and Ubuntu ([#609](https://github.com/luizomf/omxterm/issues/609)).
 - Known runtime limitations that tests account for are listed in the [Restty guide](restty-development.md#current-runtime-limitations).
+- Linux runs that include `terminal-popup-native` (including the full suite) need the explicitly provisioned native-input lane described below. Set `OMXTERM_TEST_PROVISIONED_NATIVE_INPUT=1` only after provisioning it. Missing prerequisites fail; they are not skipped as successful qualification.
 
 ### Focused checks
 
@@ -210,12 +211,53 @@ window-local session IDs, the real Busy decision/shared close slot, native
 clipboard selection, and effective translated/remapped/unbound menu state.
 Deliberate old Close Pane and clipboard routing controls must fail their distinct
 oracles; the existing fixture supervisor still requires actual child exits and
-clean ownership settlement. Run it alone with `npm test -- test/integration/terminal-popup-native.test.ts`.
+clean ownership settlement.
+
+**Native-input prerequisite:** use an idle, explicitly provisioned input-capable
+X11/XWayland desktop where these commands cannot create an unowned pending
+permission request. Xwayland's portal-backed XTEST may return command success
+while RemoteDesktop Start is still pending; those resources belong to Xwayland,
+not the Electron fixture supervisor. A portal flag's presence or absence alone
+neither proves nor refutes admission. An already admitted portal session or a
+provisioned direct XTEST lane may work; provision/authorize it separately using
+the platform's supported mechanisms before declaring the lane ready. Tests never
+change developer-desktop security, forge portal responses, or send guessed keys
+to a permission dialog. Do not use the declaration to bypass consent.
+
+On that provisioned lane, run alone:
+
+```sh
+OMXTERM_TEST_PROVISIONED_NATIVE_INPUT=1 npm test -- test/integration/terminal-popup-native.test.ts
+```
+
+The declaration is only a safety prerequisite, not proof of capability. Before
+opening the first popup, the fixture sends exactly one standard F5 warmup and
+one F6 proof, with a fixed five-second admission budget and bounded command
+submission. A cold EI fallback can discard the triggering warmup; it does not
+justify repeated attempts or sleeps. Admission requires the actual focused,
+live owned window's recognized F6 press and completed native submission, never
+xdotool exit, listener registration or menu-show/mapping timing. Preventing a
+press can omit its release, so no release is invented as an admission requirement;
+calibration events and late releases remain suppressed before renderer/PTY
+delivery until owner retirement. Wrong owner/key, submission, receipt timeout
+and retirement have distinct fixed failure categories. Commands are joined and
+owned listeners/timers retire on closure. Original popup/outer deadlines and
+Home/Down/Return activation, exact clicked-child Paste, empty alternate child and
+both intended retarget-negative oracles remain required.
+
+A failed case blocks further popup-case injection in that invocation (failure,
+not a green skip). Stop and inspect the lane, including external portal state;
+process settlement alone is not portal settlement. Native acceptance must record
+actual admission plus source and both negative oracles on the selected runtime,
+with no retained process/portal resources. This preflight adds no menu-map fence,
+arbitrary delay, product authorization change or desktop provisioning code.
+
 On KDE, `OMXTERM_POPUP_EVIDENCE_DIR` optionally uses Spectacle to capture and crop
 a synthetic-content-only native popup PNG (not `capturePage`, which omits OS
 menus). Busy answers are fixture-controlled, not native dialog-widget evidence;
 input is synthetic, not physical keyboard/layout or cross-platform qualification.
-Headless child-observation/build checks: `npm test -- test/unit/terminal-popup-native-fixture.test.ts`.
+Headless input-observer/child/build checks (no native input or provisioning declaration needed):
+`npm test -- test/unit/terminal-popup-input-admission.test.ts test/unit/terminal-popup-native-submission.test.ts test/unit/terminal-popup-native-fixture.test.ts`.
 
 The `window-chrome` suite includes an independent `about-only` scenario so an
 unrelated native geometry failure cannot skip About coverage. Run it alone with

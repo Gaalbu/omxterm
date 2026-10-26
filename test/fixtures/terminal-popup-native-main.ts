@@ -31,8 +31,15 @@ import {
 } from "./terminal-popup-native-pty";
 import {
   exerciseTerminalPopup,
+  submitPopupCalibrationKey,
   type NativePopup,
 } from "./terminal-popup-native-exercise";
+import {
+  observePopupInput,
+  requireProvisionedPopupInput,
+  POPUP_INPUT_PROVISIONING_ENV,
+  POPUP_INPUT_RECEIPT_PREFIX,
+} from "./terminal-popup-input-admission";
 
 const root = __dirname;
 for (const name of ["userData", "sessionData"] as const) {
@@ -63,6 +70,7 @@ let application: TerminalApplication<BrowserWindow>;
 let confirmCount = 0;
 let decision: ((confirmed: boolean) => void) | undefined;
 let completing = false;
+let inputAdmission: ReturnType<typeof observePopupInput> | undefined;
 async function finish(code: number) {
   if (completing) return;
   completing = true;
@@ -70,6 +78,7 @@ async function finish(code: number) {
     if (!popup.window.isDestroyed()) popup.menu.closePopup(popup.window);
   for (const window of windows)
     if (!window.isDestroyed()) application.forceCloseWindow(window);
+  inputAdmission?.dispose();
   for (const child of children) child.terminal.close();
   await Promise.all(exits);
   app.exit(code);
@@ -87,6 +96,7 @@ app.on("window-all-closed", () => {});
 app
   .whenReady()
   .then(async () => {
+    requireProvisionedPopupInput(process.env[POPUP_INPUT_PROVISIONING_ENV]);
     const router = registerTerminalIpcRouter(ipcMain);
     application = startTerminalApplication<BrowserWindow>({
       createWindow(lifecycle) {
@@ -262,6 +272,9 @@ app
       quit() {},
     });
     await application.newWindow();
+    const admission = (inputAdmission = observePopupInput(windows[0]!, () =>
+      BrowserWindow.getFocusedWindow(),
+    ));
     const result = await exerciseTerminalPopup({
       window: windows[0]!,
       windows,
@@ -288,6 +301,14 @@ app
       },
       configuration: () => configuration,
       capture: control === "none",
+      async admitNativeInput() {
+        const receipt = await admission.calibrate(submitPopupCalibrationKey);
+        assert.ok(admission.isAdmitted());
+        writeSync(
+          1,
+          `${POPUP_INPUT_RECEIPT_PREFIX}${JSON.stringify(receipt)}\n`,
+        );
+      },
     });
     router.dispose();
     // Do not publish success or let last-window quit bypass actual native exits.

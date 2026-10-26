@@ -15,6 +15,7 @@ import type { LocalTerminalSession } from "../../src/main/local-terminal-session
 import type { UserConfiguration } from "../../src/shared/user-configuration";
 import type { popupPtyObservation } from "./terminal-popup-native-pty";
 import { waitFor } from "./window-chrome-exercise";
+import { POPUP_INPUT_ADMISSION_MS } from "./terminal-popup-input-admission";
 
 export interface NativePopup {
   readonly window: BrowserWindow;
@@ -40,8 +41,34 @@ interface PopupOptions {
   readonly configure: (next: Partial<UserConfiguration>) => void;
   readonly configuration: () => UserConfiguration;
   readonly capture: boolean;
+  readonly admitNativeInput: () => Promise<void>;
 }
 const execute = promisify(execFile);
+
+export async function submitPopupCalibrationKey(
+  key: "F5" | "F6",
+  signal: AbortSignal,
+) {
+  const operation = execute(
+    "/usr/bin/xdotool",
+    ["key", "--clearmodifiers", key],
+    {
+      timeout: POPUP_INPUT_ADMISSION_MS,
+      maxBuffer: 1024,
+      signal,
+    },
+  );
+  // Abort/error is not process settlement. Keep the observer's suppression until
+  // the actual command and its streams close, before its owner can retire.
+  const closed = new Promise<void>((resolve) => {
+    operation.child.once("close", () => resolve());
+  });
+  try {
+    await operation;
+  } finally {
+    await closed;
+  }
+}
 const panes = ".terminal-tab:not([hidden]) .terminal-surface";
 const evaluate = <T>(window: BrowserWindow, script: string) =>
   window.webContents.executeJavaScript(script, true) as Promise<T>;
@@ -154,6 +181,16 @@ export async function exerciseTerminalPopup(options: PopupOptions) {
     "explicit child must be genuinely Busy",
   );
 
+  await options.admitNativeInput();
+  assert.ok(
+    children[0]!.observation.input() === "",
+    "Calibration must not enter the first child",
+  );
+  assert.ok(
+    children[1]!.observation.input() === "",
+    "Calibration must not enter the second child",
+  );
+
   // Real native menu keyboard activation, not a copied callback expression.
   clipboard.writeText("native-paste");
   const current = await open(options, window, 1);
@@ -178,6 +215,10 @@ export async function exerciseTerminalPopup(options: PopupOptions) {
     "Menu.popup activation must preserve production getFocusedWindow ownership",
   );
   assert.equal(children[0]!.observation.input(), "");
+  assert.ok(
+    children[1]!.observation.input() === "\u001b[200~native-paste\u001b[201~",
+    "Only the exact native popup Paste may reach the clicked child",
+  );
 
   const select = await open(options, window, 1);
   activate(select, 3);
