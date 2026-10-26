@@ -16,6 +16,7 @@ import {
 } from "../../src/shared/terminal-theme";
 import type { TerminalApplication } from "../../src/main/terminal-application";
 import { waitFor } from "./window-chrome-exercise";
+import { focusThemeSeparator } from "./theme-appearance-keyboard";
 
 const pane = ".terminal-tab:not([hidden]) .terminal-surface";
 const dividers = [
@@ -356,10 +357,7 @@ async function exerciseHiddenDividers(s: ReturnType<typeof createScene>) {
     await until(`!${element}.classList.contains('dragging')`);
     // Chromium receives Tab from an existing control. Programmatic focus then
     // selects each separator in that keyboard modality (not OS tab traversal).
-    await evaluate("appearanceInput.focus()");
-    key("Tab", true);
-    await evaluate(`${element}.focus()`);
-    await until(`${element}.matches(':focus-visible')`);
+    await focusThemeSeparator(contents, selector);
     assert.equal(await paint(selector), "rgb(240, 240, 255)");
     const keyboardGrid = grid();
     key(index === 1 ? "Up" : "Left");
@@ -379,11 +377,12 @@ async function exerciseHiddenDividers(s: ReturnType<typeof createScene>) {
     await until(`${element}.classList.contains('dragging')`);
     // Chromium may switch modality on mouseDown; restore keyboard modality
     // during captured drag to exercise simultaneous dragging/focus-visible.
-    await evaluate("appearanceInput.focus()");
-    key("Tab", true);
-    await evaluate(`${element}.focus()`);
-    await until(
-      `${element}.matches(':focus-visible') && ${element}.classList.contains('dragging')`,
+    await focusThemeSeparator(contents, selector);
+    assert.equal(
+      await evaluate(
+        `${element}.matches(':focus-visible') && ${element}.classList.contains('dragging')`,
+      ),
+      true,
     );
     assert.equal(await paint(selector), "rgb(240, 240, 255)");
     contents.sendInputEvent({
