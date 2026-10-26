@@ -32,10 +32,23 @@ export type TerminalThemeColors = Readonly<
   Record<TerminalThemeColorKey, string>
 >;
 
+export const TERMINAL_THEME_APPEARANCE_KEYS = [
+  "paneDivider",
+  "auxiliaryPanelDivider",
+  "activePaneHighlight",
+] as const;
+
+export type TerminalThemeAppearance = Readonly<
+  Partial<
+    Record<(typeof TERMINAL_THEME_APPEARANCE_KEYS)[number], string | null>
+  >
+>;
+
 export interface TerminalTheme {
   readonly version: 1;
   readonly name: string;
   readonly colors: TerminalThemeColors;
+  readonly appearance?: TerminalThemeAppearance;
 }
 
 export const DEFAULT_TERMINAL_THEME: TerminalTheme = Object.freeze({
@@ -46,7 +59,27 @@ export const DEFAULT_TERMINAL_THEME: TerminalTheme = Object.freeze({
 
 export function isTerminalTheme(value: unknown): value is TerminalTheme {
   if (!isRecord(value)) return false;
-  if (!hasExactKeys(value, ["version", "name", "colors"])) return false;
+  if (
+    Object.keys(value).some(
+      (key) => !["version", "name", "colors", "appearance"].includes(key),
+    ) ||
+    !["version", "name", "colors"].every((key) => key in value)
+  )
+    return false;
+  if ("appearance" in value) {
+    const appearance = value.appearance;
+    if (!isRecord(appearance)) return false;
+    if (
+      Object.keys(appearance).some(
+        (key) =>
+          !TERMINAL_THEME_APPEARANCE_KEYS.some((allowed) => allowed === key),
+      ) ||
+      !Object.values(appearance).every(
+        (color) => color === null || isTerminalThemeColor(color),
+      )
+    )
+      return false;
+  }
   if (value.version !== TERMINAL_THEME_VERSION) return false;
   if (!isTerminalThemeName(value.name) || !isRecord(value.colors)) return false;
   const colors = value.colors;

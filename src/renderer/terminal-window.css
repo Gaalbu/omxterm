@@ -71,6 +71,7 @@ body {
 }
 
 .terminal-pane-divider {
+  --separator-color: var(--terminal-pane-divider-color);
   flex: 0 0 var(--terminal-pane-divider-size, 4px);
   cursor: col-resize;
   touch-action: none;
@@ -86,10 +87,13 @@ body {
   inset: 0 auto 0 50%;
   width: 1px;
   pointer-events: none;
-  background: color-mix(
-    in srgb,
-    var(--terminal-background, #000000),
-    var(--terminal-foreground, #e6e6e6) 18%
+  background: var(
+    --separator-color,
+    color-mix(
+      in srgb,
+      var(--terminal-background, #000000),
+      var(--terminal-foreground, #e6e6e6) 18%
+    )
   );
 }
 
@@ -112,15 +116,18 @@ body {
 .terminal-pane-divider.dragging::before,
 .auxiliary-separator:hover::before,
 .auxiliary-separator.dragging::before {
-  background: color-mix(
-    in srgb,
-    var(--terminal-background, #000000),
-    var(--terminal-foreground, #e6e6e6) 45%
+  background: var(
+    --separator-color,
+    color-mix(
+      in srgb,
+      var(--terminal-background, #000000),
+      var(--terminal-foreground, #e6e6e6) 45%
+    )
   );
 }
 
-.terminal-pane-divider:focus-visible:not(.dragging)::before,
-.auxiliary-separator:focus-visible:not(.dragging)::before {
+.terminal-pane-divider:focus-visible::before,
+.auxiliary-separator:focus-visible::before {
   background: var(--terminal-foreground, #e6e6e6);
 }
 
@@ -361,6 +368,7 @@ body.tabs-visible .terminal-tab {
 }
 
 .auxiliary-separator {
+  --separator-color: var(--auxiliary-panel-divider-color);
   flex: 0 0 6px;
   width: 6px;
   margin-top: var(--native-title-inset);

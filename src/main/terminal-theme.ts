@@ -2,6 +2,7 @@ import { readFile, stat } from "node:fs/promises";
 import {
   MAX_TERMINAL_THEME_NAME_CODE_POINTS,
   TERMINAL_THEME_COLOR_KEYS,
+  TERMINAL_THEME_APPEARANCE_KEYS,
   TERMINAL_THEME_VERSION,
   isTerminalThemeColor,
   isTerminalThemeName,
@@ -63,7 +64,12 @@ export function validateTerminalTheme(
   themePath: string,
 ): TerminalTheme {
   const root = requireObject(document, themePath, "$", "must be an object");
-  rejectUnknownKeys(root, themePath, "$", ["version", "name", "colors"]);
+  rejectUnknownKeys(root, themePath, "$", [
+    "version",
+    "name",
+    "colors",
+    "appearance",
+  ]);
   requireKeys(root, themePath, "$", ["version", "name", "colors"]);
   if (root.version !== TERMINAL_THEME_VERSION)
     fail(themePath, "version", "must be 1");
@@ -91,10 +97,36 @@ export function validateTerminalTheme(
       );
   }
 
+  let appearance: TerminalTheme["appearance"];
+  if ("appearance" in root) {
+    const choices = requireObject(
+      root.appearance,
+      themePath,
+      "appearance",
+      "must be an object",
+    );
+    rejectUnknownKeys(
+      choices,
+      themePath,
+      "appearance",
+      TERMINAL_THEME_APPEARANCE_KEYS,
+    );
+    for (const key of Object.keys(choices)) {
+      if (choices[key] !== null && !isTerminalThemeColor(choices[key]))
+        fail(
+          themePath,
+          `appearance.${key}`,
+          "must be a CSS hexadecimal #RRGGBB color or null",
+        );
+    }
+    appearance = Object.freeze({ ...choices }) as TerminalTheme["appearance"];
+  }
+
   return Object.freeze({
     version: TERMINAL_THEME_VERSION,
     name: root.name,
     colors: Object.freeze({ ...colors }) as TerminalTheme["colors"],
+    ...(appearance ? { appearance } : {}),
   });
 }
 

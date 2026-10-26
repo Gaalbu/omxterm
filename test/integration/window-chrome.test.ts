@@ -56,6 +56,7 @@ async function runChrome(
         ...(mode === "about-only" ? ["--fixture-about-only"] : []),
         ...(mode === "settings-only" ? ["--fixture-settings-only"] : []),
         ...(mode === "feature-smoke" ? [FEATURE_SMOKE_FLAG] : []),
+        ...(mode === "theme-appearance" ? ["--fixture-theme-appearance"] : []),
       ],
       root,
       timeout: mode === "fail-fast" ? 10_000 : 100_000,
@@ -183,6 +184,34 @@ describe.skipIf(!["darwin", "linux", "win32"].includes(process.platform))(
             isolated: true,
           },
         );
+      },
+    );
+    it(
+      "reloads theme appearance without losing separator focus, resize targets or native grids",
+      { timeout: 120_000 },
+      async (testContext) => {
+        const execution = await runChrome(
+          "theme-appearance",
+          undefined,
+          testContext,
+        );
+        expect(
+          execution,
+          `Theme appearance failed.\n${execution.stdout}\n${execution.stderr}`,
+        ).toMatchObject({
+          exitCode: 0,
+          signal: null,
+          reason: "exit",
+          cleanupErrors: [],
+        });
+        const results = execution.stdout
+          .split("\n")
+          .filter((line) => line.startsWith(prefix));
+        expect(results).toHaveLength(1);
+        expect(JSON.parse(results[0]!.slice(prefix.length))).toEqual({
+          appearance: "file-reload-three-roles-both-axes-panel-focus-and-grids",
+          input: "synthetic-chromium-not-physical",
+        });
       },
     );
     it(FEATURE_SMOKE_CASE, { timeout: 120_000 }, async (testContext) => {

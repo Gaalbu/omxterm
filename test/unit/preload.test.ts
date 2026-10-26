@@ -640,10 +640,10 @@ describe("isolated preload terminal bridge responses", () => {
       showTabBar: true,
       terminalTheme: {
         ...DEFAULT_TERMINAL_THEME,
-        name: "updated",
-        colors: {
-          ...DEFAULT_TERMINAL_THEME.colors,
-          background: "#123456",
+        appearance: {
+          paneDivider: null,
+          auxiliaryPanelDivider: "#123456",
+          activePaneHighlight: null,
         },
       },
       userFileErrors: ["reload failed"],

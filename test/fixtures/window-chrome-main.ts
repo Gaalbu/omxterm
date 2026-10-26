@@ -37,6 +37,7 @@ import { exerciseAboutKeyboardWithInput } from "./about-keyboard-exercise";
 import { exerciseWindowChrome } from "./window-chrome-exercise";
 import { createFixtureSessionInput } from "./fixture-session-input";
 import { exerciseAuxiliaryPanel } from "./auxiliary-panel-exercise";
+import { exerciseTheme } from "./theme-appearance-exercise";
 import type { LocalImageData } from "../../src/shared/local-image";
 import { assertNativeChromeConstruction } from "./window-chrome-construction";
 import { chromeNativeExpectation } from "./window-policy";
@@ -49,6 +50,7 @@ import {
 type ChromeOptions = Parameters<typeof exerciseWindowChrome>[0];
 const root = __dirname;
 const auxiliaryOnly = process.argv.includes("--fixture-auxiliary-only");
+const themeAppearance = process.argv.includes("--fixture-theme-appearance");
 const featureSmoke = createWindowChromeFeatureScenario();
 const panelClipboard = { text: "", writes: [] as string[], reads: 0 };
 const actionOrdinals = new WeakMap<
@@ -169,21 +171,19 @@ async function exerciseScenario(
   router: TerminalIpcRouter,
   options: Omit<ChromeOptions, "nativeExpectation"> & Partial<ChromeOptions>,
 ) {
+  const apply = applyFixtureConfiguration(router);
   try {
+    if (themeAppearance)
+      return await exerciseTheme(options, root, apply, sessionOutputs);
     if (featureSmoke.enabled)
-      return await featureSmoke.run({
-        ...options,
-        root,
-        router,
-        apply: applyFixtureConfiguration(router),
-      });
+      return await featureSmoke.run({ ...options, root, router, apply });
     if (process.argv.includes("--fixture-settings-only"))
       return {
         settings: await runSettingsExercise(
           root,
           router,
           () => windows[0]!,
-          applyFixtureConfiguration(router),
+          apply,
         ),
       };
     if (process.argv.includes("--fixture-about-only")) {
@@ -285,7 +285,7 @@ app
       return;
     }
     const nativeExpectation =
-      auxiliaryOnly || featureSmoke.enabled
+      auxiliaryOnly || featureSmoke.enabled || themeAppearance
         ? undefined
         : chromeNativeExpectation(process.argv);
     if (nativeExpectation !== undefined)

@@ -169,6 +169,7 @@ function harness(
     "../../src/shared/terminal-ipc": { terminalIpc: {} },
     "./window-chrome-exercise": { exerciseWindowChrome },
     "./auxiliary-panel-exercise": { exerciseAuxiliaryPanel: vi.fn() },
+    "./theme-appearance-exercise": { exerciseTheme: vi.fn() },
     "./window-chrome-construction": { assertNativeChromeConstruction() {} },
     "./window-policy": {
       chromeNativeExpectation: () => "native-maximize-observed",

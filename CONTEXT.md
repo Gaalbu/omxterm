@@ -106,8 +106,11 @@ family change during pending font acquisition can fail an initializing tab.
 controls, chosen only by the User Configuration `language` key (`en-US` default
 or `pt-BR`). Diagnostics, logs and Terminal Payload stay untranslated.
 
-**Terminal Theme** — The terminal palette: foreground, background, cursor,
-selection and ANSI colors. The bundled default is `omtheme`.
+**Terminal Theme** — The terminal palette (foreground, background, cursor,
+selection and ANSI colors), plus optional independent hex/null appearance choices
+for pane dividers, the Auxiliary Panel divider and the active pane's inset top
+highlight. Omission retains defaults; null hides decorative paint, not separator
+keyboard-focus feedback or resizing. The bundled default is `omtheme`.
 
 **Terminal Font Stack** — The ordered fonts used to render terminal text. An
 explicitly configured installed family takes precedence; otherwise FiraCode Nerd

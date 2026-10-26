@@ -408,6 +408,44 @@ Point `config.json` to your theme file (relative to `config.json` or as an absol
 }
 ```
 
+### Pane and panel appearance
+
+Optionally add `appearance` next to `colors` in your version-1 theme file:
+
+```json
+"appearance": {
+  "paneDivider": "#505068",
+  "auxiliaryPanelDivider": null,
+  "activePaneHighlight": "#80d4ff"
+}
+```
+
+Each field is independent and optional. An empty `appearance: {}` is valid.
+
+| Field                   | Omitted                                                          | Six-digit `#RRGGBB`                        | `null`                                        |
+| ----------------------- | ---------------------------------------------------------------- | ------------------------------------------ | --------------------------------------------- |
+| `paneDivider`           | Neutral line, brighter on hover/drag                             | Exact color at rest, hover and drag        | Hides decorative pane divider paint           |
+| `auxiliaryPanelDivider` | Same neutral defaults                                            | Exact color at rest, hover and drag        | Hides decorative Snippets panel divider paint |
+| `activePaneHighlight`   | Theme cyan, or foreground when it improves insufficient contrast | Exact color, without contrast substitution | Hides the active split pane's top line        |
+
+Reload User Configuration to repaint existing windows. Omission restores defaults
+rather than retaining an earlier override. These choices change no resize target,
+layout space, keyboard controls or terminal behavior. The panel never gains an
+active-pane highlight. The active pane's marker remains an inset 1 px top overlay,
+not a rectangular ring.
+
+**Keyboard focus is separate from decorative paint:** a keyboard-focused resize
+separator always paints its 1 px line in the theme foreground, even with `null`
+or while dragging. Losing focus restores the chosen decorative state. Arbitrary
+palettes and transparency do not guarantee contrast or accessibility.
+
+Only the three documented keys and hex/null values are accepted; `appearance`
+itself must be an object, not `null`. The 21 required palette colors remain
+non-nullable. This optional extension keeps theme version 1, but older OMXTerm
+builds that predate it reject `appearance`; remove that object to use the same
+palette in those builds. There are no width preferences or appearance controls
+in Settings.
+
 ### Theme troubleshooting
 
 A valid theme file requires `"version": 1`, a single-line `"name"` (1–64 characters), and all 21 color fields formatted as 6-digit hex strings (`#RRGGBB`). For transparency, use `window.transparency` in `config.json` rather than alpha hex codes. See [`docs/omtheme.json`](omtheme.json) for the canonical palette.

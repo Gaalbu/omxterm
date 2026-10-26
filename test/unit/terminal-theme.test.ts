@@ -10,6 +10,7 @@ import {
 import {
   DEFAULT_TERMINAL_THEME,
   TERMINAL_THEME_COLOR_KEYS,
+  isTerminalTheme,
 } from "../../src/shared/terminal-theme";
 
 const themePath = "/isolated/themes/custom.json";
@@ -61,6 +62,69 @@ describe("strict version 1 Terminal Theme", () => {
     expect(Object.isFrozen(theme)).toBe(true);
     expect(Object.isFrozen(theme.colors)).toBe(true);
   });
+
+  it.each([
+    {},
+    { paneDivider: "#aBcDeF" },
+    { auxiliaryPanelDivider: "#123456" },
+    { activePaneHighlight: "#654321" },
+    { paneDivider: null },
+    { auxiliaryPanelDivider: null },
+    { activePaneHighlight: null },
+    {
+      paneDivider: "#123456",
+      auxiliaryPanelDivider: null,
+      activePaneHighlight: "#abcdef",
+    },
+  ])(
+    "preserves optional appearance choices in an immutable copy: %j",
+    (appearance) => {
+      const document = { ...themeDocument(), appearance };
+      const theme = validateTerminalTheme(document, themePath);
+      expect(theme).toEqual(document);
+      expect(isTerminalTheme(theme)).toBe(true);
+      expect(theme.appearance).not.toBe(appearance);
+      expect(Object.isFrozen(theme.appearance)).toBe(true);
+      expect(isTerminalTheme(themeDocument())).toBe(true);
+      expect(
+        validateTerminalTheme(themeDocument(), themePath),
+      ).not.toHaveProperty("appearance");
+    },
+  );
+
+  it.each<[unknown, string]>([
+    [null, "appearance"],
+    [[], "appearance"],
+    [undefined, "appearance"],
+    [false, "appearance"],
+    [{ "": null }, "appearance."],
+    [{ extra: "#123456" }, "appearance.extra"],
+    ...["paneDivider", "auxiliaryPanelDivider", "activePaneHighlight"].flatMap(
+      (key) =>
+        [
+          undefined,
+          0,
+          false,
+          "#fff",
+          "#12345678",
+          "red",
+          "var(--paint)",
+          "#zzzzzz",
+        ].map((color): [unknown, string] => [
+          { [key]: color },
+          `appearance.${key}`,
+        ]),
+    ),
+  ])(
+    "rejects invalid appearance %j at %s in main and IPC",
+    (appearance, location) => {
+      const document = { ...themeDocument(), appearance };
+      expect(() => validateTerminalTheme(document, themePath)).toThrow(
+        expect.objectContaining({ themePath, location }),
+      );
+      expect(isTerminalTheme(document)).toBe(false);
+    },
+  );
 
   it.each([
     [{ ...themeDocument(), extra: true }, "$.extra"],

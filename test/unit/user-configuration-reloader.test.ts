@@ -1,4 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
+import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import {
   createUserConfigurationReloader,
   type ActiveUserConfiguration,
@@ -75,6 +78,58 @@ function harness(load: () => Promise<UserConfigurationLoad>) {
   return { reloader, initial, apply, write, setLevel, writeStderr };
 }
 
+it("falls back on invalid appearance at startup and retains an accepted null theme on rejected reload without rewriting files", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "omxterm-appearance-"));
+  try {
+    const directory = path.join(root, "omxterm");
+    await mkdir(directory);
+    const configFile = path.join(directory, "config.json");
+    const themeFile = path.join(directory, "theme.json");
+    const configText =
+      '{"version":1,"font":{"size":24},"theme":{"path":"theme.json"}}';
+    const invalidText = JSON.stringify({
+      ...DEFAULT_TERMINAL_THEME,
+      appearance: { paneDivider: "red" },
+    });
+    await writeFile(configFile, configText);
+    await writeFile(themeFile, invalidText);
+    const load = () =>
+      loadUserConfiguration({
+        environment: { XDG_CONFIG_HOME: root },
+        homeDirectory: root,
+        getInstalledFontFamilyMetrics: async () => undefined,
+      });
+    const startup = await load();
+    expect(startup.configuration.fontSize).toBe(24);
+    expect(startup.configuration.terminalTheme).toEqual(DEFAULT_TERMINAL_THEME);
+    expect(startup.fallback?.error.reason).toContain("appearance.paneDivider");
+    const reloader = createUserConfigurationReloader({
+      initial: { configuration: startup.configuration, userFileErrors: [] },
+      load,
+      apply: vi.fn(),
+    });
+    await writeFile(
+      themeFile,
+      JSON.stringify({
+        ...DEFAULT_TERMINAL_THEME,
+        appearance: { paneDivider: null },
+      }),
+    );
+    await reloader.reload();
+    const accepted = reloader.current().configuration;
+    expect(accepted.terminalTheme.appearance).toEqual({ paneDivider: null });
+    await writeFile(themeFile, invalidText);
+    await reloader.reload();
+    expect(reloader.current().configuration).toBe(accepted);
+    expect(reloader.current().userFileErrors.join()).toContain(
+      "appearance.paneDivider",
+    );
+    expect(await readFile(configFile, "utf8")).toBe(configText);
+    expect(await readFile(themeFile, "utf8")).toBe(invalidText);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
 describe("User Configuration reloader", () => {
   it("loads effects resiliently at startup and keeps the whole last snapshot after an invalid effects reload", async () => {
     let document = {

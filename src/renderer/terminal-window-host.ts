@@ -42,7 +42,7 @@ import type {
   LocalImageData,
 } from "../shared/local-image";
 import { createTerminalFontGenerationOwner } from "./terminal-font-generations";
-import { terminalPaneAccent } from "./terminal-pane-accent";
+import { applyWindowTheme } from "./terminal-window-theme";
 
 type MountTerminalSurface = (
   container: HTMLElement,
@@ -460,22 +460,6 @@ function installFileDrops(
     document.removeEventListener("dragover", onDragOver, true);
     document.removeEventListener("drop", onDrop, true);
   };
-}
-
-function applyWindowTheme(
-  document: Document,
-  tabs: HTMLElement,
-  theme: TerminalTheme,
-  transparency: number,
-): void {
-  const { background, foreground } = theme.colors;
-  const style = document.documentElement.style;
-  style.setProperty("--terminal-background-opacity", String(1 - transparency));
-  style.setProperty("--terminal-background", background);
-  style.setProperty("--terminal-foreground", foreground);
-  style.setProperty("--terminal-pane-accent", terminalPaneAccent(theme));
-  document.body.style.setProperty("--terminal-background", background);
-  tabs.style.setProperty("--terminal-background", background);
 }
 
 function sameSurfaceConfiguration(
