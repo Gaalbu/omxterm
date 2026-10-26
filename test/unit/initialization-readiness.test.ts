@@ -29,7 +29,7 @@ afterEach(async () => {
 });
 
 it.for(["fonts", "runtime"] as const)(
-  "creates B for %s only after A's actual host registration, not its started-session receipt",
+  "creates B for %s after actual host registration while A's Surface return is still held",
   { timeout: 30_000 },
   async (boundary) => {
     const f = await initializationReadinessScene(boundary);
@@ -38,21 +38,15 @@ it.for(["fonts", "runtime"] as const)(
     expect(f.starts).toBe(1);
     expect(f.selected).toEqual({ sessionId: "s1", tabSessionIds: ["s1"] });
     expect(f.surfacePort.adoptions).toBe(0);
-    expect(f.listeners).toBe(0);
+    expect(f.listeners).toBe(1);
     let sent = 0;
     const createB = startCancellationTab(f.renderer, () => {
       sent++;
       f.send({ action: "new" });
     });
-    // The old A-ready sequence sends immediately into a real preload with no
-    // host listener. Holding mount return makes that interleaving deterministic.
-    await Promise.resolve();
-    expect(
-      sent,
-      "B command must remain pending before actual registration",
-    ).toBe(0);
-    f.release();
     await createB;
+    expect(f.surfacePort.adoptions).toBe(0);
+    expect(f.surfacePort.held).toBe(true);
     await vi.waitFor(() => expect(f.surfacePort.mounts).toBe(2));
     expect(sent).toBe(1);
     expect(f.listeners).toBe(1);
@@ -60,8 +54,8 @@ it.for(["fonts", "runtime"] as const)(
   },
 );
 
-it("loses an early command despite an arrival observer and never replays it after registration", async () => {
-  const f = await initializationReadinessScene();
+it("loses an early command despite an arrival observer and never replays it after held registration", async () => {
+  const f = await initializationReadinessScene("runtime", true);
   cleanups.push(f.dispose);
   await vi.waitFor(() => expect(f.surfacePort.held).toBe(true));
   let arrivals = 0;
@@ -76,9 +70,9 @@ it("loses an early command despite an arrival observer and never replays it afte
   ).toBe(false);
   expect(f.starts).toBe(1);
   expect(f.surfacePort.mounts).toBe(1);
-  f.release();
+  f.releaseRegistration();
   await vi.waitFor(() => expect(f.listeners).toBe(2));
-  expect(f.surfacePort.adoptions).toBe(1);
+  expect(f.surfacePort.adoptions).toBe(0);
   expect(f.surfacePort.mounts).toBe(1); // No queued replay from the preload.
   expect(f.starts).toBe(1);
   f.send({ action: "new" });
@@ -87,8 +81,8 @@ it("loses an early command despite an arrival observer and never replays it afte
   remove();
 }, 30_000);
 
-it("rejects B creation when the window retires before actual host registration", async () => {
-  const f = await initializationReadinessScene();
+it("rejects B creation when the window retires before held actual host registration", async () => {
+  const f = await initializationReadinessScene("runtime", true);
   cleanups.push(f.dispose);
   await vi.waitFor(() => expect(f.surfacePort.held).toBe(true));
   const createTab = vi.fn(() => f.send({ action: "new" }));
@@ -97,6 +91,7 @@ it("rejects B creation when the window retires before actual host registration",
   ).rejects.toThrow("unavailable");
   f.pagehide();
   await failed;
+  f.releaseRegistration();
   f.release();
   expect(createTab).not.toHaveBeenCalled();
   expect(f.starts).toBe(1);

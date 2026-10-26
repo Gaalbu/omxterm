@@ -181,7 +181,7 @@ it("native discovery controls cannot launch the next loop iteration after contex
 const ordinaryCallers = [
   { name: "application-about", cases: 5 },
   { name: "failure-acknowledgement", cases: 2 },
-  { name: "initialization-cancellation", cases: 2 },
+  { name: "initialization-cancellation", cases: 4 },
   { name: "intrinsic-shift", cases: 1 },
   { name: "literal-argv", cases: 1, allocations: 2 },
   { name: "pending-tab-ownership", cases: 1 },

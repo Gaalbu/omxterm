@@ -347,17 +347,28 @@ The tab-removal, startup-title and initialization-cancellation fixture entries
 observe successful registration of the actual host tab-command callback through
 their supplied bridge; independent arrival observers never establish readiness.
 Initialization cancellation waits for that receipt before requesting B, not just
-A's native-child readiness. Its headless held-mount control executes the emitted
-entry and production preload, proves an early New command is lost without replay,
-and then verifies the fenced command reaches the host. Run
+A's native-child readiness. Its first-tab cases instead wait for the actual held
+font/runtime boundary and host registration, invoke production Close Tab, and
+check zero native sessions, normal window destruction and one Quit request.
+They do not prevent window closure to inspect renderer cleanup; late release or
+rejection and resource cleanup are covered headlessly through the production
+host, Surface and Adapter. Native cases remain separate from headless evidence.
+The headless emitted entry and production preload demonstrate host registration
+while the first Surface return is held; independently holding actual host
+registration retains the lost-command/no-replay negative control. Run
 `node node_modules/vitest/vitest.mjs run test/unit/initialization-readiness.test.ts test/unit/renderer-fixture-consumers.test.ts`
 for the ordering and stale-importer negative controls. This is fixture ordering
 evidence, not a diagnosis of a historical native timeout or native cancellation
 acceptance. Tab-removal retains its
 held-Surface, early-command and held-renderer controls and original deadlines.
+Held Surface now positively establishes reception before adoption; the
+held-registration and early-command controls independently delay the real
+subscription, preserving arrival-only, no-replay, retirement and timeout checks.
 Headless emitted-entry/production-callback coverage:
 `node node_modules/vitest/vitest.mjs run test/unit/tab-removal-host-readiness.test.ts`.
-This fixture observation does not change the documented first-tab command loss.
+The production host receives commands during synchronous setup without buffering
+or changing mount readiness. Actions requiring an unavailable Surface remain
+no-ops; zoom/tab-bar state and Snippets are already available.
 
 ### Opt-in native test suites
 

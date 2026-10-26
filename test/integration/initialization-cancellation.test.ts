@@ -14,10 +14,15 @@ const prefix = "__OMXTERM_CANCELLATION_RESULT__";
 describe.skipIf(!["darwin", "linux", "win32"].includes(process.platform))(
   "Initialization cancellation through real Electron, Restty and native PTYs",
   () => {
-    it.for(["fonts", "runtime"])(
-      "closes B at real %s readiness without a failure or PTY and keeps A usable",
+    it.for([
+      { boundary: "fonts", tab: "second" },
+      { boundary: "runtime", tab: "second" },
+      { boundary: "fonts", tab: "first" },
+      { boundary: "runtime", tab: "first" },
+    ])(
+      "closes the $tab tab at real $boundary readiness without starting its PTY",
       { timeout: 110_000 },
-      async (boundary, testContext) => {
+      async ({ boundary, tab }, testContext) => {
         testContext.signal.throwIfAborted();
         const root = await mkdtemp(
           path.join(tmpdir(), "omxterm-initialization-cancellation-"),
@@ -35,7 +40,12 @@ describe.skipIf(!["darwin", "linux", "win32"].includes(process.platform))(
           supervised = true;
           const execution = await runNativeFixture({
             executable,
-            args: [...args, root, `--fixture-boundary=${boundary}`],
+            args: [
+              ...args,
+              root,
+              `--fixture-boundary=${boundary}`,
+              `--fixture-tab=${tab}`,
+            ],
             root,
             timeout: 90_000,
             testContext,
@@ -54,13 +64,23 @@ describe.skipIf(!["darwin", "linux", "win32"].includes(process.platform))(
             .split("\n")
             .find((line) => line.startsWith(prefix));
           expect(result).toBeDefined();
-          expect(JSON.parse(result!.slice(prefix.length)) as unknown).toEqual({
-            heldBeforePty: true,
-            cancelledWithoutFailure: true,
-            exactlyOnePty: true,
-            usable: true,
-            lastTabClosed: true,
-          });
+          expect(JSON.parse(result!.slice(prefix.length)) as unknown).toEqual(
+            tab === "first"
+              ? {
+                  firstTab: true,
+                  heldBeforePty: true,
+                  zeroPtys: true,
+                  normalWindowDestruction: true,
+                  quitRequests: 1,
+                }
+              : {
+                  heldBeforePty: true,
+                  cancelledWithoutFailure: true,
+                  exactlyOnePty: true,
+                  usable: true,
+                  lastTabClosed: true,
+                },
+          );
         } finally {
           if (!supervised) await rm(root, { recursive: true, force: true });
         }

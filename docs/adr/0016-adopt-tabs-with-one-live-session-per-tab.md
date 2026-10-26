@@ -136,14 +136,16 @@ New Tab commands from reviving that owner. Cancelling a mounting tab can close
 an empty window without starting a shell. Explicit window closure/Quit cancels
 pending initialization through owner disposal.
 
-**Current first-tab limitation:** `terminal-window-host.ts` subscribes to tab
-commands, clipboard actions, zoom, tab-bar toggles and snippets only after
-`tabs.ready`; preload does not buffer earlier notifications. An early Close Tab,
-New Tab or navigation command can therefore be lost, and the first pending tab
-can ignore Close Tab and later start its shell.
-[#571](https://github.com/luizomf/omxterm/issues/571) tracks this
-command-registration bug. Later-tab cancellation and native Close Window/Quit use
-separate paths.
+`terminal-window-host.ts` subscribes to tab commands, clipboard actions, Find,
+zoom, tab-bar toggles and snippets synchronously during host setup, after modal
+and disposal setup, without awaiting the first Surface. Close Tab can cancel
+that pending tab before a shell starts, following the same normal empty-window
+path as later-tab cancellation. Host-owned zoom/tab-bar state and Snippets are
+available while mounting; terminal clipboard, Find and other actions requiring
+an unavailable Surface are no-ops, never deferred or replayed. Existing modal
+guards remain active. Page teardown removes these subscriptions even while the
+first mount is pending. Host `ready` still represents first-mount settlement,
+not command reception. Native Close Window/Quit retain their separate paths.
 
 Main counts failure acknowledgements independently per window, including
 pre-start rendering failures and failures while siblings remain live. An empty

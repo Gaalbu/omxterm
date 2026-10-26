@@ -123,7 +123,7 @@ describe.skipIf(!["darwin", "linux", "win32"].includes(process.platform))(
           expect(controls).toEqual(
             [
               "actual-surface-held",
-              "readiness-pending",
+              "host-ready-surface-pending",
               "surface-released",
             ].map((n) => TAB_REMOVAL_CONTROL_PREFIX + n),
           );

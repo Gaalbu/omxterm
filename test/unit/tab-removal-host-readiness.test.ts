@@ -24,8 +24,8 @@ afterEach(async () => {
   vi.useRealTimers();
 });
 
-it("does not cross the actual first-command gate on a valid selection before Surface adoption", async () => {
-  const f = await tabRemovalScene("held-surface");
+it("does not cross a separately held actual host registration on a valid selection before Surface adoption", async () => {
+  const f = await tabRemovalScene("held-registration");
   cleanups.push(f.dispose);
   await vi.waitFor(() => expect(f.state().heldSurface).toBe(true));
   expect(f.selected).toBe("s1");
@@ -146,8 +146,8 @@ it("retains the exact held-renderer boundary and deadline even after actual host
   expect(f.starts).toBe(1);
 }, 30_000);
 
-it("does not publish readiness for a disposed pending host or retain its tab listeners", async () => {
-  const f = await tabRemovalScene("held-surface");
+it("does not publish readiness for a disposed held registration or retain its tab listeners", async () => {
+  const f = await tabRemovalScene("held-registration");
   cleanups.push(f.dispose);
   await vi.waitFor(() => expect(f.state().heldSurface).toBe(true));
   const failed = expect(
@@ -164,17 +164,36 @@ it("does not publish readiness for a disposed pending host or retain its tab lis
   expect(f.starts).toBe(1);
 }, 30_000);
 
+it("registers the host while the first Surface is pending without equating registration to adoption", async () => {
+  const f = await tabRemovalScene("held-surface");
+  cleanups.push(f.dispose);
+  await vi.waitFor(() => expect(f.state().heldSurface).toBe(true));
+  expect(f.adoptions).toBe(0);
+  expect(f.state().hostReady).toBe(true);
+  expect(f.listeners).toBe(2);
+  const initial = f.initial();
+  await vi.waitFor(() =>
+    expect(f.markers).toContain(prefix + "host-ready-surface-pending"),
+  );
+  expect(f.adoptions).toBe(0);
+  f.release();
+  await initial;
+  await vi.waitFor(() => expect(f.adoptions).toBe(1));
+  f.pagehide();
+  expect(f.listeners).toBe(0);
+  expect(f.state().hostReady).toBe(false);
+}, 30_000);
+
 it("uses the same actual subscription producer in the startup-title sibling entry", async () => {
   const f = await tabRemovalScene("ordinary", "startup-titles");
   cleanups.push(f.dispose);
   await vi.waitFor(() => expect(f.selected).toBe("s1"));
   expect(f.adoptions).toBe(0);
-  expect(f.titlesReady()).toBe(false);
-  const ready = f.titlesWait();
-  f.releaseUnderlying();
-  await ready;
-  expect(f.adoptions).toBe(1);
   expect(f.titlesReady()).toBe(true);
+  await f.titlesWait();
+  expect(f.adoptions).toBe(0);
+  f.releaseUnderlying();
+  await vi.waitFor(() => expect(f.adoptions).toBe(1));
   f.send({ action: "new" });
   await vi.waitFor(() => expect(f.starts).toBe(2));
   f.pagehide();
