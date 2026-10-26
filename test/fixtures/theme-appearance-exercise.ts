@@ -256,7 +256,7 @@ export async function exerciseTheme(
     await evaluate(
       "getComputedStyle(document.documentElement).getPropertyValue('--terminal-background-opacity').trim()",
     ),
-    "0.75",
+    process.platform === "win32" ? "1" : "0.75",
   );
   assert.equal(
     await evaluate(

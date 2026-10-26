@@ -223,9 +223,10 @@ The independent theme-appearance case reuses that Window Chrome fixture:
 `npm test -- test/integration/window-chrome.test.ts -t 'reloads theme appearance without losing separator focus, resize targets or native grids'`.
 It loads real theme files through reload into retained windows; checks distinct,
 null and omitted paint, both pane axes and the panel, pointer/keyboard PTY resize,
-foreground focus during drag, light/dark defaults and positive transparency.
-A Chromium pixel sample verifies the inset top marker above opaque first-row
-cell paint. Keyboard modality uses synthetic input plus programmatic separator
+foreground focus during drag, light/dark defaults and a positive transparency
+request with blur disabled. Windows retains its documented opaque fallback for
+that request; macOS/Linux use the requested tint opacity. A Chromium pixel sample
+verifies the inset top marker above opaque first-row cell paint. Keyboard modality uses synthetic input plus programmatic separator
 focus; this is not physical tab traversal or OS-compositor pixel parity.
 
 The `application-about` startup fixture stops before its first window. Its
