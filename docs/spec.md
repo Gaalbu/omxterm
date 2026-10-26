@@ -663,13 +663,15 @@ costs.
 OMXTerm advertises `TERM=xterm-256color`, `COLORTERM=truecolor`,
 `TERM_PROGRAM=OMXTerm`, and its installed version in `TERM_PROGRAM_VERSION`.
 Restty answers DA1 as `CSI ? 1 ; 2 c` and DA2 as `CSI > 0 ; 0 ; 0 c` once per
-query, and owns cursor-position and cell-size replies at its existing parsed
-runtime seam rather than adding a second reply path. Cursor-position reports use
-Restty's retained JavaScript cursor hint, which advances by UTF-16 code units
-rather than tracking every Ghostty cursor change. Wide or combining text,
-pending wrap and resize can produce inaccurate replies and misposition
-applications that rely on them. It installs no custom terminfo and does not edit
-or inject shell startup files. Inline-image support does not impersonate another
+query. Ghostty answers cursor-position queries (`CSI 6 n`) using its parser
+cursor at the query's position in the output stream, including wide/combining
+text and pending-wrap resize; origin-mode reports are relative to scrolling
+margins. The existing parsed runtime seam synchronously submits each filtered
+prefix including CPR and drains its core reply before later filter-owned
+DA1/DA2/cell-size replies. No render frame or JavaScript cursor hint is used to
+answer CPR. Cell-size reports keep the Surface metrics provider. This is not a
+guarantee of every xterm extension. OMXTerm installs no custom terminfo and does
+not edit or inject shell startup files. Inline-image support does not impersonate another
 terminal or inject application-specific capability variables.
 
 In a direct Live Terminal Session, the Terminal Surface renders two bounded

@@ -62,7 +62,7 @@ async function observe(
       "utf8",
     );
     expect(createHash("sha256").update(runtime).digest("hex")).toBe(
-      "3c4dc8554c8ccc91f0b34ebea8a5638fe6592c1a973acc0a64dafcb33ab8387e",
+      "f15c6c25cb2efb879b5a00b09640fcdb2d364c8d566237ff5d0ae63975bb3e44",
     );
     let probed = runtime;
     if (priorSynthesis) {
@@ -71,7 +71,7 @@ async function observe(
         probed = probed.replace(corrected, original);
       }
       expect(createHash("sha256").update(probed).digest("hex")).toBe(
-        "15984f54ad2dac65ed571e98c74e84d5b73f5db5319cfbee4ea853dd1ea1091b",
+        "b4112dacd54853f78333a3d5d65f8a87825b1ff45adb53cbfb45726b58a83625",
       );
     }
     const synthesisRuntimeSha256 = capture

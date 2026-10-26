@@ -1,5 +1,44 @@
 [
   {
+    "name": "priorCprDigest",
+    "sha256": "3c4dc8554c8ccc91f0b34ebea8a5638fe6592c1a973acc0a64dafcb33ab8387e",
+    "edits": [
+      {
+        "start": 47847,
+        "deleteCount": 1,
+        "lines": [
+          "            const sanitized = inputHandler.filterOutput(text);"
+        ]
+      },
+      {
+        "start": 1528,
+        "deleteCount": 1,
+        "lines": ["    filterOutput: (output) => filter.filter(output),"]
+      },
+      {
+        "start": 1464,
+        "deleteCount": 9,
+        "lines": []
+      },
+      {
+        "start": 1336,
+        "deleteCount": 1,
+        "lines": ["  filter(output) {"]
+      },
+      {
+        "start": 905,
+        "deleteCount": 0,
+        "lines": [
+          "  if (seq === \"\\x1B[6n\") {",
+          "    const { row, col } = handlers.getCursorPosition();",
+          "    handlers.sendReply(`\\x1B[${row};${col}R`);",
+          "    return true;",
+          "  }"
+        ]
+      }
+    ]
+  },
+  {
     "name": "priorWideWrapLinkDigest",
     "sha256": "8ebccc2aa81d37266bbf4642e3e07e8c0b17e39935a97d8c3703eb9ac5e72649",
     "edits": [
