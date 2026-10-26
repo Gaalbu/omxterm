@@ -1,4 +1,5 @@
 import type { BrowserWindow } from "electron";
+import { recordResttyHostPhase as recordPhase } from "./restty-host-phases";
 
 // Keep the ordinary producer unchanged. This control pauses its identical
 // checkpoint bytes at an insertion boundary until the real host refit finishes.
@@ -82,6 +83,7 @@ export async function prepareOutputRefit({
   ) => Promise<void>;
 }) {
   const original = sizes.at(-1)!;
+  recordPhase("refit-layout", "begin");
   const layout = (await window.webContents.executeJavaScript(
     `(() => {
       const surface = document.querySelector('.restty-terminal-surface');
@@ -89,6 +91,7 @@ export async function prepareOutputRefit({
     })()`,
     true,
   )) as { width: number; maxWidth: string };
+  recordPhase("refit-layout", "complete");
   const setWidth = async (width: string) => {
     await window.webContents.executeJavaScript(
       `(() => {
@@ -101,21 +104,25 @@ export async function prepareOutputRefit({
   };
   const restore = () => setWidth(layout.maxWidth);
   try {
+    recordPhase("refit-calibration", "begin");
     await setWidth(`${layout.width - 50}px`);
     await waitFor(
       () => sizes.at(-1)!.cols < original.cols,
       "controlled output refit calibration",
     );
+    recordPhase("refit-calibration", "complete");
     const refitted = sizes.at(-1)!;
     if (refitted.cols < 20 || refitted.rows !== original.rows)
       throw new Error(
         "Output width refit needs at least 20 columns and unchanged rows",
       );
+    recordPhase("refit-restoration", "begin");
     await restore();
     await waitFor(
       () => sizes.at(-1)!.cols === original.cols,
       "controlled output refit restoration",
     );
+    recordPhase("refit-restoration", "complete");
     // READY has 24 printable units (plus six cursor-hide control units).
     // Choose a prefix above high water, exactly at the old right edge, but not
     // at the new right edge. Geometry is observed, never guessed from pixels.
@@ -126,6 +133,7 @@ export async function prepareOutputRefit({
         "Output refit cannot distinguish the old and new right edges",
       );
     const prefixUnits = visibleUnits - 24;
+    recordPhase("refit-baseline-ack", "begin");
     await waitFor(() => {
       const progress = readProgress();
       return (
@@ -133,6 +141,7 @@ export async function prepareOutputRefit({
         progress.pendingBytes === 0
       );
     }, "row-end prefix acknowledged native baseline");
+    recordPhase("refit-baseline-ack", "complete");
     const prefix = createOutputRefitPrefix({ prefixUnits, readProgress });
     const trace = (
       phase: "baseline" | "prefix-enter" | "prefix-ready" | "prefix-failure",
@@ -150,6 +159,7 @@ export async function prepareOutputRefit({
       restore,
       async refit() {
         trace("prefix-enter");
+        recordPhase("refit-prefix-ack", "begin");
         try {
           await waitFor(
             prefix.ready,
@@ -159,9 +169,11 @@ export async function prepareOutputRefit({
           trace("prefix-failure");
           throw error;
         }
+        recordPhase("refit-prefix-ack", "complete");
         const prefixAcknowledgement = prefix.evidence();
         trace("prefix-ready");
         const count = sizes.length;
+        recordPhase("refit-native-grid", "begin");
         await setWidth(`${layout.width - 50}px`);
         await waitFor(
           () =>
@@ -170,6 +182,7 @@ export async function prepareOutputRefit({
             sizes.at(-1)!.rows === original.rows,
           "controlled output native Surface and PTY refit",
         );
+        recordPhase("refit-native-grid", "complete");
         return prefixAcknowledgement;
       },
     };

@@ -440,6 +440,40 @@ npm test -- test/unit/linux-packaged-process.test.ts test/unit/packaged-applicat
 These process tests skip on other OSes. They do not replace exact-package desktop
 verification in direct/FUSE and extract-and-run modes.
 
+### Host/oracle phase receipts
+
+The shared Restty host fixture emits `__OMXTERM_RESTTY_HOST_PHASE__` JSON lines
+with version 1, a fixed `phase`, `begin`/`complete`, wall-clock `at` and
+process-local monotonic `monotonicMs`. Only source/ACK/copy checkpoint phases
+carry a zero-based `checkpoint` (0–15). These synchronous, best-effort receipts
+contain no terminal text, commands, titles or paths; they do not replace the
+supervisor's mechanical outcome or any oracle assertion.
+
+App readiness, load, first session, the original single native focus request,
+its observed focus event, native focus predicate and DOM readiness are separate
+boundaries. `dom-focus-query / complete` means the first existing renderer query
+returned, even if false; only `dom-focus / complete` establishes its original
+focus predicate. No extra responsiveness probe or periodic watcher is added.
+An activation stall before that query says nothing about renderer responsiveness.
+Output receipts cover the real producer, high-water/resume, all sixteen source,
+original-ACK and copied-destination checkpoints, memory query and exit. Refit
+receipts cover calibration/restoration, baseline/prefix ACK, native grid and
+cleanup. Poll iterations never emit repeated receipts. A request return or focus
+event alone is not readiness or native input admission.
+
+The existing supervisor retains these lines even when its outer deadline wins
+before an inner wait can report an error. Inspect unmatched entered phases and
+completed phases together, including asynchronous stall completion and cleanup;
+the last line alone need not identify the first failed operation. Absence of a
+receipt is not success. Diagnostic sink failure is ignored, never converted to
+acceptance. Deadlines, focus policy, producer pacing, backpressure and original
+assertions remain unchanged. Headless ordering, privacy and real-supervisor
+outer-termination controls:
+
+```sh
+node node_modules/vitest/vitest.mjs run test/unit/restty-host-window.test.ts test/unit/restty-host-phases.test.ts test/unit/restty-host-output-phases.test.ts test/unit/restty-host-phase-supervision.test.ts
+```
+
 ## Fixture ownership and cleanup
 
 Linux packaged-wrapper outcome controls use a private acquire-before-release
