@@ -522,6 +522,17 @@ Malformed, oversized, stale and foreign controls fail within the existing
 bounds; recovery cannot turn a timeout/native failure into success. This does
 not provide containment of arbitrary unobserved orphans.
 
+`beforeCleanup.outcome` records only the native exit notification already
+observed by the verifier at that snapshot; it can be absent even when a retained
+worker has been reparented after its wrapper exited. Reparenting does not prove
+that the JavaScript exit callback has run. Acquisition-gap regressions compare
+that field with independently observed notification delivery, including a real
+exit notification deferred until recovery. They still require final native
+exit 7/no signal, the acquired worker's retained identity, open streams before
+recovery, exact output, closed streams and no remaining actors after recovery,
+and the original settlement-timeout failure. Cleanup never supplies a substitute
+native outcome or turns that intentional failure into verifier success.
+
 Positive generated-actor tests share the existing 3-second readiness/setup
 allowance with their readiness polling; their outer test guards also allow all
 three native controls and bounded recovery. This is not a 250 ms native-latency

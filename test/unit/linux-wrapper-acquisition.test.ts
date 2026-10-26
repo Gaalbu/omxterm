@@ -16,6 +16,80 @@ import { verifyLinuxWrapperPropagation } from "../../scripts/linux-packaged-proc
 
 // Control external filesystem I/O through the unchanged verifier caller.
 // Native actors, streams, outcomes, recovery and pidfd validation remain real.
+// Intercept only the owned launcher's real native notification. Recovery still
+// invokes the unchanged pidfd helper with the verifier's actual targets.
+const exitView = vi.hoisted(() => ({
+  launcher: "",
+  defer: false,
+  received: undefined as Outcome | undefined,
+  delivered: undefined as Outcome | undefined,
+  atRecovery: undefined as
+    | { outcome: Outcome | undefined; held: boolean; targets: Identity[] }
+    | undefined,
+  releasedAtRecovery: false,
+  release: undefined as (() => void) | undefined,
+  restore: undefined as (() => void) | undefined,
+}));
+vi.mock("node:child_process", async (importOriginal) => {
+  const native = await importOriginal<typeof import("node:child_process")>();
+  const path = await import("node:path");
+  return {
+    ...native,
+    spawn(...args: Parameters<typeof native.spawn>) {
+      const child = native.spawn(...args);
+      if (args[0] !== exitView.launcher) return child;
+      const emit: (event: string | symbol, ...values: unknown[]) => boolean =
+        child.emit;
+      exitView.restore = () => {
+        child.emit = emit;
+      };
+      child.emit = function (event: string | symbol, ...values: unknown[]) {
+        if (event !== "exit") return emit.call(this, event, ...values);
+        const [code, signal] = values as [number | null, NodeJS.Signals | null];
+        const outcome = { code, signal };
+        exitView.received = outcome;
+        const deliver = () => {
+          const result = emit.call(this, event, ...values);
+          exitView.delivered = outcome;
+          return result;
+        };
+        if (!exitView.defer) return deliver();
+        exitView.release = () => {
+          exitView.release = undefined;
+          deliver();
+        };
+        return true;
+      };
+      return child;
+    },
+    spawnSync(...args: Parameters<typeof native.spawnSync>) {
+      if (
+        exitView.launcher &&
+        args[0] === "python3" &&
+        args[1]?.[1] === path.resolve("scripts/linux-packaged-signal.py") &&
+        typeof args[2]?.input === "string"
+      ) {
+        const request = JSON.parse(args[2].input) as {
+          signal?: string;
+          recovery?: boolean;
+          targets: Identity[];
+        };
+        if (request.recovery && request.signal === "SIGKILL") {
+          // Snapshot construction, collection and this helper call are
+          // synchronous: no exit callback can run between those boundaries.
+          exitView.atRecovery = {
+            outcome: exitView.delivered,
+            held: exitView.release !== undefined,
+            targets: request.targets,
+          };
+          exitView.releasedAtRecovery = exitView.release !== undefined;
+          exitView.release?.();
+        }
+      }
+      return native.spawnSync(...args);
+    },
+  };
+});
 const procView = vi.hoisted(() => ({
   sample: undefined as undefined | ((names: string[]) => string[]),
   stat: undefined as undefined | ((file: string, text: string) => string),
@@ -96,6 +170,10 @@ interface Identity {
   parent: number;
   group: number;
   start: string;
+}
+interface Outcome {
+  code: number | null;
+  signal: string | null;
 }
 interface Receipt {
   acquired?: Identity;
@@ -246,6 +324,18 @@ function lateHiddenCollection(root: string, timeoutMs: number) {
   return { state, sample };
 }
 afterEach(async () => {
+  // Release any captured real event even if an assertion or recovery failed,
+  // then retire interception before independent fixture cleanup.
+  exitView.release?.();
+  exitView.restore?.();
+  exitView.launcher = "";
+  exitView.defer = false;
+  exitView.received = undefined;
+  exitView.delivered = undefined;
+  exitView.atRecovery = undefined;
+  exitView.releasedAtRecovery = false;
+  exitView.release = undefined;
+  exitView.restore = undefined;
   procView.sample = undefined;
   procView.stat = undefined;
   procView.ackFault = "";
@@ -284,54 +374,87 @@ afterEach(async () => {
 describe.skipIf(process.platform !== "linux")(
   "Linux finite wrapper acquisition through the verifier",
   () => {
-    it("holds a ready stream-owning worker through a collection gap until actual retention, then preserves exit 7 and timeout on recovery", async () => {
-      const { root, launcher } = await setup();
-      let release = false;
-      let sampledReady = false;
-      rootOnlyUntilReleased(
-        () => release,
-        () => {
-          sampledReady ||= fs.existsSync(`${root}/control-ready.json`);
-        },
-      );
-      const pending = failed(launcher);
-      try {
-        await until(() => sampledReady);
-        const witness = json<{ leader: Identity; worker: Identity }>(
+    it.each(["normal", "deferred"])(
+      "holds a ready stream-owning worker through a collection gap with %s exit notification, preserving exit 7 and timeout on recovery",
+      async (notification) => {
+        const { root, launcher } = await setup();
+        exitView.launcher = launcher;
+        exitView.defer = notification === "deferred";
+        let release = false;
+        let sampledReady = false;
+        rootOnlyUntilReleased(
+          () => release,
+          () => {
+            sampledReady ||= fs.existsSync(`${root}/control-ready.json`);
+          },
+        );
+        const pending = failed(launcher);
+        try {
+          await until(() => sampledReady);
+          const witness = json<{ leader: Identity; worker: Identity }>(
+            `${root}/control-ready.json`,
+          );
+          cleanup.push(witness.worker, witness.leader);
+          const stem = fs.readFileSync(`${root}/control-path`, "utf8");
+          // Readiness alone cannot release the wrapper or authorize a signal target.
+          expect(identity(witness.leader.pid).start).toBe(witness.leader.start);
+          expect(identity(witness.worker.pid).parent).toBe(witness.leader.pid);
+          expect(fs.existsSync(`${stem}.acquired.json`)).toBe(false);
+          release = true;
+        } finally {
+          release = true;
+          await pending;
+        }
+        const { receipt } = await pending;
+        const witness = json<{ worker: Identity }>(
           `${root}/control-ready.json`,
         );
-        cleanup.push(witness.worker, witness.leader);
-        const stem = fs.readFileSync(`${root}/control-path`, "utf8");
-        // Readiness alone cannot release the wrapper or authorize a signal target.
-        expect(identity(witness.leader.pid).start).toBe(witness.leader.start);
-        expect(identity(witness.worker.pid).parent).toBe(witness.leader.pid);
-        expect(fs.existsSync(`${stem}.acquired.json`)).toBe(false);
-        release = true;
-      } finally {
-        release = true;
-        await pending;
-      }
-      const { receipt } = await pending;
-      const witness = json<{ worker: Identity }>(`${root}/control-ready.json`);
-      expect(receipt.acquired).toEqual(witness.worker);
-      expect(receipt.beforeCleanup).toMatchObject({
-        outcome: { code: 7, signal: null },
-        closed: false,
-      });
-      expect(receipt.beforeCleanup.remaining).toHaveLength(1);
-      const orphan = receipt.beforeCleanup.remaining[0]!;
-      expect(orphan.pid).toBe(witness.worker.pid);
-      expect(orphan.start).toBe(witness.worker.start);
-      expect(orphan.group).toBe(witness.worker.group);
-      expect(orphan.parent).toBeTypeOf("number");
-      expect(orphan.parent).not.toBe(witness.worker.parent);
-      expect(receipt.outcome).toEqual({ code: 7, signal: null });
-      expect(receipt.remaining).toEqual([]);
-      expect(receipt.closed).toBe(true);
-      expect(receipt.failures).toEqual([
-        "Linux wrapper outcome control did not settle",
-      ]);
-    });
+        expect(receipt.acquired).toEqual(witness.worker);
+        expect(exitView.atRecovery).toBeDefined();
+        expect(exitView.atRecovery!.targets).toEqual(
+          receipt.beforeCleanup.remaining,
+        );
+        if (notification === "deferred") {
+          expect(exitView.atRecovery!.held).toBe(true);
+          expect(exitView.atRecovery!.outcome).toBeUndefined();
+          expect(exitView.releasedAtRecovery).toBe(true);
+          expect(receipt.beforeCleanup).not.toHaveProperty("outcome");
+        } else {
+          expect(exitView.atRecovery!.held).toBe(false);
+          expect(exitView.releasedAtRecovery).toBe(false);
+        }
+        expect(exitView.release).toBeUndefined();
+        expect(exitView.received).toStrictEqual({ code: 7, signal: null });
+        expect(exitView.delivered).toBe(exitView.received);
+        // Reparenting proves native parent exit, not JS notification delivery.
+        // Require exactly what was observed at the snapshot, including absence.
+        expect(receipt.beforeCleanup.outcome).toStrictEqual(
+          exitView.atRecovery!.outcome,
+        );
+        if (exitView.atRecovery!.outcome !== undefined)
+          expect(receipt.beforeCleanup.outcome).toStrictEqual({
+            code: 7,
+            signal: null,
+          });
+        expect(receipt.beforeCleanup.closed).toBe(false);
+        expect(receipt.beforeCleanup.remaining).toHaveLength(1);
+        const orphan = receipt.beforeCleanup.remaining[0]!;
+        expect(orphan.pid).toBe(witness.worker.pid);
+        expect(orphan.start).toBe(witness.worker.start);
+        expect(orphan.group).toBe(witness.worker.group);
+        expect(orphan.parent).toBeTypeOf("number");
+        expect(orphan.parent).not.toBe(witness.worker.parent);
+        expect(receipt.outcome).toEqual({ code: 7, signal: null });
+        expect(receipt.outcome).toEqual(exitView.received);
+        expect(receipt.stdout).toBe("control stdout retained\n");
+        expect(receipt.stderr).toBe("control stderr retained\n");
+        expect(receipt.remaining).toEqual([]);
+        expect(receipt.closed).toBe(true);
+        expect(receipt.failures).toEqual([
+          "Linux wrapper outcome control did not settle",
+        ]);
+      },
+    );
 
     it(
       "keeps the generated Run-as-Node actor alive without acknowledgement before exercising all three native outcomes",
