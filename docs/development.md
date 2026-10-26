@@ -282,6 +282,17 @@ browser, observes focus leaving OMXTerm, then returns focus to the dialog.
 PNG captures. These checks still require an idle unlocked desktop; they do not
 claim physical keyboard navigation or pixel parity across platforms.
 
+On Windows, the real handle-drag no-resize oracle compares exact Win32 physical
+window **and** client sizes before/after input on the same HWND, monitor, DPI and
+restored state. Geometry-read failures, context transitions and one-physical-pixel
+size changes fail; there is no tolerance or retry. Electron's enclosing DIP bounds
+can gain or lose a DIP solely from moving across a fractional-scale rounding
+boundary, so their sizes are not the no-resize oracle. Physical and DIP movement,
+foreground/point ownership, pointer release/restoration and continuity checks are
+still required. Headless validator and caller controls:
+`npm test -- test/unit/window-chrome-drag-geometry.test.ts test/unit/window-chrome-native-drag.test.ts`.
+They do not replace native Windows execution.
+
 The independent Window Chrome feature smoke reuses the real renderer, host,
 Settings service/reloader, owned profiles and native PTY supervisor. Select its
 single literal case on an idle unlocked desktop:
