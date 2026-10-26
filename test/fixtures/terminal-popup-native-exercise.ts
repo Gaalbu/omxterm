@@ -205,8 +205,9 @@ export async function exerciseTerminalPopup(options: PopupOptions) {
     ["key", "--clearmodifiers", "Home", "Down", "Return"],
     { timeout: 5_000 },
   );
+  const expectedPaste = "\u001b[200~native-paste\u001b[201~";
   await waitFor(
-    () => children[1]!.observation.input().includes("native-paste"),
+    () => children[1]!.observation.input().length >= expectedPaste.length,
     "actual native popup callback pastes into clicked child",
   );
   assert.equal(
@@ -216,7 +217,7 @@ export async function exerciseTerminalPopup(options: PopupOptions) {
   );
   assert.equal(children[0]!.observation.input(), "");
   assert.ok(
-    children[1]!.observation.input() === "\u001b[200~native-paste\u001b[201~",
+    children[1]!.observation.input() === expectedPaste,
     "Only the exact native popup Paste may reach the clicked child",
   );
 
