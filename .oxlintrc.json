@@ -75,6 +75,15 @@
       }
     },
     {
+      "files": ["test/unit/linux-wrapper-acquisition.test.ts"],
+      "rules": {
+        "max-lines": [
+          "error",
+          { "max": 900, "skipBlankLines": true, "skipComments": true }
+        ]
+      }
+    },
+    {
       // IPC and Terminal Surface suites cover their large stateful contracts end to end.
       "files": [
         "test/unit/terminal-ipc-controller.test.ts",

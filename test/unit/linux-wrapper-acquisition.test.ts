@@ -112,6 +112,7 @@ const procView = vi.hoisted(() => ({
   sample: undefined as undefined | ((names: string[]) => string[]),
   stat: undefined as undefined | ((file: string, text: string) => string),
   ackFault: "" as string,
+  ackFaultCalls: 0,
   recordSuccess: false,
   recordedRoot: "",
 }));
@@ -136,6 +137,7 @@ vi.mock("node:fs", async (importOriginal) => {
     },
     renameSync(from: string, to: string) {
       if (procView.ackFault && to.endsWith(".acquired.json")) {
+        procView.ackFaultCalls++;
         if (procView.ackFault === "missing") return;
         const ack = JSON.parse(fs.readFileSync(from, "utf8")) as {
           control: string;
@@ -273,10 +275,10 @@ async function setup(mode = "control-streams") {
   vi.stubEnv("OMXTERM_FIXTURE_MODE", mode);
   return { root, launcher };
 }
-async function failed(launcher: string) {
+async function failed(launcher: string, timeoutMs = 250) {
   let failure: unknown;
   try {
-    await verifyLinuxWrapperPropagation(launcher, 250);
+    await verifyLinuxWrapperPropagation(launcher, timeoutMs);
   } catch (cause) {
     failure = cause;
   }
@@ -382,6 +384,7 @@ afterEach(async () => {
   procView.sample = undefined;
   procView.stat = undefined;
   procView.ackFault = "";
+  procView.ackFaultCalls = 0;
   procView.recordSuccess = false;
   procView.recordedRoot = "";
   vi.unstubAllEnvs();
@@ -824,7 +827,11 @@ describe.skipIf(process.platform !== "linux")(
       async (fault) => {
         const { launcher } = await setup("normal");
         procView.ackFault = fault;
-        const { error, receipt } = await failed(launcher);
+        const { error, receipt } = await failed(
+          launcher,
+          positiveSetupBudgetMs,
+        );
+        expect(procView.ackFaultCalls).toBe(1);
         expect(receipt.acquired).toBeDefined();
         expect(receipt.stdout).toBe("");
         expect(receipt.closed).toBe(true);
@@ -833,24 +840,41 @@ describe.skipIf(process.platform !== "linux")(
           /control did not settle|masks or fails zero outcome/u,
         );
       },
+      nativeOutcomeGuardMs,
     );
 
-    it("does not release a worker when acknowledgement publication is missing", async () => {
-      const { root, launcher } = await setup();
-      procView.ackFault = "missing";
-      const { receipt } = await failed(launcher);
-      const witness = json<{ leader: Identity; worker: Identity }>(
-        `${root}/control-ready.json`,
-      );
-      expect(receipt.acquired?.pid).toBe(witness.worker.pid);
-      expect(receipt.beforeCleanup.outcome).toBeUndefined();
-      expect(receipt.outcome).toEqual({ code: null, signal: "SIGKILL" });
-      expect(receipt.closed).toBe(true);
-      expect(receipt.remaining).toEqual([]);
-      expect(receipt.failures).toEqual([
-        "Linux wrapper outcome control did not settle",
-      ]);
-    });
+    it(
+      "does not release a worker when acknowledgement publication is missing after a late hidden collection",
+      async () => {
+        const { root, launcher } = await setup();
+        procView.ackFault = "missing";
+        const hidden = lateHiddenCollection(root, positiveSetupBudgetMs);
+        rootOnlyUntilReleased(() => hidden.state.ready, hidden.sample);
+        const { receipt, directory } = await failed(
+          launcher,
+          positiveSetupBudgetMs,
+        );
+        const witness = json<{ leader: Identity; worker: Identity }>(
+          `${root}/control-ready.json`,
+        );
+        expect(procView.ackFaultCalls).toBe(1);
+        expect(fs.existsSync(`${directory}/zero.acquired.json`)).toBe(false);
+        expect(receipt).toStrictEqual({
+          acquired: witness.worker,
+          beforeCleanup: {
+            closed: false,
+            remaining: [witness.leader, witness.worker],
+          },
+          outcome: { code: null, signal: "SIGKILL" },
+          stdout: "control stdout retained\n",
+          stderr: "control stderr retained\n",
+          closed: true,
+          remaining: [],
+          failures: ["Linux wrapper outcome control did not settle"],
+        });
+      },
+      nativeOutcomeGuardMs,
+    );
   },
 );
 

@@ -549,7 +549,12 @@ production deadlines remain unchanged.
 Positive generated-actor tests share the existing 3-second readiness/setup
 allowance with their readiness polling; their outer test guards also allow all
 three native controls and bounded recovery. This is not a 250 ms native-latency
-requirement. Deliberate 250 ms negative controls still require failure: the same
+requirement. The six bad/missing-acknowledgement cases also use that positive
+setup allowance: they require actual acquisition before exercising exactly one
+ACK-publication fault, not acquisition expiry. The missing-publication case
+forces a late hidden collection while retaining the worker, native SIGKILL,
+stream closure and intentional settlement failure. Deliberate 250 ms
+acquisition-expiry controls still require failure: the same
 late hidden collection that succeeds with the positive allowance must expire
 without an acknowledgement or action under the negative budget, then settle
 cleanup. Controlled-clock tests call the actual actor acquisition helper to
