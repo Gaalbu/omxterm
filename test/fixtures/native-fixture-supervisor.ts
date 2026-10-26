@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { lstat, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { collectFixtureRegistrations } from "./native-fixture-ownership";
+import type { NativeFixtureCleanupFailure } from "./native-fixture-outcome";
 import {
   completedFixture,
   type FixtureCompletion,
@@ -13,6 +14,7 @@ import {
   collectFixtureDescendants,
   terminateFixtureProcesses,
   type FixtureProcess,
+  type FixtureCleanupCommandContext,
 } from "./native-fixture-processes";
 
 interface Request {
@@ -26,6 +28,11 @@ interface Request {
   readonly completionFile?: string;
   readonly cancellationToken?: string;
 }
+
+type CollectRegistered = (
+  rows?: readonly FixtureProcess[],
+  failureContext?: FixtureCleanupCommandContext,
+) => void;
 
 interface ExternalExit {
   readonly exitCode: number | null;
@@ -124,9 +131,7 @@ async function supervise(request: Request): Promise<void> {
   };
   process.once("disconnect", interrupt);
   const connected = request.parent !== undefined || process.connected;
-  if (!connected) {
-    interrupt();
-  }
+  if (!connected) interrupt();
   const child =
     connected && !request.externalChild
       ? spawn(request.executable, request.args, {
@@ -181,12 +186,13 @@ async function supervise(request: Request): Promise<void> {
   }
   let leaderPid = child?.pid;
   let pendingRegistrations = 0;
-  const collectRegistered = (rows?: readonly FixtureProcess[]) => {
+  const collectRegistered: CollectRegistered = (rows, failureContext) => {
     pendingRegistrations = collectFixtureRegistrations(
       request.root,
       leaderPid,
       owned,
       rows,
+      failureContext,
     );
     // An empty inventory cannot settle an interrupted Windows bootstrap. The
     // launcher must have supplied creation identity or an actual native event.
@@ -198,7 +204,7 @@ async function supervise(request: Request): Promise<void> {
     )
       pendingRegistrations += 1;
   };
-  const sample = () => {
+  const sample = (failureContext?: FixtureCleanupCommandContext) => {
     if (
       request.cancellationToken &&
       readRecord<{ token: string }>(request.root, "native-cancel.json")
@@ -207,7 +213,7 @@ async function supervise(request: Request): Promise<void> {
       if (reason === "exit") reason = "caller-cancelled";
       resolveEnd();
     }
-    const rows = fixtureProcesses();
+    const rows = fixtureProcesses(failureContext);
     if (
       request.parent &&
       !rows.some(
@@ -279,9 +285,12 @@ async function supervise(request: Request): Promise<void> {
   clearInterval(monitor);
   process.removeListener("disconnect", interrupt);
   const cleanupErrors: string[] = inspectionError ? [inspectionError] : [];
+  const failureMetadata: { cleanupFailure?: NativeFixtureCleanupFailure } = {};
+  const onFailure = (cleanupFailure: NativeFixtureCleanupFailure) =>
+    Object.assign(failureMetadata, { cleanupFailure });
   try {
-    sample();
-    await terminateFixtureProcesses(owned, collectRegistered);
+    sample({ callsite: "final-sample", onFailure });
+    await terminateFixtureProcesses(owned, collectRegistered, onFailure);
 
     if (request.externalChild) {
       stdout = await readNativeOutput(
@@ -340,6 +349,7 @@ async function supervise(request: Request): Promise<void> {
     stdout,
     stderr,
     cleanupErrors,
+    ...failureMetadata,
     ownedProcesses: [...owned.values()],
   };
   // Keep the mechanical outcome even when no test worker remains to report it.

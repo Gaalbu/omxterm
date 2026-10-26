@@ -605,6 +605,27 @@ Graphical integration tests use [`runNativeFixture`](../test/fixtures/run-native
 - The supervisor removes temporary profiles only after verifying that child processes have exited and streams have closed.
 - If a fixture process cannot be cleanly verified on exit, it writes an `ownership-blocked.json` receipt in `.scratch/native-fixtures/` and blocks further launches in that scope until inspected (except for abandoned Windows pre-bootstrap receipts whose parent process has already exited, which are archived automatically).
 
+Windows supervisor receipts can additionally contain optional `cleanupFailure`
+metadata when an existing cleanup PowerShell command throws. Its fixed `callsite`
+is `final-sample`, `registration-before-kill`, `termination`,
+`registration-after-kill`, or `survival`. `elapsedMs` measures the synchronous
+boundary around the failed `execFileSync` call (including JavaScript call/argument
+overhead) using the process-local monotonic clock, floored to whole milliseconds
+and capped at 86,400,000 (one day). It excludes inventory parsing, registration
+file processing and target encoding; it is not total cleanup time or an internal
+PowerShell phase duration. `category` uses only own data properties: `timeout`
+for `ETIMEDOUT`, `command-failed` for a nonzero safe-integer command exit status,
+otherwise `unknown`. No arbitrary error codes/text, command arguments, output, environment
+values or paths enter this metadata. The original `cleanupErrors` strings and
+native exit/signal/reason remain authoritative and unchanged. Successful cleanup
+and failures outside those command boundaries omit the field; legacy receipts
+without it remain valid. This improves future failure discrimination, not
+historical Windows performance or diagnosis of a rare timeout's cause. Command
+bounds, ownership blocking, profile retention and supervisor joining are unchanged.
+Headless emitted-supervisor/schema controls:
+`npm test -- test/unit/native-fixture-cleanup-failure.test.ts test/unit/native-fixture-cleanup-outcome.test.ts test/unit/run-native-fixture-windows.test.ts`.
+They do not replace actual Windows execution.
+
 To run the unit tests for fixture preparation and supervision headlessly:
 
 ```sh

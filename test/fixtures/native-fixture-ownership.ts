@@ -6,6 +6,7 @@ import {
   collectFixtureDescendants,
   fixtureProcesses,
   type FixtureProcess,
+  type FixtureCleanupCommandContext,
 } from "./native-fixture-processes";
 
 export const FIXTURE_PROCESS_DIRECTORY = "native-process-ownership";
@@ -98,8 +99,10 @@ export function collectFixtureRegistrations(
   root: string,
   leaderPid: number | undefined,
   owned: Map<number, FixtureProcess>,
-  current: readonly FixtureProcess[] = fixtureProcesses(),
+  current?: readonly FixtureProcess[],
+  failureContext?: FixtureCleanupCommandContext,
 ): number {
+  if (current === undefined) current = fixtureProcesses(failureContext);
   let pending = 0;
   const directory = path.join(root, FIXTURE_PROCESS_DIRECTORY);
   for (const name of readdirSync(directory)) {

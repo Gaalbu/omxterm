@@ -1,6 +1,64 @@
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import path from "node:path";
+import { performance } from "node:perf_hooks";
+import {
+  MAX_CLEANUP_COMMAND_ELAPSED_MS,
+  type NativeFixtureCleanupFailure,
+} from "./native-fixture-outcome";
+
+export interface FixtureCleanupCommandContext {
+  readonly callsite: NativeFixtureCleanupFailure["callsite"];
+  readonly onFailure: (failure: NativeFixtureCleanupFailure) => void;
+}
+
+function commandFailureCategory(
+  error: unknown,
+): NativeFixtureCleanupFailure["category"] {
+  try {
+    if (typeof error === "object" && error !== null) {
+      const code = Object.getOwnPropertyDescriptor(error, "code");
+      if (code && "value" in code && code.value === "ETIMEDOUT")
+        return "timeout";
+      const status = Object.getOwnPropertyDescriptor(error, "status");
+      if (
+        status &&
+        "value" in status &&
+        Number.isSafeInteger(status.value) &&
+        status.value !== 0
+      )
+        return "command-failed";
+    }
+  } catch {
+    // Only own data properties classify errors; never invoke error getters.
+  }
+  return "unknown";
+}
+
+function observeCleanupCommand<T>(
+  context: FixtureCleanupCommandContext | undefined,
+  command: () => T,
+): T {
+  if (!context) return command();
+  const started = performance.now();
+  try {
+    return command();
+  } catch (error) {
+    try {
+      context.onFailure({
+        callsite: context.callsite,
+        elapsedMs: Math.min(
+          MAX_CLEANUP_COMMAND_ELAPSED_MS,
+          Math.max(0, Math.floor(performance.now() - started)),
+        ),
+        category: commandFailureCategory(error),
+      });
+    } catch {
+      // Diagnostics must never replace the original command exception.
+    }
+    throw error;
+  }
+}
 
 export function nativeFixtureEnvironment(root: string): NodeJS.ProcessEnv {
   return {
@@ -22,17 +80,21 @@ export interface FixtureProcess {
 
 // Inspect metadata only. Ownership is established by descent from the child
 // we spawned, never by an executable name or a machine-wide kill pattern.
-export function fixtureProcesses(): FixtureProcess[] {
+export function fixtureProcesses(
+  failureContext?: FixtureCleanupCommandContext,
+): FixtureProcess[] {
   if (process.platform === "win32") {
-    const text = execFileSync(
-      "powershell.exe",
-      [
-        "-NoProfile",
-        "-NonInteractive",
-        "-Command",
-        "@(Get-CimInstance Win32_Process | Where-Object { $_.CreationDate } | ForEach-Object { @{ pid = [int]$_.ProcessId; parent = [int]$_.ParentProcessId; identity = $_.CreationDate.ToUniversalTime().Ticks.ToString() } }) | ConvertTo-Json -Compress",
-      ],
-      { encoding: "utf8", timeout: 5_000, windowsHide: true },
+    const text = observeCleanupCommand(failureContext, () =>
+      execFileSync(
+        "powershell.exe",
+        [
+          "-NoProfile",
+          "-NonInteractive",
+          "-Command",
+          "@(Get-CimInstance Win32_Process | Where-Object { $_.CreationDate } | ForEach-Object { @{ pid = [int]$_.ProcessId; parent = [int]$_.ParentProcessId; identity = $_.CreationDate.ToUniversalTime().Ticks.ToString() } }) | ConvertTo-Json -Compress",
+        ],
+        { encoding: "utf8", timeout: 5_000, windowsHide: true },
+      ),
     );
     return JSON.parse(text) as FixtureProcess[];
   }
@@ -75,9 +137,15 @@ function linuxStartTime(pid: number): string {
 
 export async function terminateFixtureProcesses(
   owned: Map<number, FixtureProcess>,
-  collectRegistered: () => void = () => {},
+  collectRegistered: (
+    rows?: readonly FixtureProcess[],
+    context?: FixtureCleanupCommandContext,
+  ) => void = () => {},
+  onFailure?: FixtureCleanupCommandContext["onFailure"],
 ): Promise<void> {
-  collectRegistered();
+  const context = (callsite: NativeFixtureCleanupFailure["callsite"]) =>
+    onFailure ? { callsite, onFailure } : undefined;
+  collectRegistered(undefined, context("registration-before-kill"));
   // PTYs call setsid(): descend from the owned child, not only its group.
   // Freeze POSIX parents and rescan before killing, closing the spawn race.
   if (process.platform !== "win32") {
@@ -88,15 +156,16 @@ export async function terminateFixtureProcesses(
     }
   }
   const targets = [...owned.values()].reverse();
-  if (process.platform === "win32") killWindowsFixtureProcesses(targets);
+  if (process.platform === "win32")
+    killWindowsFixtureProcesses(targets, context("termination"));
   else for (const row of targets) signalFixtureProcess(row, "SIGKILL");
   // This is a post-termination deadline, not a total-cleanup bound. It is
   // checked after each bounded inventory; an in-flight inventory may overrun it.
   // Freeze/rescan and signal operations above have separate command bounds.
   const deadline = Date.now() + 5_000;
   while (true) {
-    collectRegistered();
-    const remaining = fixtureProcesses().filter(
+    collectRegistered(undefined, context("registration-after-kill"));
+    const remaining = fixtureProcesses(context("survival")).filter(
       (row) => owned.get(row.pid)?.identity === row.identity,
     );
     if (remaining.length === 0) return;
@@ -143,17 +212,21 @@ export function collectFixtureDescendants(
   } while (changed);
 }
 
-function killWindowsFixtureProcesses(rows: readonly FixtureProcess[]): void {
+function killWindowsFixtureProcesses(
+  rows: readonly FixtureProcess[],
+  failureContext?: FixtureCleanupCommandContext,
+): void {
   const encoded = Buffer.from(JSON.stringify(rows)).toString("base64");
   // Hold each process handle before rechecking CIM identity. Kill uses that
   // handle, not an unchecked PID or a broad taskkill /T selection.
-  execFileSync(
-    "powershell.exe",
-    [
-      "-NoProfile",
-      "-NonInteractive",
-      "-Command",
-      `
+  observeCleanupCommand(failureContext, () =>
+    execFileSync(
+      "powershell.exe",
+      [
+        "-NoProfile",
+        "-NonInteractive",
+        "-Command",
+        `
     $ErrorActionPreference = 'Stop'
     $targets = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${encoded}')) | ConvertFrom-Json
     foreach ($target in $targets) {
@@ -167,8 +240,9 @@ function killWindowsFixtureProcesses(rows: readonly FixtureProcess[]): void {
     }
     exit 0
   `,
-    ],
-    { timeout: 5_000, windowsHide: true },
+      ],
+      { timeout: 5_000, windowsHide: true },
+    ),
   );
 }
 
