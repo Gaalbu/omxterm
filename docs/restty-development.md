@@ -10,6 +10,7 @@ The portable Terminal Surface (`src/terminal-surface/`) receives a session Adapt
 
 - **Initialization:** Fonts, the Ghostty WASM core, and a WebGL2 context initialize before the PTY starts. If initialization fails, no shell is spawned. WebGL context loss reports a visible error and disposes the affected pane/session without affecting siblings.
 - **Pane cancellation:** Closing an initializing pane (directly or through its tab) marks late callbacks inert, waits for pending acquisitions to settle, and releases partial resources. An already accepted session start is closed once through the Adapter.
+- **Commands during first mount:** The window host registers tab commands and related actions during synchronous setup, not after Surface readiness. Close Tab cancels the pending first tab normally. Zoom/tab-bar state and Snippets are available immediately; terminal clipboard, Find and other actions requiring an unavailable Surface do nothing without delayed replay. Modal guards and teardown still apply; host `ready` remains mount settlement.
 
 ### Configuration and Surface lifetime
 
@@ -21,7 +22,6 @@ The portable Terminal Surface (`src/terminal-surface/`) receives a session Adapt
 
 - **Cursor Position Reports (`CSI 6 n`):** The `OutputFilter` answers CPR queries using a retained UTF-16 cursor hint before core write. Wide/combining characters, pending wrap, and resize can cause the reply to differ from Ghostty's actual cursor ([#568](https://github.com/luizomf/omxterm/issues/568)).
 - **Reload application errors:** `user-configuration-reloader.ts` updates the active configuration snapshot before applying consumers sequentially. While validation errors cleanly retain the previous configuration, an unexpected runtime exception during consumer application has no automatic rollback.
-- **First-tab startup commands:** `terminal-window-host.ts` subscribes to tab-level actions after `tabs.ready`; an early `Close Tab` before the first tab finishes initializing can be dropped ([#571](https://github.com/luizomf/omxterm/issues/571)). `Close Window` and `Quit` remain active on separate main-process routes.
 
 ### Scrollback and viewport
 

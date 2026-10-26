@@ -8,7 +8,10 @@ let first = true;
 let heldSurface = false;
 let newCommands = 0;
 let releaseSurface = () => {};
-const host = observeHostTabCommands(window.omxterm.terminal.onTabCommand);
+const host = observeHostTabCommands(
+  window.omxterm.terminal.onTabCommand,
+  control === "held-registration" || control === "early-command",
+);
 export const observeTabRemovalCommands = host.subscribe;
 const globals = globalThis as typeof globalThis & {
   __omxtermTabRemovalControl?: {
@@ -21,7 +24,10 @@ const globals = globalThis as typeof globalThis & {
 globals.__omxtermTabRemovalControl = {
   state: () => ({ heldSurface, newCommands, hostReady: host.ready }),
   waitForHost: host.wait,
-  release: () => releaseSurface(),
+  release() {
+    host.release();
+    releaseSurface();
+  },
   holdRendererBoundary() {
     console.log(`${TAB_REMOVAL_CONTROL_PREFIX}held-renderer-boundary`);
     return new Promise<never>(() => {});
@@ -49,7 +55,12 @@ export async function mountResttyTerminalSurface(
   const surface = await mount(...args);
   const initial = first;
   first = false;
-  if (initial && (control === "held-surface" || control === "early-command")) {
+  if (
+    initial &&
+    ["held-surface", "held-registration", "early-command"].includes(
+      control ?? "",
+    )
+  ) {
     heldSurface = true;
     console.log(`${TAB_REMOVAL_CONTROL_PREFIX}actual-surface-held`);
     const signal = args[2]?.abortSignal;

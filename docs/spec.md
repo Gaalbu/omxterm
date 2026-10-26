@@ -192,12 +192,16 @@ succeeds ([ADR 0025](adr/0025-use-restty-as-the-terminal-surface.md)).
   become idle. Selection reports the tab's session set even when the focused
   pane is still mounting or retained after native exit. A pending or dead focused
   pane never borrows another tab's Busy decision; Close Pane considers only its
-  captured focused pane. Closing a window's last tab closes that window. During the first
-  tab's initialization, however, the renderer has not yet subscribed to tab
-  commands: an early Close Tab, New Tab or tab-navigation command can be lost
-  rather than queued. Clipboard, zoom, tab-bar and snippets actions also
-  subscribe only after that readiness; earlier notifications are not buffered.
-  Close Window and Quit use separate main-owned paths and can still cancel
+  captured focused pane. Closing a window's last tab closes that window. The
+  renderer subscribes to tab commands, clipboard, Find, zoom, tab-bar and snippets
+  actions during host setup, without waiting for the first Surface to mount.
+  Close Tab cancels a pending first tab through the normal empty-window lifecycle;
+  queued New Tab cannot revive that owner. Host-owned zoom and tab-bar state and
+  the Snippets panel are available during mounting. Actions requiring an unavailable
+  Surface (such as terminal clipboard or Find) do nothing and are not replayed
+  after mount; no command buffer is added. Existing modal guards still apply.
+  Host readiness remains first-mount settlement, not command registration.
+  Close Window and Quit use separate main-owned paths and also cancel
   initialization. Close Window defaults to `Cmd+Shift+W` on macOS and
   `Ctrl+Shift+Q` on Linux and Windows and closes all of the selected window's
   tabs. Closing the last window quits OMXTerm.

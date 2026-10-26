@@ -761,7 +761,7 @@ describe("renderer Terminal Window page host continued", () => {
     expect(removeTabTitleListener).toHaveBeenCalledOnce();
   });
 
-  it("routes tab bar toggles after mount and removes the subscription on disposal", async () => {
+  it("receives tab bar toggles before mount and removes the subscription on disposal", async () => {
     const elements = createPageElements();
     let toggle!: () => void;
     let command!: (value: TerminalTabCommand) => void;
@@ -780,7 +780,7 @@ describe("renderer Terminal Window page host continued", () => {
         return vi.fn();
       },
     });
-    expect(subscribeToTabBarToggle).not.toHaveBeenCalled();
+    expect(subscribeToTabBarToggle).toHaveBeenCalledOnce();
     await host.ready;
     toggle();
     command({ action: "new" });

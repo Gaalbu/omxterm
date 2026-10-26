@@ -251,128 +251,87 @@ describe("cancelled tab initialization through the production host and Adapter",
   it.each([
     "fonts",
     "runtime",
-    "startup",
     "fonts-rejection",
     "runtime-rejection",
-    "startup-rejection",
-  ] as const)("keeps A usable after closing B at %s", async (boundary) => {
-    harness.instances.length = 0;
-    harness.setInitError(undefined);
-    harness.setInitGate(undefined);
-    const gate = deferred();
-    const startup = boundary.startsWith("startup");
-    const { bridge, outputs, exits } = cancellationBridge(
-      startup ? gate.promise : undefined,
-    );
-    const onSurfaceFailure = vi.fn();
-    const released = [vi.fn(), vi.fn()];
-    let command!: (value: TerminalTabCommand) => void;
-    let mounts = 0;
-    let settled = 0;
-    const tabStrip = document.createElement("nav");
-    const tabsContainer = document.createElement("div");
-    document.body.replaceChildren(tabStrip, tabsContainer);
-    const page = mountTerminalWindowPage(
-      { tabStrip, tabsContainer },
-      {
-        createAdapter: () => createElectronTerminalAdapter(bridge),
-        onSurfaceFailure,
-        subscribeToTabCommands(listener) {
-          command = listener;
-          return () => {};
-        },
-        async mount(container, adapter, options) {
-          const index = mounts++;
-          try {
-            return await mountResttyTerminalSurface(container, adapter, {
+  ] as const)(
+    "closes the first pending tab at %s without starting a session or reviving its owner",
+    async (boundary) => {
+      harness.instances.length = 0;
+      harness.setInitError(undefined);
+      const gate = deferred();
+      harness.setInitGate(
+        boundary.startsWith("runtime") ? gate.promise : undefined,
+      );
+      const { bridge, outputs, exits } = cancellationBridge();
+      const released = vi.fn();
+      const fatal = vi.fn();
+      const notifyTabsEmpty = vi.fn();
+      const commands = new Set<(command: TerminalTabCommand) => void>();
+      let held = false;
+      const tabStrip = document.createElement("nav");
+      const tabsContainer = document.createElement("div");
+      document.body.replaceChildren(tabStrip, tabsContainer);
+      const page = mountTerminalWindowPage(
+        { tabStrip, tabsContainer },
+        {
+          createAdapter: () => createElectronTerminalAdapter(bridge),
+          notifyTabsEmpty,
+          subscribeToTabCommands(listener) {
+            commands.add(listener);
+            return () => {
+              commands.delete(listener);
+            };
+          },
+          mount: (container, adapter, options) =>
+            mountResttyTerminalSurface(container, adapter, {
               ...options,
+              onFatalError: fatal,
               async acquireFontInputs() {
-                if (index === 1 && boundary.startsWith("fonts"))
-                  await gate.promise;
-                return { fonts: [], release: released[index]! };
+                held = true;
+                if (boundary.startsWith("fonts")) await gate.promise;
+                return { fonts: [], release: released };
               },
-            });
-          } finally {
-            settled += 1;
-          }
+            }),
         },
-      },
-    );
-    try {
-      await page.ready;
-      const a = harness.instances[0]!;
-      if (boundary.startsWith("runtime")) harness.setInitGate(gate.promise);
-      command({ action: "new" });
-      await vi.waitFor(() => {
-        if (startup) expect(bridge.start).toHaveBeenCalledTimes(2);
-        else if (boundary.startsWith("runtime"))
-          expect(harness.instances[1]!.state).toBe("initializing");
-        else expect(mounts).toBe(2);
-      });
-      const bBeforeClose = harness.instances[1];
-      const lateListeners = [...(bBeforeClose?.listeners ?? [])];
-      command({ action: "close" });
-      expect(tabsContainer.children).toHaveLength(1);
-      for (const listener of lateListeners) {
-        listener({ type: "title", title: "cancelled owner" });
-        listener({ type: "bell" });
-      }
-      if (bBeforeClose) {
-        expect(
-          bBeforeClose.options.services.ptyTransport.sendInput(
-            "cancelled input",
-          ),
-        ).toBe(false);
-        bBeforeClose.canvas.dispatchEvent(
-          new Event("webglcontextlost", { cancelable: true }),
+      );
+      try {
+        await vi.waitFor(() => {
+          expect(held).toBe(true);
+          if (boundary.startsWith("runtime"))
+            expect(harness.instances[0]?.state).toBe("initializing");
+        });
+        expect(bridge.start).not.toHaveBeenCalled();
+        for (const command of commands) command({ action: "close" });
+        expect(tabsContainer.children).toHaveLength(0);
+        expect(notifyTabsEmpty).toHaveBeenCalledExactlyOnceWith(undefined);
+        for (const command of commands) command({ action: "new" });
+        expect(tabsContainer.children).toHaveLength(0);
+        if (boundary.endsWith("rejection"))
+          gate.reject(new Error("late initialization failure"));
+        else gate.resolve();
+        await page.ready;
+        expect(bridge.start).not.toHaveBeenCalled();
+        expect(fatal).not.toHaveBeenCalled();
+        expect(notifyTabsEmpty).toHaveBeenCalledOnce();
+        expect(released).toHaveBeenCalledTimes(
+          boundary === "fonts-rejection" ? 0 : 1,
         );
+        for (const runtime of harness.instances) {
+          expect(runtime.destroy).toHaveBeenCalledOnce();
+          expect(runtime.listeners.size).toBe(0);
+        }
+      } finally {
+        gate.resolve();
+        harness.setInitGate(undefined);
+        page.dispose();
+        page.dispose();
+        await page.ready;
       }
-      expect(onSurfaceFailure).not.toHaveBeenCalled();
-      if (boundary.endsWith("rejection"))
-        gate.reject(new Error("late initialization rejection"));
-      else gate.resolve();
-      await vi.waitFor(() => expect(settled).toBe(2));
-      expect(onSurfaceFailure).not.toHaveBeenCalled();
-      expect(bridge.start).toHaveBeenCalledTimes(startup ? 2 : 1);
-      expect(bridge.close.mock.calls).toEqual(
-        startup && boundary !== "startup-rejection" ? [["s2", undefined]] : [],
-      );
-      expect(released[1]).toHaveBeenCalledTimes(
-        boundary === "fonts-rejection" ? 0 : 1,
-      );
-      expect(released[0]).not.toHaveBeenCalled();
-      const b = harness.instances[1];
-      if (b) {
-        expect(b.destroy).toHaveBeenCalledOnce();
-        expect(b.listeners.size).toBe(0);
-        b.emit({ type: "bell" });
-        b.canvas.dispatchEvent(
-          new Event("webglcontextlost", { cancelable: true }),
-        );
-        expect(b.options.services.ptyTransport.sendInput("late")).toBe(false);
-      }
-      expect(onSurfaceFailure).not.toHaveBeenCalled();
-      expect(outputs.size).toBe(1);
-      expect(exits.size).toBe(1);
-      expect(a.destroy).not.toHaveBeenCalled();
-      expect(
-        a.options.services.ptyTransport.sendInput("A remains usable"),
-      ).toBe(true);
-      expect(bridge.input).toHaveBeenCalledExactlyOnceWith(
-        "s1",
-        "A remains usable",
-      );
-      for (const output of outputs) output("s1", "healthy output", 14);
-      expect(a.sendInput).toHaveBeenCalledWith("healthy output", "pty");
-    } finally {
-      gate.resolve();
-      harness.setInitGate(undefined);
-      page.dispose();
-    }
-    expect(released[0]).toHaveBeenCalledOnce();
-    expect(outputs.size).toBe(0);
-    expect(exits.size).toBe(0);
-  });
+      expect(commands.size).toBe(0);
+      expect(outputs.size).toBe(0);
+      expect(exits.size).toBe(0);
+    },
+  );
 });
 
 function hex(rgb: string) {
