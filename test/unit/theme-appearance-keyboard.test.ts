@@ -104,10 +104,13 @@ it("does not focus the separator until the submitted Tab down/default/up has act
 });
 
 it("ignores untrusted, wrong-key/modifier/repeated and release-only receipts", async () => {
+  vi.useFakeTimers();
   const f = fixture();
   const operation = focusThemeSeparator(f.contents, ".separator");
   await f.submission;
   f.deliver("keyup");
+  await vi.advanceTimersByTimeAsync(25);
+  expect(f.focus).not.toHaveBeenCalled();
   for (const changes of [
     { isTrusted: false },
     { key: "F6" },
@@ -119,11 +122,16 @@ it("ignores untrusted, wrong-key/modifier/repeated and release-only receipts", a
   ]) {
     f.deliver("keydown", changes);
     f.deliver("keyup", changes);
+    // Let the real consumer poll before replacing invalid input with a valid pair.
+    await vi.advanceTimersByTimeAsync(25);
+    expect(f.focus).not.toHaveBeenCalled();
   }
-  await Promise.resolve();
-  expect(f.focus).not.toHaveBeenCalled();
   f.deliver("keydown");
+  // An earlier release cannot acknowledge this newly consumed down.
+  await vi.advanceTimersByTimeAsync(25);
+  expect(f.focus).not.toHaveBeenCalled();
   f.deliver("keyup");
+  await vi.advanceTimersByTimeAsync(25);
   await operation;
   expect(f.focus).toHaveBeenCalledOnce();
   expect(f.listeners.size).toBe(0);
