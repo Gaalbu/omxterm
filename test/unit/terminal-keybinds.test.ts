@@ -109,13 +109,13 @@ describe("terminal keybind accelerators", () => {
   });
 
   it.each(["darwin", "linux", "win32"])(
-    "keeps existing defaults bound and commandPalette unbound on %s",
+    "keeps every default canonically conflict-free on %s",
     (platform) => {
       const defaults = terminalDefaultKeybinds(platform);
-      expect(defaults.commandPalette).toBeNull();
-      const canonicals = TERMINAL_ACTION_NAMES.filter(
-        (action) => action !== "commandPalette",
-      ).map((action) => {
+      expect(defaults.commandPalette).toBe(
+        platform === "darwin" ? "CommandOrControl+Shift+P" : "Control+Shift+P",
+      );
+      const canonicals = TERMINAL_ACTION_NAMES.map((action) => {
         const value = defaults[action];
         expect(value).not.toBeNull();
         if (value === null) throw new Error("Existing default was unbound");

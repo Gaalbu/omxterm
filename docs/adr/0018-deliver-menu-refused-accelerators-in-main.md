@@ -39,8 +39,12 @@ to the shared matcher rather than inferring AltGr from held keys or a layout.
 
 The native View menu exposes Command Palette on every Supported Platform.
 `commandPalette` is part of the ordinary remappable Settings/keybind vocabulary,
-with a `null` default everywhere. Reserving no new key preserves previously
-valid configurations; no automatic rewrite or migration is needed.
+with `CommandOrControl+Shift+P` on macOS and `Control+Shift+P` on Linux/Windows.
+This maintainer-selected convention supersedes the initial unbound default.
+The defaults are canonically conflict-free; explicit remaps and `null` remain
+unchanged. Existing custom mappings can conflict with the new default and use
+the ordinary actionable collision rejection: remap either action or disable its
+shortcut. No silent reassignment, automatic rewrite or migration is introduced.
 
 The catalog is rebuilt for effective binding/language changes. The palette reads
 one localized snapshot per opening, shows current accelerator labels, and uses
