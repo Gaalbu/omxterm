@@ -76,8 +76,8 @@ its native floating behavior. The menu toggles the selected window;
 configuration sets the default for new windows.
 
 **Command Palette** — A temporary window-owned dialog for searching and invoking
-core application actions from the native View menu or an explicitly configured
-`commandPalette` shortcut (Cmd+Shift+P on macOS, Ctrl+Shift+P on Linux/Windows). It uses
+core application actions from the native View menu or the configurable
+`commandPalette` shortcut (default: Cmd+Shift+P on macOS, Ctrl+Shift+P on Linux/Windows). It uses
 localized substring matching without fuzzy search or history and validates its
 captured selected tab/pane rather than retargeting a replacement. Copy, Paste,
 Select All, Find, positional tab selection and self-opening are excluded. Find
