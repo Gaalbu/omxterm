@@ -82,6 +82,9 @@ On Linux and Windows, press and release **Alt** to open the application menu (ev
 
 - **Copy:** select text with the mouse, then use **Edit → Copy**, its shortcut, or the right-click menu. Selecting text alone does not overwrite your clipboard. If a terminal app (like Vim or `tmux`) captures mouse clicks, hold **Shift** while dragging to select text.
 - **Paste:** use **Edit → Paste**, its shortcut, or the right-click menu.
+
+If a program such as tmux handles right click, turn off **Show terminal right-click menu** in **Settings → General** (`terminal.contextMenu: false`). This hides only OMXTerm's terminal-content menu and preserves the program's mouse input. Editable-field menus and application-menu/keyboard actions remain available. To reach the application menu on Linux/Windows, press and release **Alt**. Reloading a JSON edit applies the choice to existing panes.
+
 - **Terminal control keys:** `Ctrl+C` interrupts the running command, and `Ctrl+V` is sent directly to the terminal program (for example, CLI tools that use `Ctrl+V` to attach clipboard images).
 
 ### Searching the scrollback

@@ -45,6 +45,11 @@ export function pages(platform: string): readonly Page[] {
           label: "settings.confirmClose",
         },
         {
+          kind: "toggle",
+          path: "terminal.contextMenu",
+          label: "settings.contextMenu",
+        },
+        {
           kind: "choice",
           path: "logLevel",
           label: "settings.logLevel",

@@ -544,6 +544,7 @@ describe("renderer Terminal Tabs runtime configuration", () => {
       },
     );
     const update = {
+      contextMenu: false,
       appearance: { fontSize: 24, lineHeight: 1.25, ligatures: true },
       padding: { top: 1, right: 2, bottom: 3, left: 4 },
       scrollbackLines: 0,

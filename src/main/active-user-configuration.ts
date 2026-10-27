@@ -60,6 +60,7 @@ export function terminalRendererConfiguration(
     fontSize: configuration.fontSize,
     fontLineHeight: configuration.fontLineHeight,
     fontLigatures: configuration.fontLigatures,
+    terminalContextMenu: configuration.terminalContextMenu,
     terminalPadding: configuration.terminalPadding,
     scrollbackLines: configuration.scrollbackLines,
     optionKeyMode: configuration.optionKeyMode,

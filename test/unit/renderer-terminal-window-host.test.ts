@@ -198,6 +198,7 @@ describe("renderer Terminal Window page host", () => {
           ligatures: true,
           systemFont: { family: "SF Mono", available: true },
         },
+        contextMenu: true,
         padding: { top: 4, right: 12, bottom: 6, left: 14 },
         scrollbackLines: 2_000,
         optionKeyMode: "right",

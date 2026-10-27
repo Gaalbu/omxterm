@@ -78,6 +78,33 @@ describe("settings snapshot", () => {
 });
 
 describe("graphical settings changes", () => {
+  it("saves and resets the live terminal context-menu preference", async () => {
+    const { service, read, reload } = await setup(
+      JSON.stringify({ version: 1 }),
+    );
+    expect((await service.snapshot()).values["terminal.contextMenu"]).toBe(
+      true,
+    );
+    expect(
+      await service.change({ path: "terminal.contextMenu", value: false }),
+    ).toMatchObject({ status: "saved" });
+    expect(JSON.parse(await read())).toEqual({
+      version: 1,
+      terminal: { contextMenu: false },
+    });
+    expect((await service.snapshot()).values["terminal.contextMenu"]).toBe(
+      false,
+    );
+    expect(
+      await service.change({ path: "terminal.contextMenu", value: null }),
+    ).toMatchObject({ status: "saved" });
+    expect(JSON.parse(await read())).toEqual({ version: 1 });
+    expect((await service.snapshot()).values["terminal.contextMenu"]).toBe(
+      true,
+    );
+    expect(reload).toHaveBeenCalledTimes(2);
+  });
+
   it("creates a minimal document only when the user changes a setting", async () => {
     const { service, read, reload } = await setup();
     const result = await service.change({ path: "font.size", value: 20 });

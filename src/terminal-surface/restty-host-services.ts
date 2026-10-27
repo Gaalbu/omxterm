@@ -3,7 +3,6 @@ import type { PatchedResttyServices } from "./restty-runtime-contract";
 import { decodeOsc52Write } from "./osc52-clipboard";
 import type { SemanticInputDelivery } from "./semantic-input-delivery";
 import type {
-  TerminalClipboard,
   TerminalSurfaceOptions,
   TerminalSurface,
 } from "./terminal-surface";
@@ -39,13 +38,24 @@ export function resttyClipboardActions(
 }
 
 export function resttyContextMenuHandler(
-  clipboard: TerminalClipboard | undefined,
+  options: Pick<TerminalSurfaceOptions, "clipboard" | "contextMenu">,
 ) {
-  return (event: Event) => {
-    if (!clipboard) return;
-    event.preventDefault();
-    clipboard.requestContextMenu();
-  };
+  let enabled = options.contextMenu ?? true;
+  return Object.assign(
+    (event: Event) => {
+      if (!options.clipboard) return;
+      event.preventDefault();
+      const searchField =
+        event.target instanceof HTMLInputElement &&
+        event.target.closest('[role="search"]') !== null;
+      if (enabled || searchField) options.clipboard.requestContextMenu();
+    },
+    {
+      configure: (value: boolean | undefined) => {
+        enabled = value ?? true;
+      },
+    },
+  );
 }
 
 export function resttyHostServices(

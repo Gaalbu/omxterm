@@ -21,6 +21,20 @@ import {
 
 beforeAll(installSettingsDom);
 
+it("exposes the terminal popup preference in General and submits its boolean value", async () => {
+  const view = await open();
+  const field = view.field("Show terminal right-click menu");
+  expect(field.type).toBe("checkbox");
+  expect(field.checked).toBe(true);
+  field.checked = false;
+  field.dispatchEvent(new Event("change"));
+  await view.settle();
+  expect(view.bridge.change).toHaveBeenCalledWith({
+    path: "terminal.contextMenu",
+    value: false,
+  });
+});
+
 afterEach(() => {
   document.body.replaceChildren();
 });

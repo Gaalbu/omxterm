@@ -1,3 +1,4 @@
+import { validateTerminalMenu } from "./user-configuration-terminal";
 import { validateLanguage } from "./user-configuration-language";
 import { lstat, readFile, stat } from "node:fs/promises";
 import path from "node:path";
@@ -55,6 +56,7 @@ export const DEFAULT_USER_CONFIGURATION: UserConfiguration = Object.freeze({
   fontSize: DEFAULT_TERMINAL_FONT_SIZE,
   fontLineHeight: DEFAULT_TERMINAL_LINE_HEIGHT,
   fontLigatures: DEFAULT_TERMINAL_FONT_LIGATURES,
+  terminalContextMenu: true,
   terminalPadding: DEFAULT_TERMINAL_PADDING,
   scrollbackLines: DEFAULT_SCROLLBACK_LINES,
   optionKeyMode: "none",
@@ -383,8 +385,6 @@ export function validateUserConfiguration(
       "lineHeight",
       "ligatures",
     ]);
-  if (terminal)
-    rejectUnknownKeys(terminal, configurationPath, "terminal", ["padding"]);
   if (padding)
     rejectUnknownKeys(padding, configurationPath, "terminal.padding", [
       "top",
@@ -534,13 +534,6 @@ export function validateUserConfiguration(
     "info",
   ) as OperationalLogLevel;
   const language = validateLanguage(root.language, configurationPath);
-  const optionKeyMode = optionalEnum(
-    keyboard?.optionAsAlt,
-    configurationPath,
-    "keyboard.optionAsAlt",
-    ["none", "left", "right", "both"] as const,
-    "none",
-  );
 
   return Object.freeze({
     version: USER_CONFIGURATION_VERSION,
@@ -552,9 +545,16 @@ export function validateUserConfiguration(
     fontSize,
     fontLineHeight,
     fontLigatures,
+    terminalContextMenu: validateTerminalMenu(terminal, configurationPath),
     terminalPadding,
     scrollbackLines,
-    optionKeyMode,
+    optionKeyMode: optionalEnum(
+      keyboard?.optionAsAlt,
+      configurationPath,
+      "keyboard.optionAsAlt",
+      ["none", "left", "right", "both"] as const,
+      "none",
+    ),
     ...windowPreferences(window, configurationPath),
     terminalTheme: DEFAULT_TERMINAL_THEME,
     keybinds: terminalKeybinds,

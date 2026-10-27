@@ -109,7 +109,7 @@ describe("strict version 1 User Configuration", () => {
         installedFonts,
       ),
     ).toEqual({
-      version: 1,
+      ...DEFAULT_USER_CONFIGURATION,
       language: "pt-BR",
       confirmClose: false,
       logLevel: "debug",

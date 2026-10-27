@@ -11,6 +11,12 @@ directly from the operating-system clipboard. Those image bytes do not travel
 through the PTY. Linux and Windows default to `Ctrl+Shift+C`/`Ctrl+Shift+V` for
 application text copy/paste, keeping bare `Ctrl+C`/`Ctrl+V` as terminal input.
 
+The live `terminal.contextMenu` preference defaults to `true`. Users may disable
+terminal-content popups while retaining program mouse reports, native-menu and
+keyboard clipboard actions. Editable-field context menus remain available. The
+Surface still cancels the browser default menu; this preference does not remove
+clipboard capabilities or alter PTY input routing.
+
 OSC 52 may write to the host clipboard so tmux and terminal applications can
 copy naturally, but clipboard read requests, empty writes, and malformed
 payloads are consumed without changing the clipboard. Text copy/paste is not

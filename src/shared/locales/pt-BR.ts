@@ -205,6 +205,8 @@ export const brazilianPortugueseMessages: Readonly<
   "settings.english": "English (United States)",
   "settings.portuguese": "Português (Brasil)",
   "settings.confirmClose": "Confirmar antes de fechar sessões ocupadas",
+  "settings.contextMenu":
+    "Mostrar menu do terminal ao clicar com o botão direito",
   "settings.logLevel": "Nível de registro",
   "settings.errors": "Somente erros",
   "settings.info": "Informações",

@@ -231,6 +231,7 @@ Every field except `version` is optional and falls back to its default when omit
 | `font.size`               | integer `8` – `72` (CSS px)             | `16`                             |
 | `font.lineHeight`         | number `1.0` – `2.0`                    | `1.0`                            |
 | `font.ligatures`          | boolean                                 | `true`                           |
+| `terminal.contextMenu`    | boolean                                 | `true`                           |
 | `terminal.padding.top`    | integer `0` – `128` (CSS px)            | `0`                              |
 | `terminal.padding.right`  | integer `0` – `128` (CSS px)            | `8`                              |
 | `terminal.padding.bottom` | integer `0` – `128` (CSS px)            | `8`                              |
@@ -248,6 +249,7 @@ Every field except `version` is optional and falls back to its default when omit
 ### Notes on specific settings
 
 - **`language`:** chooses the language of OMXTerm's menus, dialogs, window controls, Settings, snippets panel and preview, image preview, About and search controls. OMXTerm never picks it from your system language. Only the exact tags `"en-US"` and `"pt-BR"` are accepted; any other value is a configuration error. At startup, invalid configuration uses the built-in defaults; a rejected manual reload keeps the last-valid configuration, including its language. Reloading the configuration switches the language in open windows without closing tabs. Some text stays in English: the validation detail inside a reload notice, technical cause detail inside a translated Terminal Surface failure notice, failures that happen before the configuration loads, logs, snippet file diagnostics, and text owned by the operating system. Terminal output is never translated.
+- **`terminal.contextMenu`:** controls the right-click menu on terminal content. Set it to `false` if a terminal program such as tmux handles right click. Mouse reports still reach that program; menus in editable fields remain available. Change it in **Settings → General**, or edit the JSON and reload. Existing panes update without restarting their sessions. **Edit → Copy / Paste / Select All**, pane actions and their configured shortcuts remain available; on Linux/Windows, tap **Alt** for the application menu.
 - **`scrollback.lines`:** kept in memory per tab (up to a 10 MB per-screen core ceiling). Setting `0` clears and disables scrollback history.
 - **`keyboard.optionAsAlt` (macOS only):** `"none"` keeps standard macOS Option character input (like accented letters or symbols); `"left"`, `"right"`, or `"both"` sends terminal `Alt` sequences instead.
 - **`window.showTitleBar`, `window.showTabBar`, and `window.alwaysOnTop`:** set the initial state for new windows. Use the **View** and **Window** menus to toggle them in your current window.
@@ -483,13 +485,13 @@ node scripts/convert-ghostty-theme.mjs input-theme output-theme.json
 
 Choose **View → Reload User Configuration** (`Cmd+Shift+,` / `Ctrl+Shift+,`) after saving edits to `config.json` or your theme file:
 
-| Scope                 | Settings updated                                              |
-| --------------------- | ------------------------------------------------------------- |
-| Existing and new tabs | Theme, font size, ligatures, padding, scrollback, Option keys |
-| All windows and tabs  | Background transparency and blur                              |
-| App behavior          | Close confirmation, log level, keyboard shortcuts, language   |
-| New tabs (or restart) | Font family, line height, Windows shell                       |
-| New windows           | Always-on-Top, title-bar, and tab-bar initial defaults        |
+| Scope                 | Settings updated                                                            |
+| --------------------- | --------------------------------------------------------------------------- |
+| Existing and new tabs | Theme, font size, ligatures, context menu, padding, scrollback, Option keys |
+| All windows and tabs  | Background transparency and blur                                            |
+| App behavior          | Close confirmation, log level, keyboard shortcuts, language                 |
+| New tabs (or restart) | Font family, line height, Windows shell                                     |
+| New windows           | Always-on-Top, title-bar, and tab-bar initial defaults                      |
 
 A native font read already started for an initializing tab can finish with its
 creation-time family after reload; new tabs use the latest family. Requests must

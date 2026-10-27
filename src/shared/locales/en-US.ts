@@ -193,6 +193,7 @@ export const englishMessages = {
   "settings.english": "English (United States)",
   "settings.portuguese": "Português (Brasil)",
   "settings.confirmClose": "Confirm before closing busy sessions",
+  "settings.contextMenu": "Show terminal right-click menu",
   "settings.logLevel": "Log level",
   "settings.errors": "Errors only",
   "settings.info": "Information",

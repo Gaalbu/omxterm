@@ -166,6 +166,10 @@ succeeds ([ADR 0025](adr/0025-use-restty-as-the-terminal-surface.md)).
   pane focuses it before the native context menu opens, so its Copy, Paste and
   Select All act on that pane; in a split tab the menu also offers Close Pane,
   showing the current `closePane` keybind and following the same confirmation.
+  `terminal.contextMenu` defaults to `true`. Setting it to `false` suppresses
+  only terminal-content popups, including Close Pane, without suppressing
+  application mouse reports or enabling a browser menu. Reload applies to
+  existing panes; field/search menus and native-menu/keyboard actions remain.
   Each terminal popup captures its source window, pane and live Surface, not
   a later selection. Pane exit, pane/tab removal, changed pane/tab selection,
   a newer popup or owner disposal makes its retained actions inert; activation
@@ -1014,6 +1018,7 @@ track subsequent bundled palette changes. A present file must contain
 - `logLevel`;
 - `windowsShell`;
 - `font.family`, `font.size`, `font.lineHeight`, and `font.ligatures`;
+- `terminal.contextMenu`: boolean, default `true`, live;
 - `terminal.padding.top`, `terminal.padding.right`, `terminal.padding.bottom`,
   and `terminal.padding.left`;
 - `scrollback.lines`;

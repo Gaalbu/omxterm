@@ -153,7 +153,7 @@ export async function mountResttyTerminalSurface(
   let padding = resolvePadding(options.padding);
   const scrollbackLines = validateScrollbackLines(options.scrollbackLines);
   const initialFamily = options.appearance?.systemFont?.family;
-  const onContextMenu = resttyContextMenuHandler(options.clipboard);
+  const onContextMenu = resttyContextMenuHandler(options);
   const releaseSearchEscape = retainSearchEscapeGesture(container);
   const revealInput = () => {
     visibleLinkController?.invalidate();
@@ -187,13 +187,13 @@ export async function mountResttyTerminalSurface(
   const applyConfiguration = (configuration: TerminalSurfaceConfiguration) => {
     const nextBaseline = resolveFontSize(configuration.appearance.fontSize);
     resolveLineHeight(configuration.appearance.lineHeight);
-    const nextLigatures = configuration.appearance.ligatures;
     const nextPadding = resolvePadding(configuration.padding);
     const nextTheme = resolveTheme(configuration.theme);
     const nextScrollbackLines = validateScrollbackLines(
       configuration.scrollbackLines,
     );
     if (disposed || !pane) return;
+    onContextMenu.configure(configuration.contextMenu);
 
     const zoomDelta = currentFontSize - baselineFontSize;
     baselineFontSize = nextBaseline;
@@ -202,7 +202,7 @@ export async function mountResttyTerminalSurface(
     applyContainerAppearance();
     applyRuntimeTheme(terminalTheme, configuration.labels);
     applyRuntimeSize(Math.max(1, baselineFontSize + zoomDelta));
-    pane.runtime.terminal.setLigatures(nextLigatures);
+    pane.runtime.terminal.setLigatures(configuration.appearance.ligatures);
     pane.runtime.terminal.setOptionKeyMode(configuration.optionKeyMode);
     pane.runtime.terminal.setScrollbackLines(nextScrollbackLines);
     refit();

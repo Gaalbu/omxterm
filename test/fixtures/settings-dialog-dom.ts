@@ -22,6 +22,7 @@ export const base: SettingsSnapshot = {
     "font.size": 16,
     "font.lineHeight": 1,
     "font.ligatures": true,
+    "terminal.contextMenu": true,
     "theme.path": "",
     "scrollback.lines": 10_000,
     "terminal.padding.top": 0,

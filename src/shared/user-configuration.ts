@@ -45,6 +45,7 @@ export interface TerminalRendererConfiguration {
   readonly fontSize: number;
   readonly fontLineHeight: number;
   readonly fontLigatures: boolean;
+  readonly terminalContextMenu?: boolean;
   readonly terminalPadding: TerminalPadding;
   readonly scrollbackLines: number;
   readonly optionKeyMode: OptionKeyMode;
@@ -65,6 +66,7 @@ export interface UserConfiguration {
   readonly fontSize: number;
   readonly fontLineHeight: number;
   readonly fontLigatures: boolean;
+  readonly terminalContextMenu: boolean;
   readonly terminalPadding: TerminalPadding;
   readonly scrollbackLines: number;
   readonly optionKeyMode: OptionKeyMode;
@@ -82,6 +84,8 @@ function hasValidOptionalRendererFields(
 ): boolean {
   return (
     (value.language === undefined || isSupportedLanguage(value.language)) &&
+    (value.terminalContextMenu === undefined ||
+      typeof value.terminalContextMenu === "boolean") &&
     isOptionalSurfaceFontIdentity(value.fontConfigurationId) &&
     (value.fontFamily === undefined || typeof value.fontFamily === "string")
   );
@@ -101,6 +105,7 @@ export function isTerminalRendererConfiguration(
         "fontSize",
         "fontLineHeight",
         "fontLigatures",
+        "terminalContextMenu",
         "terminalPadding",
         "scrollbackLines",
         "optionKeyMode",

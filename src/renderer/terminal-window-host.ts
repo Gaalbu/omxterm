@@ -464,6 +464,7 @@ function sameSurfaceConfiguration(
     first.appearance.ligatures === second.appearance.ligatures &&
     firstSystemFont?.family === secondSystemFont?.family &&
     firstSystemFont?.available === secondSystemFont?.available &&
+    first.contextMenu === second.contextMenu &&
     first.scrollbackLines === second.scrollbackLines &&
     first.optionKeyMode === second.optionKeyMode &&
     first.padding.top === second.padding.top &&
@@ -496,6 +497,7 @@ function surfaceConfiguration(
           }
         : {}),
     },
+    contextMenu: configuration.terminalContextMenu ?? true,
     scrollbackLines: configuration.scrollbackLines,
     padding: configuration.terminalPadding,
     optionKeyMode: configuration.optionKeyMode,

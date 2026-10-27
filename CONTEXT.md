@@ -177,6 +177,11 @@ frame. This identity is not a guarantee of every xterm extension.
 **Shell Integration** — Terminal-specific shell startup hooks. OMXTerm leaves
 shell initialization to the user and injects no hooks.
 
+**Terminal Context Menu** — The native popup for terminal content. The live
+`terminal.contextMenu` preference defaults to enabled; disabling it preserves
+application mouse reporting, editable-field menus and keyboard/native-menu
+actions, without enabling a browser popup.
+
 **Clipboard Boundary** — Explicit text copy/paste between the terminal and OS
 clipboard. Selection alone does not copy. Programs can request bounded OSC 52
 writes, but cannot read or clear the clipboard.

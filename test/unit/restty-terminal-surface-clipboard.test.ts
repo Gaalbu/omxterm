@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { DEFAULT_TERMINAL_THEME } from "../../src/shared/terminal-theme";
 import type {
   PatchedResttyConfig,
   PatchedResttyPane,
@@ -115,6 +116,56 @@ async function mount(
 }
 
 describe("Restty clipboard and Protected Paste", () => {
+  it("suppresses only the terminal popup and reloads that choice without replacing the session", async () => {
+    const value = await mount(createHarness(), { contextMenu: false });
+    const popup = () => {
+      const event = new MouseEvent("contextmenu", {
+        bubbles: true,
+        cancelable: true,
+        button: 2,
+      });
+      value.restty.canvas.dispatchEvent(event);
+      expect(event.defaultPrevented).toBe(true);
+    };
+    popup();
+    expect(value.clipboard.requestContextMenu).not.toHaveBeenCalled();
+    value.restty.services().ptyTransport.sendInput("\u001b[<2;10;3M");
+    expect(value.adapter.write).toHaveBeenCalledWith("\u001b[<2;10;3M");
+    const configuration = {
+      appearance: { fontSize: 16, lineHeight: 1, ligatures: true },
+      padding: { top: 0, right: 8, bottom: 8, left: 8 },
+      scrollbackLines: 10000,
+      optionKeyMode: "none" as const,
+      theme: DEFAULT_TERMINAL_THEME,
+    };
+    value.surface.applyConfiguration({ ...configuration, contextMenu: true });
+    popup();
+    expect(value.clipboard.requestContextMenu).toHaveBeenCalledOnce();
+    value.surface.applyConfiguration({ ...configuration, contextMenu: false });
+    popup();
+    expect(value.clipboard.requestContextMenu).toHaveBeenCalledOnce();
+    expect(value.adapter.start).toHaveBeenCalledOnce();
+    expect(value.adapter.close).not.toHaveBeenCalled();
+    value.surface.dispose();
+  });
+
+  it("keeps the search field context menu when terminal popups are disabled", async () => {
+    const value = await mount(createHarness(), { contextMenu: false });
+    const search = document.createElement("div");
+    search.setAttribute("role", "search");
+    const input = document.createElement("input");
+    search.append(input);
+    value.container.append(search);
+    const event = new MouseEvent("contextmenu", {
+      bubbles: true,
+      cancelable: true,
+    });
+    input.dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(true);
+    expect(value.clipboard.requestContextMenu).toHaveBeenCalledOnce();
+    value.surface.dispose();
+  });
+
   beforeEach(() => {
     harness.FakeRestty.instances.length = 0;
   });

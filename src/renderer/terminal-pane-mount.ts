@@ -172,6 +172,7 @@ function completeConfiguration(
         ? { systemFont: options.appearance.systemFont }
         : {}),
     },
+    contextMenu: options.contextMenu ?? true,
     padding: options.padding,
     scrollbackLines: options.scrollbackLines,
     optionKeyMode: options.optionKeyMode,

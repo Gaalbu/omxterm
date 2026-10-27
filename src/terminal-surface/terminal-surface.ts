@@ -66,6 +66,7 @@ export interface TerminalSurfaceLabels {
 }
 
 export interface TerminalSurfaceConfiguration {
+  readonly contextMenu?: boolean;
   readonly labels?: TerminalSurfaceLabels;
   readonly scrollbackLines: number;
   readonly optionKeyMode: OptionKeyMode;
@@ -90,6 +91,7 @@ export type TerminalSurfaceFailure =
   | { readonly kind: "backend-loss" };
 
 export interface TerminalSurfaceOptions {
+  readonly contextMenu?: boolean;
   readonly labels?: TerminalSurfaceLabels;
   // Standalone Surfaces focus their initial pane by default. Window/tab owners
   // disable this implicit construction side effect and call focus() explicitly.
