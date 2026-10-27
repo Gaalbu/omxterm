@@ -246,6 +246,20 @@ may also serve as a practical example for extension authors.
 by the OMXTerm project. Compatibility with OMXTerm does not imply project
 review, support or a safety guarantee.
 
+**Installed Packages** — The internal module that owns local archive validation,
+immutable installed versions, aggregate registry transactions, installation
+generations and deferred cleanup. It is an implementation foundation, not the
+planned user-facing extension manager or execution host. See the
+[foundation contract](docs/extension-installation-foundation.md).
+
+**Version Use Lease** — An independently held native shared lease retaining one
+immutable installed version while its owner may read package files. It does not
+prove code stopped, serialize external side effects or contain descendants.
+
+**Pending Cleanup** — Managed bytes remain because they are pinned, busy or not
+yet collected. Admission can already be disabled/tombstoned; unrelated extension
+management need not stop.
+
 ## Diagnostics and distribution
 
 **Operational Event** — Safe structured metadata about OMXTerm lifecycle,

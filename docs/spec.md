@@ -1607,6 +1607,18 @@ The package is organized by runtime responsibility: main, preload, renderer, and
 the portable Terminal Surface. Native window management and PTY creation remain
 in main.
 
+### Internal installed-package foundation
+
+An internal, explicitly built Installed Packages module implements local archive
+validation/installation, compatibility, immutable version pins, generation-based
+admission, disable/tombstones and deferred physical cleanup. It has no application
+startup caller, graphical installation, catalog/network operation, public SDK or
+extension execution. This checkpoint does not deliver Files or change the current
+application network/terminal ownership contracts. Its implemented interface and
+limits are governed by the [foundation contract](extension-installation-foundation.md)
+and [ADR 0038](adr/0038-pin-immutable-installed-packages.md); future runtime/UI
+consumers require their own integration and qualification.
+
 ## Release contract
 
 OMXTerm uses the MIT License and follows the [versioning policy](versioning.md).
