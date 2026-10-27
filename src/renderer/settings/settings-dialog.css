@@ -26,6 +26,7 @@ body.tabs-visible .settings-tab {
   padding: 0;
   background: var(--ui-surface, var(--terminal-background));
   color: var(--ui-text, var(--terminal-foreground));
+  color-scheme: var(--ui-color-scheme, dark);
   overflow: hidden;
 }
 .settings-tabs {

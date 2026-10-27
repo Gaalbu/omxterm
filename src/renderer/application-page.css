@@ -3,7 +3,7 @@
   flex: 1 1 auto;
   grid-template-columns: minmax(0, 1fr);
   grid-template-rows: auto auto minmax(0, 1fr) auto;
-  gap: 16px 24px;
+  gap: 12px 24px;
   width: 100%;
   max-width: 1440px;
   min-width: 0;
@@ -151,7 +151,7 @@
 @media (min-width: 1200px) {
   .application-page {
     padding: 32px;
-    gap: 24px 32px;
+    gap: 12px 32px;
   }
 }
 @media (max-height: 360px) {
