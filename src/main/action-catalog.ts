@@ -47,7 +47,6 @@ export interface TerminalApplicationMenuActions {
   readonly focusSelectedPane: (target: TerminalPaneFocusTarget) => void;
   readonly equalizeSelectedPanes: () => void;
 }
-
 export type CoreActionId =
   | TerminalActionName
   | "about"
@@ -55,16 +54,13 @@ export type CoreActionId =
   | "openLocalImage"
   | "alwaysOnTop"
   | "devTools";
-export type CoreActionTarget = "application" | "window" | "content";
-
 export interface CoreAction {
   readonly id: CoreActionId;
   readonly label: string;
   readonly accelerator: string | null;
+  // These existing guarded callbacks own availability, target selection and
+  // lifecycle policy for every entry point; metadata is not a second policy.
   readonly invoke: () => void;
-  // Metadata for the composition owner to capture/validate targets, not a
-  // second dispatcher. Supplied callbacks retain their existing guards.
-  readonly target: CoreActionTarget;
   readonly palette: boolean;
 }
 export type CoreActionCatalog = Readonly<Record<CoreActionId, CoreAction>>;
@@ -78,161 +74,95 @@ export function createCoreActionCatalog(
   keybinds: TerminalKeybinds,
   t: Translator["t"] = translatorFor(DEFAULT_LANGUAGE).t,
 ): CoreActionCatalog {
-  const action = (
-    label: string,
-    invoke: () => void,
-    target: CoreActionTarget,
-    palette = true,
-  ) => ({ label, invoke, target, palette });
+  const action = (label: string, invoke: () => void, palette = true) => ({
+    label,
+    invoke,
+    palette,
+  });
   const definitions = {
-    about: action(t("menu.about"), actions.showAbout, "window"),
-    settings: action(t("menu.settings"), actions.showSettings, "window"),
+    about: action(t("menu.about"), actions.showAbout),
+    settings: action(t("menu.settings"), actions.showSettings),
     quit: action(
       t("menu.quit", { name: applicationName }),
       actions.requestQuit,
-      "application",
     ),
-    copy: action(
-      t("menu.copy"),
-      actions.copySelectedTerminal,
-      "content",
-      false,
-    ),
-    paste: action(
-      t("menu.paste"),
-      actions.pasteSelectedTerminal,
-      "content",
-      false,
-    ),
+    copy: action(t("menu.copy"), actions.copySelectedTerminal, false),
+    paste: action(t("menu.paste"), actions.pasteSelectedTerminal, false),
     selectAll: action(
       t("menu.selectAll"),
       actions.selectAllSelectedTerminal,
-      "content",
       false,
     ),
-    find: action(
-      t("menu.find"),
-      actions.findInSelectedTerminal,
-      "content",
-      false,
-    ),
-    newWindow: action(t("menu.newWindow"), actions.newWindow, "application"),
-    newTab: action(t("menu.newTab"), actions.newTabInSelectedWindow, "window"),
-    openLocalImage: action(
-      t("menu.openLocalImage"),
-      actions.openLocalImage,
-      "window",
-    ),
-    closeTab: action(t("menu.closeTab"), actions.closeSelectedTab, "content"),
-    closeWindow: action(
-      t("menu.closeWindow"),
-      actions.closeSelectedWindow,
-      "window",
-    ),
+    find: action(t("menu.find"), actions.findInSelectedTerminal, false),
+    newWindow: action(t("menu.newWindow"), actions.newWindow),
+    newTab: action(t("menu.newTab"), actions.newTabInSelectedWindow),
+    openLocalImage: action(t("menu.openLocalImage"), actions.openLocalImage),
+    closeTab: action(t("menu.closeTab"), actions.closeSelectedTab),
+    closeWindow: action(t("menu.closeWindow"), actions.closeSelectedWindow),
     commandPalette: action(
       t("action.commandPalette"),
       actions.showCommandPalette,
-      "window",
       false,
     ),
-    zoomIn: action(t("menu.zoomIn"), actions.zoomInSelectedWindow, "window"),
-    zoomOut: action(t("menu.zoomOut"), actions.zoomOutSelectedWindow, "window"),
-    actualSize: action(
-      t("menu.actualSize"),
-      actions.resetSelectedWindowZoom,
-      "window",
-    ),
+    zoomIn: action(t("menu.zoomIn"), actions.zoomInSelectedWindow),
+    zoomOut: action(t("menu.zoomOut"), actions.zoomOutSelectedWindow),
+    actualSize: action(t("menu.actualSize"), actions.resetSelectedWindowZoom),
     toggleSnippets: action(
       t("menu.toggleSnippets"),
       actions.toggleSelectedSnippets,
-      "window",
     ),
-    toggleTabBar: action(
-      t("menu.toggleTabBar"),
-      actions.toggleSelectedTabBar,
-      "window",
-    ),
+    toggleTabBar: action(t("menu.toggleTabBar"), actions.toggleSelectedTabBar),
     toggleTitleBar: action(
       t("menu.toggleTitleBar"),
       actions.toggleSelectedTitleBar,
-      "window",
     ),
-    splitRight: action(
-      t("menu.splitRight"),
-      () => actions.splitSelectedPane("right"),
-      "content",
+    splitRight: action(t("menu.splitRight"), () =>
+      actions.splitSelectedPane("right"),
     ),
-    splitDown: action(
-      t("menu.splitDown"),
-      () => actions.splitSelectedPane("down"),
-      "content",
+    splitDown: action(t("menu.splitDown"), () =>
+      actions.splitSelectedPane("down"),
     ),
-    focusNextPane: action(
-      t("menu.focusNextPane"),
-      () => actions.focusSelectedPane("next"),
-      "content",
+    focusNextPane: action(t("menu.focusNextPane"), () =>
+      actions.focusSelectedPane("next"),
     ),
-    focusPreviousPane: action(
-      t("menu.focusPreviousPane"),
-      () => actions.focusSelectedPane("previous"),
-      "content",
+    focusPreviousPane: action(t("menu.focusPreviousPane"), () =>
+      actions.focusSelectedPane("previous"),
     ),
-    focusPaneLeft: action(
-      t("menu.focusPaneLeft"),
-      () => actions.focusSelectedPane("left"),
-      "content",
+    focusPaneLeft: action(t("menu.focusPaneLeft"), () =>
+      actions.focusSelectedPane("left"),
     ),
-    focusPaneRight: action(
-      t("menu.focusPaneRight"),
-      () => actions.focusSelectedPane("right"),
-      "content",
+    focusPaneRight: action(t("menu.focusPaneRight"), () =>
+      actions.focusSelectedPane("right"),
     ),
-    focusPaneUp: action(
-      t("menu.focusPaneAbove"),
-      () => actions.focusSelectedPane("up"),
-      "content",
+    focusPaneUp: action(t("menu.focusPaneAbove"), () =>
+      actions.focusSelectedPane("up"),
     ),
-    focusPaneDown: action(
-      t("menu.focusPaneBelow"),
-      () => actions.focusSelectedPane("down"),
-      "content",
+    focusPaneDown: action(t("menu.focusPaneBelow"), () =>
+      actions.focusSelectedPane("down"),
     ),
     equalizePanes: action(
       t("menu.equalizePanes"),
       actions.equalizeSelectedPanes,
-      "content",
     ),
-    closePane: action(
-      t("menu.closePane"),
-      actions.closeSelectedPane,
-      "content",
-    ),
+    closePane: action(t("menu.closePane"), actions.closeSelectedPane),
     reloadConfig: action(
       t("menu.reloadConfiguration"),
       actions.reloadUserConfiguration,
-      "application",
     ),
     devTools: action(
       t("menu.toggleDeveloperTools"),
       actions.toggleSelectedDevTools,
-      "window",
     ),
     toggleFullScreen: action(
       t("menu.toggleFullScreen"),
       actions.toggleSelectedFullScreen,
-      "window",
     ),
     alwaysOnTop: action(
       t("menu.alwaysOnTop"),
       actions.toggleSelectedAlwaysOnTop,
-      "window",
     ),
-    nextTab: action(t("menu.showNextTab"), actions.selectNextTab, "window"),
-    previousTab: action(
-      t("menu.showPreviousTab"),
-      actions.selectPreviousTab,
-      "window",
-    ),
+    nextTab: action(t("menu.showNextTab"), actions.selectNextTab),
+    previousTab: action(t("menu.showPreviousTab"), actions.selectPreviousTab),
     ...(Object.fromEntries(
       Array.from({ length: 9 }, (_, index) => {
         const position = index + 1;
@@ -241,7 +171,6 @@ export function createCoreActionCatalog(
           action(
             t("menu.tab", { position }),
             () => actions.selectTabInSelectedWindow(position),
-            "window",
             false,
           ),
         ];
@@ -263,7 +192,6 @@ export function createCoreActionCatalog(
     ) as Record<CoreActionId, CoreAction>,
   );
 }
-
 export function coreActionInvocations(
   catalog: CoreActionCatalog,
 ): Readonly<Record<TerminalActionName, () => void>> {
@@ -273,7 +201,6 @@ export function coreActionInvocations(
     ) as Record<TerminalActionName, () => void>,
   );
 }
-
 export function coreActionKeybinds(
   catalog: CoreActionCatalog,
 ): TerminalKeybinds {
@@ -283,7 +210,6 @@ export function coreActionKeybinds(
     ) as Record<TerminalActionName, string | null>,
   );
 }
-
 export function coreActionForKeyboardInput(
   catalog: CoreActionCatalog,
   input: AcceleratorKeyboardInput,
@@ -296,7 +222,6 @@ export function coreActionForKeyboardInput(
   );
   return id === undefined ? undefined : catalog[id];
 }
-
 export function corePaletteActions(
   catalog: CoreActionCatalog,
 ): readonly CoreAction[] {

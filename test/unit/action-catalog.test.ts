@@ -109,13 +109,7 @@ it.each(["en-US", "pt-BR"] as const)(
     ] as const) {
       expect(palette).toContain(catalog[id]);
       expect(catalog[id].accelerator).toBeNull();
-      expect(catalog[id].target).toBe("window");
     }
-    expect(catalog.quit.target).toBe("application");
-    expect(catalog.reloadConfig.target).toBe("application");
-    expect(catalog.newWindow.target).toBe("application");
-    expect(catalog.closeTab.target).toBe("content");
-    expect(catalog.splitRight.target).toBe("content");
     const match = coreActionForKeyboardInput(
       catalog,
       {

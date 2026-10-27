@@ -8,7 +8,9 @@
   border-radius: var(--ui-radius);
   background: var(--ui-raised);
   color: var(--ui-text);
-  font: inherit;
+  font:
+    14px/1.5 system-ui,
+    sans-serif;
   box-shadow: 0 16px 48px #0006;
 }
 .command-palette::backdrop {
