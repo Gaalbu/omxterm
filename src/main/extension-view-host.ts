@@ -1,3 +1,4 @@
+/* eslint-disable max-lines -- Keep one epoch's admission, presentation and bounded retirement transitions together. */
 import { randomUUID } from "node:crypto";
 import { isAbsolute } from "node:path";
 import {
@@ -107,6 +108,8 @@ function notify(callback: () => void) {
 }
 
 // One captured resource capability, one lazy epoch. A retired host never revives.
+const storageMethods = ["clearData", "clearCache", "clearAuthCache"] as const;
+
 class NativeExtensionViewHost {
   readonly #epoch = randomUUID();
   readonly #origin = `${extensionViewScheme}://${this.#epoch}`;
@@ -118,6 +121,7 @@ class NativeExtensionViewHost {
   #session: Session | undefined;
   #retirement: Promise<ExtensionViewOutcome> | undefined;
   #selected: string | null = null;
+  #layoutFocus: string | null = null;
   #revision = 0;
   #cleanupFailed = false;
   constructor(private readonly options: ExtensionViewHostOptions) {
@@ -130,8 +134,8 @@ class NativeExtensionViewHost {
     options.owner.webContents.on("destroyed", this.#ownerLost);
     options.owner.webContents.on("render-process-gone", this.#ownerLost);
     options.owner.webContents.on("did-start-navigation", this.#ownerNavigation);
-    options.owner.on("resize", this.#hideAll);
-    options.owner.webContents.on("zoom-changed", this.#hideAll);
+    options.owner.on("resize", this.#hideForLayout);
+    options.owner.webContents.on("zoom-changed", this.#hideForLayout);
   }
   #live() {
     return (
@@ -150,10 +154,10 @@ class NativeExtensionViewHost {
     if (!entry.contents.isDestroyed())
       entry.contents.send(extensionViewIpc.visibility, visible);
   }
-  #hideAll = () => {
-    this.#selected = null;
+  #hideAll = (keep?: Entry) => {
+    this.#selected = keep?.descriptor.id ?? null;
     for (const entry of this.#views.values()) {
-      if (!entry.contents.isDestroyed()) {
+      if (entry !== keep && !entry.contents.isDestroyed()) {
         try {
           this.#visibility(entry, false);
         } catch {
@@ -161,6 +165,11 @@ class NativeExtensionViewHost {
         }
       }
     }
+  };
+  #hideForLayout = () => {
+    if (this.#selected && this.#views.get(this.#selected)?.contents.isFocused())
+      this.#layoutFocus = this.#selected;
+    this.#hideAll();
   };
   #destroy(entry: Entry) {
     if (entry.closing) return;
@@ -203,7 +212,6 @@ class NativeExtensionViewHost {
       } catch {
         this.#cleanupFailed = true;
       }
-      // Keep refusal hooks installed after unhandling, including on failure.
       try {
         await this.#session.closeAllConnections();
       } catch {
@@ -215,21 +223,14 @@ class NativeExtensionViewHost {
     );
     await this.#resources.drain();
     if (this.#session) {
-      // Separate calls also catch synchronous failures without skipping others.
-      for (const clear of [
-        () => this.#session!.clearData(),
-        () => this.#session!.clearCache(),
-        () => this.#session!.clearAuthCache(),
-      ]) {
+      for (const clear of storageMethods) {
         try {
-          await clear();
+          await this.#session[clear]();
         } catch {
           failures.push("storage");
         }
       }
     }
-    // Disk ownership may release after actual views/reads drain even when
-    // session cleanup failed. Neither is proof of all-browser-work exit.
     try {
       await this.options.resources.release();
     } catch {
@@ -264,8 +265,8 @@ class NativeExtensionViewHost {
         "did-start-navigation",
         this.#ownerNavigation,
       );
-      this.options.owner.removeListener("resize", this.#hideAll);
-      this.#ownerContents.removeListener("zoom-changed", this.#hideAll);
+      this.options.owner.removeListener("resize", this.#hideForLayout);
+      this.#ownerContents.removeListener("zoom-changed", this.#hideForLayout);
       this.#changeState(outcome.status, outcome);
       return outcome;
     });
@@ -426,32 +427,49 @@ class NativeExtensionViewHost {
       throw new TypeError("Invalid hosted presentation");
     if (!this.#live() || presentation.revision <= this.#revision) return false;
     this.#revision = presentation.revision;
-    this.#hideAll();
+    const entry =
+      presentation.id === null ? undefined : this.#views.get(presentation.id);
+    // A geometry-only update must not hide/refocus a live field or interrupt IME.
+    this.#hideAll(
+      entry && this.#selected === presentation.id ? entry : undefined,
+    );
     if (this.#cleanupFailed) {
       void this.retire();
       return false;
     }
-    if (presentation.id === null) return true;
-    const entry = this.#views.get(presentation.id);
+    if (presentation.id === null) {
+      this.#layoutFocus = null;
+      return true;
+    }
     if (
       !entry ||
       entry.closing ||
       entry.loading ||
       entry.contents.isDestroyed()
-    )
+    ) {
+      this.#hideAll();
       return false;
+    }
     try {
       const bounds = extensionViewBounds(
         this.options.owner,
         this.options.contentSlot(),
         presentation.bounds,
       );
-      if (!bounds || !this.#live() || this.#revision !== presentation.revision)
+      if (
+        !bounds ||
+        !this.#live() ||
+        this.#revision !== presentation.revision
+      ) {
+        this.#hideAll();
         return false;
+      }
       entry.view.setBounds(bounds);
       this.#visibility(entry, true);
       this.#selected = entry.descriptor.id;
-      if (presentation.focus) entry.contents.focus();
+      if (presentation.focus || this.#layoutFocus === presentation.id)
+        entry.contents.focus();
+      this.#layoutFocus = null;
       return true;
     } catch {
       void this.retire();

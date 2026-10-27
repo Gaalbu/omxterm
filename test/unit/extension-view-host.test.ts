@@ -24,7 +24,11 @@ import {
   type ExtensionViewRuntime,
 } from "../../src/main/extension-view-host";
 import { extensionResourceLimits } from "../../src/main/extension-view-resources";
-import { startExtensionViewHost } from "../../src/main/extension-view-ipc";
+import {
+  startExtensionViewHost,
+  sendExtensionAwareClipboard,
+} from "../../src/main/extension-view-ipc";
+import { terminalIpc } from "../../src/shared/terminal-ipc";
 import {
   extensionViewIpc,
   type HostedContentPresentation,
@@ -382,6 +386,26 @@ describe("native extension host through its production resource interface", () =
 });
 
 describe("epoch lifetime and failure settlement", () => {
+  it("preserves field focus during layout and restores it after acknowledged native resize", async () => {
+    const f = await fixture();
+    const tab = await f.host!.open(opening);
+    await f.host!.present(present(tab.id));
+    const view = f.views[0]!;
+    view.setVisible.mockClear();
+    view.webContents.focus.mockClear();
+    await f.host!.present({ ...present(tab.id, 2), focus: false });
+    expect(view.setVisible).not.toHaveBeenCalledWith(false);
+    expect(view.webContents.focus).not.toHaveBeenCalled();
+    f.owner.emit("resize", {});
+    expect(view.setVisible).toHaveBeenLastCalledWith(false);
+    await f.host!.present({ ...present(tab.id, 3), focus: false });
+    expect(view.webContents.focus).toHaveBeenCalledOnce();
+    await f.host!.present({
+      ...present(tab.id, 4),
+      bounds: { x: 2000, y: 2000, width: 1, height: 1 },
+    });
+    expect(view.setVisible).toHaveBeenLastCalledWith(false);
+  });
   it("retains lifetime objects when native owner/view getters disappear on close", async () => {
     const f = await fixture();
     await f.host!.open({ entryResource: "index.html", title: "A" });
@@ -622,6 +646,14 @@ it("IPC composition authenticates actual terminal main frame and rejects cross-o
   expect(await invoke(extensionViewIpc.present, event(a), present(da.id))).toBe(
     true,
   );
+  a.owner.webContents.send.mockClear();
+  sendExtensionAwareClipboard(
+    ipc,
+    a.owner.webContents as unknown as Electron.WebContents,
+    "copy",
+  );
+  expect(a.views[0]!.webContents.copy).toHaveBeenCalledOnce();
+  expect(a.owner.webContents.send).not.toHaveBeenCalled();
   expect(
     await invoke(extensionViewIpc.present, event(a), present(null, 2)),
   ).toBe(true);
@@ -633,5 +665,38 @@ it("IPC composition authenticates actual terminal main frame and rejects cross-o
   );
   expect(handlers.size).toBe(2); // Other window still owns the shared handlers.
   await second.retire();
+  expect(
+    await invoke(extensionViewIpc.present, event(a), present(null, 3)),
+  ).toBe(true);
+  await expect(
+    invoke(extensionViewIpc.present, event(a), present(da.id, 4)),
+  ).rejects.toThrow("Unknown");
+  sendExtensionAwareClipboard(
+    ipc,
+    a.owner.webContents as unknown as Electron.WebContents,
+    "copy",
+  );
+  expect(a.owner.webContents.send).toHaveBeenLastCalledWith(
+    terminalIpc.clipboardAction,
+    "copy",
+  );
+  const c = await fixture(false);
+  const next = startExtensionViewHost({
+    ...c.options,
+    owner: a.options.owner,
+    ipcMain: ipc,
+  });
+  cleanups.push(() => next.retire());
+  const fresh = await next.open(opening);
+  expect(
+    await invoke(extensionViewIpc.present, event(a), present(fresh.id, 2)),
+  ).toBe(false);
+  expect(
+    await invoke(extensionViewIpc.present, event(a), present(fresh.id, 5)),
+  ).toBe(true);
+  await next.retire();
+  expect(handlers.size).toBe(2); // Safe hide ACKs survive epoch retirement.
+  a.owner.webContents.emit("destroyed");
+  b.owner.webContents.emit("destroyed");
   expect(handlers.size).toBe(0);
 });

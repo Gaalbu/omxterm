@@ -16,7 +16,12 @@ import {
 } from "./extension-view-host";
 
 type Host = ReturnType<typeof createExtensionViewHost>;
-type Route = { contents: WebContents; host: Host; issued: Set<string> };
+type Route = {
+  contents: WebContents;
+  host: Host | undefined;
+  retiring: boolean;
+  issued: Set<string>;
+};
 const routers = new WeakMap<IpcMain, Map<WebContents, Route>>();
 const presentationRevisions = new WeakMap<WebContents, number>();
 
@@ -31,7 +36,7 @@ export function sendExtensionAwareClipboard(
     routers
       .get(ipcMain)
       ?.get(owner)
-      ?.host.clipboard(action === "select-all" ? "selectAll" : action)
+      ?.host?.clipboard(action === "select-all" ? "selectAll" : action)
   )
     return;
   owner.send(terminalIpc.clipboardAction, target ? { action, target } : action);
@@ -50,7 +55,8 @@ export function startExtensionViewHost(
   )
     throw new Error("Invalid hosted owner setup");
   let routes = routers.get(options.ipcMain);
-  if (routes?.has(contents)) throw new Error("Hosted owner already registered");
+  if (routes?.get(contents)?.host)
+    throw new Error("Hosted owner already registered");
   if (!routes) {
     routes = new Map();
     const registry = routes;
@@ -74,7 +80,7 @@ export function startExtensionViewHost(
         if (
           presentation.id !== null &&
           (!route.issued.has(presentation.id) ||
-            !route.host.owns(presentation.id))
+            !route.host?.owns(presentation.id))
         )
           throw new Error("Unknown hosted content");
         if (
@@ -83,7 +89,13 @@ export function startExtensionViewHost(
         )
           return false;
         presentationRevisions.set(event.sender, presentation.revision);
-        return route.host.present(presentation);
+        if (presentation.id === null && route.retiring)
+          return route.host
+            ? route.host
+                .retire()
+                .then((outcome) => outcome.status === "settled")
+            : true;
+        return route.host?.present(presentation) ?? false;
       },
     );
     options.ipcMain.handle(
@@ -93,7 +105,7 @@ export function startExtensionViewHost(
         if (args.length !== 1 || !isHostedContentId(args[0]))
           throw new TypeError("Invalid hosted close");
         const id = args[0];
-        if (!route.issued.has(id) || !route.host.owns(id))
+        if (!route.issued.has(id) || !route.host?.owns(id))
           throw new Error("Unknown hosted content");
         await route.host.close(id);
       },
@@ -110,18 +122,25 @@ export function startExtensionViewHost(
       options.onRetired?.(id);
     },
     onState(state, outcome) {
-      if (state === "retiring") {
-        registry.delete(contents);
-        if (!registry.size) {
-          options.ipcMain.removeHandler(extensionViewIpc.present);
-          options.ipcMain.removeHandler(extensionViewIpc.close);
-          routers.delete(options.ipcMain);
-        }
+      const route = registry.get(contents);
+      if (route?.host === host) {
+        if (state === "retiring") route.retiring = true;
+        if (state === "settled") route.host = undefined;
       }
       options.onState?.(state, outcome);
     },
   });
-  registry.set(contents, { contents, host, issued });
+  if (!registry.has(contents))
+    contents.once("destroyed", () => {
+      registry.delete(contents);
+      presentationRevisions.delete(contents);
+      if (!registry.size) {
+        options.ipcMain.removeHandler(extensionViewIpc.present);
+        options.ipcMain.removeHandler(extensionViewIpc.close);
+        routers.delete(options.ipcMain);
+      }
+    });
+  registry.set(contents, { contents, host, issued, retiring: false });
   return {
     async open(input: { entryResource: string; title: string }) {
       const descriptor = await host.open(input);

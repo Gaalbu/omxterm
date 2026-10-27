@@ -44,6 +44,10 @@ if (bridge.terminal.hostedContent) {
     once: true,
   });
 }
+const presentationReceipts: unknown[] = [];
+Object.defineProperty(window, "__extensionPresentationReceipts", {
+  value: presentationReceipts,
+});
 const hostedContent = bridge.terminal.hostedContent && {
   ...bridge.terminal.hostedContent,
   async present(
@@ -53,6 +57,7 @@ const hostedContent = bridge.terminal.hostedContent && {
     latestRevision = input.revision;
     if (input.id !== null) hiddenAcknowledged = false;
     const accepted = await bridge.terminal.hostedContent!.present(input);
+    presentationReceipts.push({ ...input, accepted });
     if (accepted && input.id === null && input.revision === latestRevision) {
       hiddenAcknowledged = true;
       hideRevision = input.revision;

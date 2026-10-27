@@ -1,3 +1,4 @@
+/* eslint-disable max-lines -- One supervised composition owns the real PTY, Settings, child views and pin through failure. */
 import assert from "node:assert/strict";
 import {
   type BrowserWindow,
@@ -111,9 +112,7 @@ export async function exerciseExtensionViews(options: {
     catalog: () => catalog,
   });
   options.ownPalette(palette);
-  // Main-approved conservative slot: fixed fixture chrome is 34 DIP title bar,
-  // tab strip and host toolbar. Reserve 128 DIP (larger than their sum), then
-  // let production intersect with the actual renderer slot and owner viewport.
+  // Reserve 128 DIP for chrome, then intersect the real slot and viewport.
   const approvedSlot = () => {
     const [width, height] = window.getContentSize();
     return { x: 0, y: 128, width: width!, height: Math.max(0, height! - 128) };
@@ -158,8 +157,8 @@ export async function exerciseExtensionViews(options: {
       `document.querySelectorAll('#tab-strip [role=tab]')[${index - 1}]?.getAttribute('aria-selected') === 'true'`,
     );
   };
-  const terminalRoundTrip = async (text: string) => {
-    await select(1);
+  const terminalRoundTrip = async (text: string, selectFirst = true) => {
+    if (selectFirst) await select(1);
     await until("!!document.activeElement?.closest('.terminal-surface')");
     await core.insertText(text);
     key(core, "Enter");
@@ -182,7 +181,8 @@ export async function exerciseExtensionViews(options: {
       "window.__extensionOriginalCanvas = document.querySelector('.terminal-surface canvas')",
     );
     assert.equal(await js("!!window.__extensionOriginalCanvas"), true);
-    await terminalRoundTrip("before-views");
+    // A single terminal intentionally has no rendered tab-strip button.
+    await terminalRoundTrip("before-views", false);
     settings.show();
     await until("!!document.querySelector('.settings-dialog input')");
     await js(`(() => {
@@ -262,7 +262,7 @@ export async function exerciseExtensionViews(options: {
     };
     await focus(3, first, firstContents);
     key(firstContents, "End");
-    key(firstContents, "X");
+    firstContents.sendInputEvent({ type: "char", keyCode: "x" });
     await waitFor(
       async () =>
         (
@@ -482,7 +482,20 @@ export async function exerciseExtensionViews(options: {
       await writeFile(
         path.join(evidence, "composition-failure.json"),
         JSON.stringify(
-          { states, pids, captures, error: String(error) },
+          {
+            states,
+            pids,
+            captures,
+            error: String(error),
+            presentation: await js("window.__extensionPresentationReceipts"),
+            layout: await js(
+              "[...document.querySelectorAll('.hosted-content-tab')].map(e => ({ hidden:e.hidden, bounds:e.querySelector('.hosted-content-slot').getBoundingClientRect().toJSON() }))",
+            ),
+            views: window.contentView.children.map((view) => ({
+              bounds: view.getBounds(),
+              visible: view.getVisible(),
+            })),
+          },
           null,
           2,
         ),

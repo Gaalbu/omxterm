@@ -1,4 +1,5 @@
 import { englishLanguage, type RendererLanguage } from "./renderer-language";
+import { createPageButton, setPageNotice } from "./application-page";
 import type {
   HostedContentBridge,
   HostedContentDescriptor,
@@ -45,8 +46,10 @@ export function createHostedContentTabs(
   parent.before(notice);
   const fail = () => {
     failed = true;
-    notice.textContent = language.t("hosted.failure");
-    notice.hidden = false;
+    setPageNotice(notice, {
+      text: language.t("hosted.failure"),
+      severity: "error",
+    });
   };
   const removeLanguage = language.bind(() => {
     if (failed) notice.textContent = language.t("hosted.failure");
@@ -115,7 +118,7 @@ export function createHostedContentTabs(
     const container = parent.ownerDocument.createElement("section");
     container.className = "hosted-content-tab";
     container.hidden = true;
-    const close = parent.ownerDocument.createElement("button");
+    const close = createPageButton(parent.ownerDocument);
     close.textContent = language.t("hosted.close");
     const slot = parent.ownerDocument.createElement("div");
     slot.className = "hosted-content-slot";

@@ -38,9 +38,16 @@ export async function exerciseExtensionPolicy(contents: WebContents) {
   assert.equal(policy.popup, "denied");
   const originalUrl = contents.getURL();
   let navigationPrevented = false;
-  contents.once("will-navigate", (event) => {
-    navigationPrevented = event.defaultPrevented;
-  });
+  const navigationRefusals: string[] = [];
+  // Electron can refuse the frame event before emitting will-navigate.
+  const record = (name: string) => (event: Electron.Event) => {
+    if (event.defaultPrevented) {
+      navigationPrevented = true;
+      navigationRefusals.push(name);
+    }
+  };
+  contents.once("will-frame-navigate", record("will-frame-navigate"));
+  contents.once("will-navigate", record("will-navigate"));
   await contents.executeJavaScript(
     "location.href = 'index.html?forbidden-navigation'",
   );
@@ -49,5 +56,10 @@ export async function exerciseExtensionPolicy(contents: WebContents) {
     "production navigation preventDefault",
   );
   assert.equal(contents.getURL(), originalUrl);
-  return { ...policy, navigationPrevented, runningServiceWorkers: 0 };
+  return {
+    ...policy,
+    navigationPrevented,
+    navigationRefusals,
+    runningServiceWorkers: 0,
+  };
 }
