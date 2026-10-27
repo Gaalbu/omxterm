@@ -54,7 +54,10 @@ beforeAll(async () => {
   adapter = createNativeLeaseAdapter(path.join(build, "extension-leases.node"));
 }, 100_000);
 afterAll(async () => {
-  if (build) await rm(build, { recursive: true, force: true });
+  // Windows maps the addon until this worker exits. The outer qualification
+  // owner removes its scratch build only after observing actual process exit.
+  if (build && process.platform !== "win32")
+    await rm(build, { recursive: true, force: true });
 });
 beforeEach(async () => {
   root = await mkdtemp(path.join(os.tmpdir(), "installed-packages-"));
@@ -457,6 +460,6 @@ describe("Installed Packages production interface", () => {
         timeout: 60_000,
       },
     );
-    expect(stdout.match(/^PASS /gm)).toHaveLength(11);
+    expect(stdout.match(/^PASS /gm)).toHaveLength(12);
   }, 65_000);
 });

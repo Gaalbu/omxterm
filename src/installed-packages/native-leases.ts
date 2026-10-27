@@ -1,4 +1,5 @@
 import { createRequire } from "node:module";
+import path from "node:path";
 
 export type VersionLease = { release(): Promise<void> };
 export type LeaseAdapter = {
@@ -29,7 +30,14 @@ export function createNativeLeaseAdapter(addonPath: string): LeaseAdapter {
   }
   return {
     async tryAcquire(filePath, exclusive) {
-      const token = await native.tryAcquire(filePath, exclusive);
+      if (!path.isAbsolute(filePath))
+        throw Object.assign(new Error("LEASE_PATH"), { code: "LEASE_PATH" });
+      // Unlike Node's filesystem adapter, direct CreateFileW does not expand
+      // long paths. Preserve one absolute lock identity beyond legacy MAX_PATH.
+      const token = await native.tryAcquire(
+        path.toNamespacedPath(filePath),
+        exclusive,
+      );
       if (token === null) return null;
       // The closure owns the token even after acquire's promise is collected.
       // Concurrent and subsequent releases join the same native operation.

@@ -43,7 +43,10 @@ beforeAll(async () => {
   native = createNativeLeaseAdapter(path.join(build, "extension-leases.node"));
 }, 100_000);
 afterAll(async () => {
-  if (build) await rm(build, { recursive: true, force: true });
+  // A loaded Windows addon cannot be unlinked until the test worker exits.
+  // Its outer owner retires this scratch build after that native exit receipt.
+  if (build && process.platform !== "win32")
+    await rm(build, { recursive: true, force: true });
 });
 beforeEach(async () => {
   root = await mkdtemp(path.join(os.tmpdir(), "package-recovery-"));

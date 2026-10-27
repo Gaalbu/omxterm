@@ -81,6 +81,22 @@ if (mode === "hold" || mode === "hold-shared") {
   };
   try {
     await check(
+      "absolute sidecars beyond the Windows legacy path limit",
+      async () => {
+        const directory = path.join(root, "a".repeat(150), "b".repeat(100));
+        await mkdir(directory, { recursive: true });
+        const longFile = path.join(directory, "permanent.lock");
+        assert.ok(longFile.length > 260);
+        const shared = await adapter.tryAcquire(longFile, false);
+        assert.ok(shared);
+        assert.equal(await adapter.tryAcquire(longFile, true), null);
+        await shared.release();
+        const exclusive = await adapter.tryAcquire(longFile, true);
+        assert.ok(exclusive);
+        await exclusive.release();
+      },
+    );
+    await check(
       "shared/exclusive independent descriptors and permanent inode",
       async () => {
         const a = await adapter.tryAcquire(file, false);
