@@ -7,6 +7,7 @@ import { satisfies, valid, validRange } from "semver";
 import { fromBufferPromise, type Entry, type ZipFile } from "yauzl";
 
 export class PackageError extends Error {
+  cleanupFailed = false;
   constructor(
     readonly code:
       | "invalid-package"
@@ -155,6 +156,11 @@ type ArchiveNames = Map<
   string,
   { name: string; directory: boolean; explicit: boolean }
 >;
+function archiveKey(name: string): string {
+  // Conservative Unicode caseless identity: catches final sigma, sharp-s and
+  // compatibility aliases without promising filesystem-specific normalization.
+  return name.normalize("NFKC").toUpperCase().toLowerCase();
+}
 function registerEntry(entry: Entry, names: ArchiveNames) {
   const directory = entry.fileName.endsWith("/");
   const name = packagePath(
@@ -164,7 +170,13 @@ function registerEntry(entry: Entry, names: ArchiveNames) {
   const kind = mode & 0o170000;
   if (
     (kind !== 0 && kind !== (directory ? 0o040000 : 0o100000)) ||
-    (directory && entry.uncompressedSize !== 0) ||
+    (directory &&
+      [
+        entry.uncompressedSize,
+        entry.compressedSize,
+        entry.compressionMethod,
+        entry.crc32,
+      ].some((value) => value !== 0)) ||
     (!directory && (entry.externalFileAttributes & 0x10) !== 0) ||
     entry.extraFields.some(
       (field) => field.id === 0x000d || field.id === 0x756e,
@@ -174,7 +186,7 @@ function registerEntry(entry: Entry, names: ArchiveNames) {
   const parts = name.split("/");
   for (let i = 1; i <= parts.length; i++) {
     const current = parts.slice(0, i).join("/");
-    const key = current.toLowerCase();
+    const key = archiveKey(current);
     const last = i === parts.length;
     const old = names.get(key);
     if (
@@ -277,6 +289,9 @@ export async function extractPackage(
         ),
       );
     }
+    const manifestEntry = names.get(archiveKey("extension.json"));
+    if (manifestEntry?.name !== "extension.json" || manifestEntry.directory)
+      throw new PackageError("invalid-package");
     const manifest = parseManifest(
       JSON.parse(
         (
@@ -289,9 +304,9 @@ export async function extractPackage(
     );
     checkCompatibility(manifest, runtime);
     if (
-      !names.has(manifest.backend.toLowerCase()) ||
-      names.get(manifest.backend.toLowerCase())?.directory ||
-      names.get(manifest.backend.toLowerCase())?.name !== manifest.backend
+      !names.has(archiveKey(manifest.backend)) ||
+      names.get(archiveKey(manifest.backend))?.directory ||
+      names.get(archiveKey(manifest.backend))?.name !== manifest.backend
     )
       throw new PackageError("invalid-package");
     for (const item of [...names.values()]

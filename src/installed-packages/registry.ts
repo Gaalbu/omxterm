@@ -22,11 +22,51 @@ export function garbageIdentity(name: string): string {
   const split = name.length - 37;
   const identity = name.slice(0, split);
   if (
+    name[split] !== "-" ||
     (!DIGEST.test(identity) && !UUID.test(identity)) ||
     !UUID.test(name.slice(split + 1))
   )
     throw new PackageError("invalid-store");
   return identity;
+}
+
+export type Publication = { attempted: boolean };
+
+// All cleanup steps run. Their failures never replace a primary failure or turn
+// a possibly committed mutation into an apparently prepublication rejection.
+export async function withCleanup<T>(
+  operation: () => Promise<T>,
+  cleanup: (() => Promise<unknown>)[],
+  publication?: Publication,
+): Promise<T> {
+  let value: T | undefined;
+  let failure: unknown;
+  let failed = false;
+  try {
+    value = await operation();
+  } catch (error) {
+    failure = error;
+    failed = true;
+  }
+  let cleanupFailed = false;
+  for (const close of cleanup) {
+    try {
+      await close();
+    } catch {
+      cleanupFailed = true;
+    }
+  }
+  if (cleanupFailed) {
+    const error = publication?.attempted
+      ? new PackageError("outcome-unknown")
+      : failure instanceof PackageError
+        ? failure
+        : new PackageError("invalid-store");
+    error.cleanupFailed = true;
+    throw error;
+  }
+  if (failed) throw failure;
+  return value as T;
 }
 
 export function parseRegistry(value: unknown): Registry {

@@ -3,7 +3,7 @@ import {
   lstat,
   mkdir,
   open,
-  readdir,
+  opendir,
   realpath,
   rename,
   rm,
@@ -24,16 +24,16 @@ import {
 import type { LeaseAdapter, VersionLease } from "./native-leases.js";
 import {
   parseRegistry,
-  garbageIdentity,
-  UUID,
-  DIGEST,
   REGISTRY_BYTES,
   MAX_INSTALLATIONS,
+  withCleanup,
+  type Publication,
   type Registry,
   type Installation,
 } from "./registry.js";
+import { collectPackages, type CleanupResult } from "./collection.js";
 export type { Installation } from "./registry.js";
-
+export type { CleanupResult } from "./collection.js";
 export {
   PackageError,
   type PackageManifest,
@@ -56,12 +56,7 @@ export type OpenVersion = VersionSelection & {
   revalidate(): Promise<boolean>;
   release(): Promise<void>;
 };
-export type CleanupResult = { removed: string[]; pending: string[] };
-const MAX_SCAN = 10_000;
-
-function hasCode(error: unknown, code: string): boolean {
-  return isRecord(error) && error.code === code;
-}
+const INITIALIZED = "installed-packages-v1\n";
 function nextGeneration(entry?: Installation): number {
   const next = (entry?.generation ?? 0) + 1;
   if (!Number.isSafeInteger(next)) throw new PackageError("invalid-store");
@@ -77,14 +72,21 @@ async function exists(file: string): Promise<boolean> {
     await lstat(file);
     return true;
   } catch (error) {
-    if (hasCode(error, "ENOENT")) return false;
+    if (isRecord(error) && error.code === "ENOENT") return false;
     throw error;
   }
+}
+async function onlyEntries(file: string, allowed: string[]): Promise<boolean> {
+  const handle = await opendir(file);
+  for await (const entry of handle)
+    if (!allowed.includes(entry.name)) return false;
+  return true;
 }
 
 /** Internal installation foundation. No extension execution or application IPC. */
 export class InstalledPackages {
   private active = 0;
+  private cleanupOffset = 0;
   private constructor(
     private readonly root: string,
     private readonly runtime: PackageRuntime,
@@ -116,19 +118,41 @@ export class InstalledPackages {
       { ...options.runtime },
       options.leases,
     );
-    await store.writer(async () => {
-      if (!(await exists(store.registryPath))) {
-        if (
-          (await readdir(path.join(root, "versions"))).length ||
-          (await readdir(path.join(root, "staging"))).length
-        )
-          throw new PackageError("invalid-store");
-        await store.publish({ format: 1, installations: [] });
-      } else await store.readRegistry();
-    });
+    const publication = { attempted: false };
+    await store.writer(() => store.initialize(publication), publication);
     return store;
   }
-
+  private async initialize(publication: Publication): Promise<void> {
+    const guard = path.join(this.root, "initialized");
+    if (await exists(guard)) {
+      if ((await readBoundedFile(guard, 64)).toString("utf8") !== INITIALIZED)
+        throw new PackageError("invalid-store");
+      await this.readRegistry();
+      return;
+    }
+    if (
+      !(await onlyEntries(this.root, [
+        "locks",
+        "versions",
+        "staging",
+        "garbage",
+      ])) ||
+      !(await onlyEntries(path.join(this.root, "locks"), ["writer.lock"]))
+    )
+      throw new PackageError("invalid-store");
+    for (const name of ["versions", "staging", "garbage"])
+      if (!(await onlyEntries(path.join(this.root, name), [])))
+        throw new PackageError("invalid-store");
+    // Permanent initialization witness precedes publication. Missing metadata
+    // after this point is a targeted error, never guessed generation reset.
+    const marker = await open(guard, "wx", 0o600);
+    await withCleanup(async () => {
+      await marker.writeFile(INITIALIZED);
+      await marker.sync();
+    }, [() => marker.close()]);
+    await syncDirectory(this.root);
+    await this.publish({ format: 1, installations: [] }, publication);
+  }
   private get registryPath(): string {
     return path.join(this.root, "registry.json");
   }
@@ -151,15 +175,14 @@ export class InstalledPackages {
       this.active--;
     }
   }
-  private async writer<T>(operation: () => Promise<T>): Promise<T> {
+  private async writer<T>(
+    operation: () => Promise<T>,
+    publication?: Publication,
+  ): Promise<T> {
     await this.checkRoot();
     const lease = await this.lock("writer", true);
     if (!lease) throw new PackageError("busy");
-    try {
-      return await operation();
-    } finally {
-      await lease.release();
-    }
+    return withCleanup(operation, [() => lease.release()], publication);
   }
   private async readRegistry(): Promise<Registry> {
     try {
@@ -174,7 +197,10 @@ export class InstalledPackages {
       throw new PackageError("invalid-store");
     }
   }
-  private async publish(registry: Registry): Promise<void> {
+  private async publish(
+    registry: Registry,
+    publication: Publication,
+  ): Promise<void> {
     const bytes = JSON.stringify(registry);
     if (
       Buffer.byteLength(bytes) > REGISTRY_BYTES ||
@@ -182,32 +208,26 @@ export class InstalledPackages {
     )
       throw new PackageError("invalid-store");
     const temporary = path.join(this.root, `registry-${randomUUID()}.tmp`);
-    const file = await open(temporary, "wx", 0o600);
-    try {
-      await file.writeFile(bytes);
-      await file.sync();
-    } finally {
-      await file.close();
-    }
-    try {
-      await rename(temporary, this.registryPath);
-      // POSIX directory fsync makes the publication name durable on supported
-      // local filesystems. Windows replacement is atomic but power loss is not
-      // qualified; do not claim FlushFileBuffers on a file flushes its directory.
-      if (process.platform !== "win32") {
-        const parent = await open(this.root, "r");
+    await withCleanup(
+      async () => {
+        const file = await open(temporary, "wx", 0o600);
+        await withCleanup(async () => {
+          await file.writeFile(bytes);
+          await file.sync();
+        }, [() => file.close()]);
+        publication.attempted = true;
         try {
-          await parent.sync();
-        } finally {
-          await parent.close();
+          await rename(temporary, this.registryPath);
+          // Windows directory durability remains unqualified. POSIX flush failure
+          // after replacement is unknown, not permission to replay a mutation.
+          await syncDirectory(this.root);
+        } catch {
+          throw new PackageError("outcome-unknown");
         }
-      }
-    } catch {
-      // A replace/flush failure or lost response is not permission to replay.
-      throw new PackageError("outcome-unknown");
-    } finally {
-      await rm(temporary, { force: true }).catch(() => undefined);
-    }
+      },
+      [() => rm(temporary, { force: true })],
+      publication,
+    );
   }
   private entry(
     registry: Registry,
@@ -227,7 +247,6 @@ export class InstalledPackages {
       this.writer(async () => (await this.readRegistry()).installations),
     );
   }
-
   install(
     archive: string,
     options: { expectedGeneration: number; enabled: boolean },
@@ -240,73 +259,76 @@ export class InstalledPackages {
       const stage = path.join(this.root, "staging", stageId);
       const pin = await this.lock(`stage-${stageId}`, false);
       if (!pin) throw new PackageError("busy");
-      try {
-        await mkdir(stage, { mode: 0o700 });
-        const { manifest, digest } = await extractPackage(
-          archive,
-          stage,
-          this.runtime,
-        );
-        const marker = JSON.stringify({ digest, manifest });
-        const metadata = await open(
-          path.join(stage, ".omxterm-install.json"),
-          "wx",
-          0o600,
-        );
-        try {
-          await metadata.writeFile(marker);
-          await metadata.sync();
-        } finally {
-          await metadata.close();
-        }
-        await syncDirectory(stage);
-        return await this.writer(async () => {
-          const registry = await this.readRegistry();
-          const old = this.entry(
-            registry,
-            manifest.id,
-            options.expectedGeneration,
+      const publication = { attempted: false };
+      let created = false;
+      return withCleanup(
+        async () => {
+          await mkdir(stage, { mode: 0o700 });
+          created = true;
+          const { manifest, digest } = await extractPackage(
+            archive,
+            stage,
+            this.runtime,
           );
-          const version = path.join(this.root, "versions", digest);
-          if (await exists(version)) {
-            await directory(version);
-            const existing = await readBoundedFile(
-              path.join(version, ".omxterm-install.json"),
-              128 * 1024,
+          const marker = JSON.stringify({ digest, manifest });
+          const metadata = await open(
+            path.join(stage, ".omxterm-install.json"),
+            "wx",
+            0o600,
+          );
+          await withCleanup(async () => {
+            await metadata.writeFile(marker);
+            await metadata.sync();
+          }, [() => metadata.close()]);
+          await syncDirectory(stage);
+          return this.writer(async () => {
+            const registry = await this.readRegistry();
+            const old = this.entry(
+              registry,
+              manifest.id,
+              options.expectedGeneration,
             );
-            if (existing.toString("utf8") !== marker)
-              throw new PackageError("invalid-store");
-          } else {
-            // All managed publishers/collectors use writer exclusion. This is
-            // not a generic no-replace filesystem primitive for arbitrary paths.
-            await rename(stage, version);
-            await syncDirectory(path.join(this.root, "versions"));
-            await syncDirectory(path.join(this.root, "staging"));
-          }
-          const installed: Installation = {
-            id: manifest.id,
-            generation: nextGeneration(old),
-            digest,
-            enabled: options.enabled,
-            manifest,
-          };
-          registry.installations = registry.installations.filter(
-            (entry) => entry.id !== manifest.id,
-          );
-          registry.installations.push(installed);
-          await this.publish(registry);
-          return installed;
-        });
-      } finally {
-        try {
-          await rm(stage, { recursive: true, force: true });
-        } finally {
-          await pin.release();
-        }
-      }
+            const version = path.join(this.root, "versions", digest);
+            if (await exists(version)) {
+              await directory(version);
+              const existing = await readBoundedFile(
+                path.join(version, ".omxterm-install.json"),
+                128 * 1024,
+              );
+              if (existing.toString("utf8") !== marker)
+                throw new PackageError("invalid-store");
+            } else {
+              // All managed publishers/collectors use writer exclusion. This is
+              // not a generic no-replace filesystem operation for arbitrary paths.
+              await rename(stage, version);
+              await syncDirectory(path.join(this.root, "versions"));
+              await syncDirectory(path.join(this.root, "staging"));
+            }
+            const installed: Installation = {
+              id: manifest.id,
+              generation: nextGeneration(old),
+              digest,
+              enabled: options.enabled,
+              manifest,
+            };
+            registry.installations = registry.installations.filter(
+              (entry) => entry.id !== manifest.id,
+            );
+            registry.installations.push(installed);
+            await this.publish(registry, publication);
+            return installed;
+          }, publication);
+        },
+        [
+          async () => {
+            if (created) await rm(stage, { recursive: true, force: true });
+          },
+          () => pin.release(),
+        ],
+        publication,
+      );
     });
   }
-
   setEnabled(
     id: string,
     expectedGeneration: number,
@@ -315,7 +337,6 @@ export class InstalledPackages {
     return this.change(id, expectedGeneration, enabled);
   }
   uninstall(id: string, expectedGeneration: number): Promise<Installation> {
-    // Tombstone publication and physical cleanup are deliberately separate.
     return this.change(id, expectedGeneration, null);
   }
   private change(
@@ -323,6 +344,7 @@ export class InstalledPackages {
     expectedGeneration: number,
     enabled: boolean | null,
   ): Promise<Installation> {
+    const publication = { attempted: false };
     return this.bounded(() =>
       this.writer(async () => {
         const registry = await this.readRegistry();
@@ -342,181 +364,114 @@ export class InstalledPackages {
         registry.installations = registry.installations.map((current) =>
           current.id === id ? entry : current,
         );
-        await this.publish(registry);
+        await this.publish(registry, publication);
         return entry;
-      }),
+      }, publication),
     );
   }
 
   openVersion(id: string, expected?: VersionSelection): Promise<OpenVersion> {
-    return this.bounded(() =>
-      this.writer(async () => {
-        const entry = (await this.readRegistry()).installations.find(
-          (entry) => entry.id === id,
-        );
-        if (
-          !entry?.enabled ||
-          !entry.digest ||
-          !entry.manifest ||
-          (expected &&
-            (expected.id !== id ||
-              expected.generation !== entry.generation ||
-              expected.digest !== entry.digest))
-        )
-          throw new PackageError("unavailable");
-        checkCompatibility(entry.manifest, this.runtime);
-        const pin = await this.lock(`version-${entry.digest}`, false);
-        if (!pin) throw new PackageError("busy");
-        let released = false;
-        try {
-          const version = path.join(this.root, "versions", entry.digest);
-          await directory(version);
-          const marker = JSON.parse(
-            (
-              await readBoundedFile(
-                path.join(version, ".omxterm-install.json"),
-                128 * 1024,
-              )
-            ).toString("utf8"),
-          ) as unknown;
-          if (
-            !isRecord(marker) ||
-            marker.digest !== entry.digest ||
-            JSON.stringify(marker.manifest) !== JSON.stringify(entry.manifest)
-          )
-            throw new PackageError("invalid-store");
-          return {
-            id,
-            generation: entry.generation,
-            digest: entry.digest,
-            directory: version,
-            manifest: entry.manifest,
-            release: async () => {
-              released = true;
-              await pin.release();
-            },
-            revalidate: () =>
-              this.bounded(() =>
-                this.writer(async () => {
-                  if (released) return false;
-                  const current = (
-                    await this.readRegistry()
-                  ).installations.find((item) => item.id === id);
-                  return (
-                    current?.enabled === true &&
-                    current.generation === entry.generation &&
-                    current.digest === entry.digest
-                  );
-                }),
-              ),
-          };
-        } catch (error) {
-          await pin.release();
-          throw error;
-        }
-      }),
-    );
-  }
-
-  collect(): Promise<CleanupResult> {
     return this.bounded(async () => {
-      const result: CleanupResult = { removed: [], pending: [] };
-      const detached: { path: string; identity: string; pin: VersionLease }[] =
-        [];
+      let opened: OpenVersion | undefined;
       try {
-        await this.writer(async () => {
-          const registry = await this.readRegistry();
-          const referenced = new Set(
-            registry.installations.map((entry) => entry.digest),
+        return await this.writer(async () => {
+          const entry = (await this.readRegistry()).installations.find(
+            (entry) => entry.id === id,
           );
-          for (const kind of ["versions", "staging"] as const) {
-            const entries = await readdir(path.join(this.root, kind));
-            if (entries.length > MAX_SCAN)
-              throw new PackageError("invalid-store");
-            for (const identity of entries) {
-              if (!(kind === "versions" ? DIGEST : UUID).test(identity))
-                throw new PackageError("invalid-store");
-              if (kind === "versions" && referenced.has(identity)) continue;
-              if (detached.length >= 32) {
-                result.pending.push(identity);
-                continue;
-              }
-              const pin = await this.lock(
-                `${kind === "versions" ? "version" : "stage"}-${identity}`,
-                true,
-              );
-              if (!pin) {
-                result.pending.push(identity);
-                continue;
-              }
-              try {
-                const source = path.join(this.root, kind, identity);
-                await directory(source);
-                const name = `${identity}-${randomUUID()}`;
-                const target = path.join(this.root, "garbage", name);
-                const garbagePin = await this.lock(`garbage-${name}`, true);
-                if (!garbagePin) throw new PackageError("busy");
-                try {
-                  await rename(source, target);
-                  detached.push({ path: target, identity, pin: garbagePin });
-                } catch {
-                  await garbagePin.release();
-                  result.pending.push(identity);
-                }
-              } finally {
-                await pin.release();
-              }
-            }
-          }
-          // Garbage is never selectable. A dedicated use lease protects deletion
-          // outside the writer interval against concurrent cleanup passes.
-          const garbage = await readdir(path.join(this.root, "garbage"));
-          if (garbage.length > MAX_SCAN)
-            throw new PackageError("invalid-store");
-          for (const name of garbage) {
-            if (detached.some((item) => path.basename(item.path) === name))
-              continue;
-            const identity = garbageIdentity(name);
-            if (detached.length >= 32) {
-              result.pending.push(identity);
-              continue;
-            }
-            const source = path.join(this.root, "garbage", name);
-            const garbagePin = await this.lock(`garbage-${name}`, true);
-            if (!garbagePin) {
-              result.pending.push(identity);
-              continue;
-            }
-            try {
-              await directory(source);
-              detached.push({ path: source, identity, pin: garbagePin });
-            } catch {
-              await garbagePin.release();
-              result.pending.push(identity);
-            }
-          }
-          // Incomplete registry temp files are non-authoritative and writer-owned.
-          for (const name of await readdir(this.root)) {
+          if (
+            !entry?.enabled ||
+            !entry.digest ||
+            !entry.manifest ||
+            (expected &&
+              (expected.id !== id ||
+                expected.generation !== entry.generation ||
+                expected.digest !== entry.digest))
+          )
+            throw new PackageError("unavailable");
+          checkCompatibility(entry.manifest, this.runtime);
+          const pin = await this.lock(`version-${entry.digest}`, false);
+          if (!pin) throw new PackageError("busy");
+          let released = false;
+          try {
+            const version = path.join(this.root, "versions", entry.digest);
+            await directory(version);
+            const marker = JSON.parse(
+              (
+                await readBoundedFile(
+                  path.join(version, ".omxterm-install.json"),
+                  128 * 1024,
+                )
+              ).toString("utf8"),
+            ) as unknown;
             if (
-              name.startsWith("registry-") &&
-              name.endsWith(".tmp") &&
-              UUID.test(name.slice(9, -4))
+              !isRecord(marker) ||
+              marker.digest !== entry.digest ||
+              JSON.stringify(marker.manifest) !== JSON.stringify(entry.manifest)
             )
-              await rm(path.join(this.root, name), { force: true });
+              throw new PackageError("invalid-store");
+            opened = {
+              id,
+              generation: entry.generation,
+              digest: entry.digest,
+              directory: version,
+              manifest: entry.manifest,
+              release: async () => {
+                released = true;
+                await pin.release();
+              },
+              revalidate: () =>
+                this.bounded(() =>
+                  this.writer(async () => {
+                    if (released) return false;
+                    const current = (
+                      await this.readRegistry()
+                    ).installations.find((item) => item.id === id);
+                    return (
+                      current?.enabled === true &&
+                      current.generation === entry.generation &&
+                      current.digest === entry.digest
+                    );
+                  }),
+                ),
+            };
+            return opened;
+          } catch (error) {
+            return withCleanup(async () => {
+              throw error;
+            }, [() => pin.release()]);
           }
         });
-        for (const item of detached) {
-          try {
-            await rm(item.path, { recursive: true, force: true });
-            result.removed.push(item.identity);
-          } catch {
-            result.pending.push(item.identity);
-          }
-        }
-        return result;
-      } finally {
-        await Promise.all(detached.map((item) => item.pin.release()));
+      } catch (error) {
+        return withCleanup(async () => {
+          throw error;
+        }, [
+          async () => {
+            await opened?.release();
+          },
+        ]);
       }
+    });
+  }
+  collect(): Promise<CleanupResult> {
+    return this.bounded(async () => {
+      await this.checkRoot();
+      const { result, nextOffset } = await collectPackages(
+        this.root,
+        this.leases,
+        (operation) =>
+          this.writer(async () =>
+            operation(
+              new Set(
+                (await this.readRegistry()).installations.map(
+                  (entry) => entry.digest,
+                ),
+              ),
+            ),
+          ),
+        this.cleanupOffset,
+      );
+      this.cleanupOffset = nextOffset;
+      return result;
     });
   }
 }
