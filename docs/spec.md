@@ -1517,9 +1517,24 @@ IPC, PTY control, resize, duration, and failures; they must never contain PTY
 input/output, clipboard data, environment contents, configuration contents,
 executable names, command arguments, commands, titles, secrets, or transcripts.
 
-The application performs no network requests: no analytics, telemetry, crash
-reporting, update check, or remote log delivery. Child processes retain their
-normal network access.
+The application performs no remote network requests: no analytics, telemetry,
+crash reporting, update check, or remote log delivery. Child processes retain
+their normal network access. The internal Extension View Host may load only its
+owned epoch-local `omx-extension` packaged-resource origin, returning bounded
+materialized bytes under a captured immutable-version pin. This exception does
+not enable catalog fetching, downloads, external web content or a public SDK.
+Remote/foreign origins, navigation, connect and browser-worker routes are refused.
+See [ADR 0039](adr/0039-own-packaged-web-content-by-epoch.md) for admission,
+hide-before-overlay, retirement and the unqualified main-death file-read gate.
+
+Hosted content is optional internal Application Tab content, with retained
+Settings and real terminal panes unchanged. Main-issued identities and monotonic
+slot presentations are owner-bound. The host hides native views before admitting
+host DOM overlays and restores only a still-current content owner. Field input
+and clipboard remain in the child, never forwarded into a terminal. Closing or
+crashing a hosted epoch retires its known views, not core PTYs. This is a
+production-facing development module without a shipping extension activation
+path; installed-package/backend activation, catalog UI and Files remain separate.
 
 The optional Linux AppImage desktop installer accepts only a user-supplied,
 previously checksum-verified local Linux ARM64/x64 OMXTerm AppImage matching the

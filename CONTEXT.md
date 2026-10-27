@@ -266,9 +266,16 @@ management need not stop.
 validation, IPC, PTY control or failures. Local logs exclude Terminal Payload,
 clipboard, configuration and environment contents, commands and titles.
 
-**Application Network Boundary** — OMXTerm makes no application network
-requests. Child processes retain normal network access; explicitly activated web
-links open through the OS.
+**Extension View Host** — Internal owner of lazy native web-content views in a
+nonpersistent epoch. It retains a captured package reader/pin, materializes bounded
+local resource responses, and retires known views/reads without terminating core
+PTYs. The Application Tab adapter acknowledges native hiding before DOM overlays.
+It is not a public SDK, activation UI or proof of main-death disk-read exclusion.
+
+**Application Network Boundary** — OMXTerm makes no remote application network
+requests. Its sole internal web-content loading exception is an owned epoch-local
+packaged-resource protocol, not remote content or catalog access. Child processes
+retain normal network access; explicitly activated web links open through the OS.
 
 **Release Artifact** — An exact native package (ARM64, or x64 on Linux/Windows)
 (DMG, AppImage or NSIS) published with its source tag, checksum and verification

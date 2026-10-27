@@ -197,13 +197,25 @@ export async function exerciseExtensionViews(options: {
     });
     const first = window.contentView.children.at(-1) as WebContentsView;
     const firstContents = first.webContents; // Retain before native view closure.
-    resources.replaceCurrent();
     const b = await host.open({
       entryResource: "index.html",
       title: "Captured A two",
     });
     const second = window.contentView.children.at(-1) as WebContentsView;
     const secondContents = second.webContents;
+    await firstContents.executeJavaScript(
+      "localStorage.setItem('captured-version', 'A')",
+    );
+    await resources.replaceCurrent();
+    const retainedStorage = await Promise.all(
+      [firstContents, secondContents].map(
+        (child) =>
+          child.executeJavaScript(
+            "localStorage.getItem('captured-version')",
+          ) as Promise<string | null>,
+      ),
+    );
+    assert.deepEqual(retainedStorage, ["A", "A"]);
     assert.notEqual(a.id, b.id);
     assert.equal(firstContents.session, secondContents.session);
     assert.equal(
@@ -446,6 +458,7 @@ export async function exerciseExtensionViews(options: {
         secondContents.isDestroyed(),
       ],
       resourceReceipts,
+      retainedStorage,
       captures,
       input: "synthetic-chromium-and-native-editing-APIs-not-physical",
       limits: [

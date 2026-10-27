@@ -4,13 +4,14 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { expect, it } from "vitest";
 import { buildFixture } from "../fixtures/window-chrome-build";
+import { buildExtensionFixturePackages } from "../fixtures/extension-view-package-build";
 import { runNativeFixture } from "../fixtures/run-native-fixture";
 import { supportedFixtureChromiumArguments } from "../fixtures/supported-fixture-chromium-arguments";
 
 // Assigned idle Ubuntu desktop only; no new supervisor or destructive main-death probe.
 it.skipIf(process.platform !== "linux")(
   "composes two production hosted tabs with retained Settings and a continuing real Surface/PTY",
-  { timeout: 150_000 },
+  { timeout: 250_000 },
   async (testContext) => {
     const root = await mkdtemp(path.join(tmpdir(), "omxterm-extension-view-"));
     const requestedEvidence = process.env.OMXTERM_EXTENSION_VIEW_EVIDENCE_DIR;
@@ -41,7 +42,10 @@ it.skipIf(process.platform !== "linux")(
       root,
       timeout: 130_000,
       testContext,
-      prepare: () => buildFixture(root, "runner"),
+      prepare: async () => {
+        await buildFixture(root, "runner");
+        await buildExtensionFixturePackages(root);
+      },
     });
     if (evidence)
       await writeFile(
@@ -65,7 +69,15 @@ it.skipIf(process.platform !== "linux")(
     expect(JSON.parse(lines[0]!.slice(prefix.length))).toMatchObject({
       extensionViews: "production-composition-verified",
       retirement: { status: "settled" },
-      resourceReceipts: { released: 1, active: 0, postReleaseRead: "rejected" },
+      resourceReceipts: {
+        admitted: true,
+        released: 1,
+        active: 0,
+        postReleaseRead: "rejected",
+        replacementDirectoryRetained: true,
+        first: { generation: 1 },
+        replacement: { generation: 2 },
+      },
     });
   },
 );

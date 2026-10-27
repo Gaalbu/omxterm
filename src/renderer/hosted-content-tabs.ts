@@ -1,3 +1,4 @@
+import { englishLanguage, type RendererLanguage } from "./renderer-language";
 import type {
   HostedContentBridge,
   HostedContentDescriptor,
@@ -22,6 +23,7 @@ export function createHostedContentTabs(
     retired(id: string): void;
     close(tab: HostedTab): void;
   },
+  language: RendererLanguage = englishLanguage,
 ) {
   const page = parent.ownerDocument.defaultView!;
   let selected: HostedTab | undefined;
@@ -43,10 +45,16 @@ export function createHostedContentTabs(
   parent.before(notice);
   const fail = () => {
     failed = true;
-    notice.textContent =
-      "Hosted content could not be hidden, updated, or closed. Close the window to recover.";
+    notice.textContent = language.t("hosted.failure");
     notice.hidden = false;
   };
+  const removeLanguage = language.bind(() => {
+    if (failed) notice.textContent = language.t("hosted.failure");
+    for (const button of parent.querySelectorAll(
+      ".hosted-content-tab > button",
+    ))
+      button.textContent = language.t("hosted.close");
+  });
   const present = async (tab: HostedTab | undefined, focus = false) => {
     if (!bridge) return true;
     const bounds = tab?.slot.getBoundingClientRect();
@@ -108,7 +116,7 @@ export function createHostedContentTabs(
     container.className = "hosted-content-tab";
     container.hidden = true;
     const close = parent.ownerDocument.createElement("button");
-    close.textContent = "Close";
+    close.textContent = language.t("hosted.close");
     const slot = parent.ownerDocument.createElement("div");
     slot.className = "hosted-content-slot";
     const tab: HostedTab = {
@@ -196,6 +204,7 @@ export function createHostedContentTabs(
       observer?.disconnect();
       page.removeEventListener("resize", layout);
       notice.remove();
+      removeLanguage();
       if (nativePossible) void present(undefined);
     },
   };

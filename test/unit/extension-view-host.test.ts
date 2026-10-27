@@ -1,3 +1,4 @@
+/* eslint-disable max-lines -- Keep the shared native adapter and its lifetime/IPC failure matrix together. */
 import { EventEmitter } from "node:events";
 import { mkdtemp, open, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -106,7 +107,7 @@ async function fixture(createHost = true) {
   };
   const owner = Object.assign(new EventEmitter(), {
     webContents: new Contents(),
-    isDestroyed: () => false,
+    isDestroyed: (): boolean => false,
     getContentSize: () => [800, 600],
     contentView: { addChildView: vi.fn(), removeChildView: vi.fn() },
   });
@@ -381,6 +382,28 @@ describe("native extension host through its production resource interface", () =
 });
 
 describe("epoch lifetime and failure settlement", () => {
+  it("retains lifetime objects when native owner/view getters disappear on close", async () => {
+    const f = await fixture();
+    await f.host!.open({ entryResource: "index.html", title: "A" });
+    const child = f.views[0]!.webContents;
+    const parent = f.owner.webContents;
+    child.once("destroyed", () =>
+      Object.defineProperty(f.views[0], "webContents", {
+        get() {
+          throw new Error("View closed");
+        },
+      }),
+    );
+    f.owner.isDestroyed = () => true;
+    Object.defineProperty(f.owner, "webContents", {
+      get() {
+        throw new Error("Window closed");
+      },
+    });
+    parent.emit("destroyed");
+    expect(await f.host!.retire()).toEqual({ status: "settled" });
+    expect(child.dead).toBe(true);
+  });
   it("tracks OS renderer identity, and one crash retires every epoch view including hidden drafts", async () => {
     const f = await fixture();
     await f.host.open(opening);

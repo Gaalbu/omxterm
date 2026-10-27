@@ -23,28 +23,34 @@ export function createGraphicalTabs(
     remove(tab: ApplicationTab): void;
   },
 ) {
-  const hosted = createHostedContentTabs(parent, options.hostedContent, {
-    open(tab) {
-      if (
-        !owner.available() ||
-        tabs.some(
-          (candidate) => candidate.kind === "hosted" && candidate.id === tab.id,
-        )
-      ) {
-        tab.container.remove();
-        return;
-      }
-      tabs.push(tab);
-      owner.select(tabs.length - 1, true);
+  const hosted = createHostedContentTabs(
+    parent,
+    options.hostedContent,
+    {
+      open(tab) {
+        if (
+          !owner.available() ||
+          tabs.some(
+            (candidate) =>
+              candidate.kind === "hosted" && candidate.id === tab.id,
+          )
+        ) {
+          tab.container.remove();
+          return;
+        }
+        tabs.push(tab);
+        owner.select(tabs.length - 1, true);
+      },
+      retired(id) {
+        const tab = tabs.find(
+          (candidate) => candidate.kind === "hosted" && candidate.id === id,
+        );
+        if (tab) owner.remove(tab);
+      },
+      close: owner.close,
     },
-    retired(id) {
-      const tab = tabs.find(
-        (candidate) => candidate.kind === "hosted" && candidate.id === id,
-      );
-      if (tab) owner.remove(tab);
-    },
-    close: owner.close,
-  });
+    language,
+  );
   const settingsActions: Pick<
     TerminalTabs,
     | "openSettings"

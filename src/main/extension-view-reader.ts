@@ -1,5 +1,6 @@
 import { open, realpath } from "node:fs/promises";
 import path from "node:path";
+import type { OpenVersion } from "../installed-packages/installed-packages";
 import {
   extensionResourceLimits,
   isExtensionResource,
@@ -9,10 +10,9 @@ import {
 // Structural private consumer of InstalledPackages.openVersion's captured pin.
 // Keep the complete pin in this closure. Admission/revalidate belongs to the
 // caller, before epoch creation; existing reads never consult the registry.
-export function extensionResourceOwner(pin: {
-  readonly directory: string;
-  release(): Promise<void>;
-}): CapturedResourceOwner {
+export function extensionResourceOwner(
+  pin: Pick<OpenVersion, "directory" | "release">,
+): CapturedResourceOwner {
   let root: Promise<string> | undefined;
   let released = false;
   let release: Promise<void> | undefined;

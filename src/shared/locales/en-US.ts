@@ -138,6 +138,9 @@ export const englishMessages = {
   "palette.empty": "No matching actions",
   "palette.loading": "Loading actions…",
   "palette.error": "Actions are unavailable. Close and try again.",
+  "hosted.close": "Close",
+  "hosted.failure":
+    "Hosted content could not be hidden, updated, or closed. Close the window to recover.",
   "search.region": "Search terminal scrollback",
   "search.placeholder": "Find in scrollback",
   "search.clear": "Clear",

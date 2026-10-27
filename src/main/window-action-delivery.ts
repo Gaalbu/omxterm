@@ -1,8 +1,28 @@
 import type { BrowserWindow } from "electron";
+import type { TrustedWebContents } from "./terminal-ipc-types";
 import { coreActionKeybinds, type CoreActionCatalog } from "./action-catalog";
 import type { startCommandPalette } from "./command-palette";
 import type { KeybindCapture } from "./keybind-capture";
 import { deliverKeybindsFromKeyEvents } from "./keybind-delivery";
+
+export function createWindowActionSender(
+  palette: () => ReturnType<typeof startCommandPalette> | undefined,
+) {
+  const sendAction = (
+    sender: TrustedWebContents,
+    channel: string,
+    payload?: unknown,
+  ) => {
+    const current = palette();
+    if (current) current.send(sender, channel, payload);
+    else sender.send(channel, payload);
+  };
+  return {
+    sendAction,
+    notifyWindow: (channel: string) => (window: BrowserWindow) =>
+      sendAction(window.webContents, channel),
+  };
+}
 
 // Window-owned key delivery and palette invalidation share native lifetime.
 export function registerWindowActionDelivery(

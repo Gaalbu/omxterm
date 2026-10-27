@@ -149,6 +149,9 @@ export const brazilianPortugueseMessages: Readonly<
   "palette.empty": "Nenhuma ação encontrada",
   "palette.loading": "Carregando ações…",
   "palette.error": "Ações indisponíveis. Feche e tente novamente.",
+  "hosted.close": "Fechar",
+  "hosted.failure":
+    "Não foi possível ocultar, atualizar ou fechar o conteúdo hospedado. Feche a janela para recuperar.",
   "search.region": "Buscar no histórico do terminal",
   "search.placeholder": "Buscar no histórico",
   "search.clear": "Limpar",

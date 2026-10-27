@@ -1,4 +1,9 @@
 import { isAbsolute } from "node:path";
+import { terminalIpc } from "../shared/terminal-ipc";
+import type {
+  TerminalClipboardAction,
+  TerminalContextMenuTarget,
+} from "../shared/terminal-contract";
 import type { IpcMain, IpcMainInvokeEvent, WebContents } from "electron";
 import {
   extensionViewIpc,
@@ -14,6 +19,23 @@ type Host = ReturnType<typeof createExtensionViewHost>;
 type Route = { contents: WebContents; host: Host; issued: Set<string> };
 const routers = new WeakMap<IpcMain, Map<WebContents, Route>>();
 const presentationRevisions = new WeakMap<WebContents, number>();
+
+export function sendExtensionAwareClipboard(
+  ipcMain: IpcMain,
+  owner: WebContents,
+  action: TerminalClipboardAction,
+  target?: TerminalContextMenuTarget,
+): void {
+  if (
+    !target &&
+    routers
+      .get(ipcMain)
+      ?.get(owner)
+      ?.host.clipboard(action === "select-all" ? "selectAll" : action)
+  )
+    return;
+  owner.send(terminalIpc.clipboardAction, target ? { action, target } : action);
+}
 
 // Multiple actual windows share one pair of handlers; callers cannot choose a
 // window or host. The trusted owner is registered by main, never by a child.
