@@ -181,6 +181,7 @@ async function createCaptureRouting(options: ShortcutCaptureOptions) {
     openLocalImage: unexpected,
     showAbout: unexpected,
     showSettings: unexpected,
+    showCommandPalette: unexpected,
     splitSelectedPane: unexpected,
     closeSelectedPane: unexpected,
     focusSelectedPane: unexpected,

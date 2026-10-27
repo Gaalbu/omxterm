@@ -8,10 +8,12 @@ import type { TerminalIpcRouter } from "../../src/main/terminal-ipc-types";
 export function createAboutExercise(
   router: TerminalIpcRouter,
   getWindow: () => BrowserWindow,
+  sendAction?: Parameters<typeof startAbout>[0]["sendAction"],
 ) {
   const openedLinks: string[] = [];
   const about = startAbout({
     ipcMain,
+    ...(sendAction ? { sendAction } : {}),
     isTrustedSender: router.isTrustedSender,
     getVersion: () => app.getVersion(),
     selectedContents: () => getWindow().webContents,

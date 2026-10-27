@@ -1,3 +1,4 @@
+/* eslint-disable max-lines -- Keep the existing cohesive native panel scenario together. */
 import assert from "node:assert/strict";
 import {
   overlayActionsConsumed,
@@ -95,6 +96,7 @@ function createScenario(options: PanelOptions) {
     openLocalImage: () => application.openLocalImageInSelectedWindow(),
     showAbout: options.showAbout,
     showSettings: unexpected,
+    showCommandPalette: unexpected,
     splitSelectedPane: unexpected,
     closeSelectedPane: unexpected,
     focusSelectedPane: unexpected,

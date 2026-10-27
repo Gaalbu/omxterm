@@ -13,14 +13,17 @@ import { userInfo } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { terminalIpc } from "../shared/terminal-ipc";
+import type { TrustedWebContents } from "./terminal-ipc-types";
+import { coreActionMenuTemplate } from "./application-menu";
 import {
-  terminalActionInvocations,
-  terminalApplicationMenuTemplate,
-} from "./application-menu";
+  createCoreActionCatalog,
+  type CoreActionCatalog,
+} from "./action-catalog";
+import { startCommandPalette } from "./command-palette";
 import { terminalContextMenuTemplate } from "./terminal-context-menu";
 import * as applicationAbout from "./application-about";
 import { startApplicationSettings } from "./application-settings";
-import { deliverKeybindsFromKeyEvents } from "./keybind-delivery";
+import { registerWindowActionDelivery } from "./window-action-delivery";
 import { createKeybindCapture } from "./keybind-capture";
 import { createDefaultShellResolver, defaultShellName } from "./default-shell";
 import {
@@ -105,8 +108,17 @@ const linuxWindowIconPath =
       : developmentApplicationIconPath
     : undefined;
 
+let palette: ReturnType<typeof startCommandPalette> | undefined;
+const sendAction = (
+  sender: TrustedWebContents,
+  channel: string,
+  payload?: unknown,
+) => {
+  if (palette) palette.send(sender, channel, payload);
+  else sender.send(channel, payload);
+};
 const notifyWindow = (channel: string) => (window: BrowserWindow) =>
-  window.webContents.send(channel);
+  sendAction(window.webContents, channel);
 
 let terminalApplication: TerminalApplication<BrowserWindow> | undefined;
 // Settings shortcut recording owns a window's keyboard through key delivery.
@@ -158,6 +170,7 @@ app
         const terminalIpcRouter = fontIpcRouter(ipcMain, operationalEvents!);
         disposeTerminalSessions = () => terminalIpcRouter.dispose();
         let rebuildMenu = () => {};
+        let actionCatalog: CoreActionCatalog;
         const nativeTitleInset = terminalNativeTitleInset(process.platform);
         const backgroundEffects = createWindowBackgroundEffectsOwner(
           process.platform,
@@ -212,17 +225,12 @@ app
             );
             const shellName = defaultShellName(process.platform, initialShell);
             lockTerminalRendererNavigation(window.webContents);
-            deliverKeybindsFromKeyEvents(
-              window.webContents,
-              () => configurationReloader.current().configuration.keybinds,
-              (action) => keybindActionInvocations[action](),
-              process.platform,
+            const actionDelivery = registerWindowActionDelivery(
+              window,
+              () => actionCatalog,
               keybindCapture,
+              () => palette,
             );
-            // Retain the target: BrowserWindow.webContents throws after closed.
-            const captureTarget = window.webContents;
-            window.on("blur", () => keybindCapture.release(captureTarget));
-            window.once("closed", () => keybindCapture.release(captureTarget));
             guardTerminalWindowClose(window, terminalApplication!);
             const chrome = registerWindowChrome(window, ipcMain, {
               platform: process.platform,
@@ -278,15 +286,21 @@ app
               onSessionStartError: lifecycle.onSessionStartError,
               onTabsEmpty: lifecycle.onTabsEmpty,
               onSessionExit: (exit, context) => {
+                actionDelivery.invalidate();
                 titleController.sessionEnded(context.sessionId);
                 lifecycle.onSessionExit(exit, context);
               },
               onSessionStarted: titleController.sessionStarted,
-              onSessionSelected: titleController.selectSession,
-              onSettingsSelected: () =>
+              onSessionSelected: (sessionId) => {
+                actionDelivery.select(sessionId);
+                titleController.selectSession(sessionId);
+              },
+              onSettingsSelected: () => {
+                actionDelivery.select("settings");
                 titleController.selectSettings(
                   currentTranslator().t("settings.title"),
-                ),
+                );
+              },
               onSessionTitleSync: titleController.syncSessionTitle,
               onTitleRequest: titleController.requestTitle,
               onBell: titleController.ringBell,
@@ -359,7 +373,7 @@ app
           showClosePaneConfirmation: nativeDialogs.confirmClosePane,
           showSessionFailure: nativeDialogs.sessionFailure,
           sendFontZoom: (window, command) =>
-            window.webContents.send(terminalIpc.fontZoom, command),
+            sendAction(window.webContents, terminalIpc.fontZoom, command),
           sendClipboardAction: (window, action, target) =>
             window.webContents.send(
               terminalIpc.clipboardAction,
@@ -372,7 +386,7 @@ app
           sendLocalImageOpen: notifyWindow(terminalIpc.localImageOpen),
           toggleDeveloperTools: (window) => window.webContents.toggleDevTools(),
           sendTabCommand: (window, command) =>
-            window.webContents.send(terminalIpc.tabCommand, command),
+            sendAction(window.webContents, terminalIpc.tabCommand, command),
           quit: () => app.quit(),
           operationalEvents: operationalEvents!,
         });
@@ -425,25 +439,42 @@ app
           toggleSelectedTitleBar: terminalApplication.toggleSelectedTitleBar,
           reloadUserConfiguration: () => void configurationReloader.reload(),
           openLocalImage: terminalApplication.openLocalImageInSelectedWindow,
-          showAbout: applicationAbout.startApplicationAbout(terminalIpcRouter),
+          showAbout: applicationAbout.startApplicationAbout(
+            terminalIpcRouter,
+            sendAction,
+          ),
+          showCommandPalette: () => palette?.show(),
           showSettings: startApplicationSettings(
             terminalIpcRouter,
             configurationLoadOptions,
             configurationReloader,
             keybindCapture,
+            sendAction,
           ),
         };
-        const keybindActionInvocations = terminalActionInvocations(menuActions);
-        rebuildMenu = () =>
+        rebuildMenu = () => {
+          actionCatalog = createCoreActionCatalog(
+            app.name,
+            menuActions,
+            configurationReloader.current().configuration.keybinds,
+            currentTranslator().t,
+          );
           nativeMenu.installApplicationMenu(
-            terminalApplicationMenuTemplate(
+            coreActionMenuTemplate(
               app.name,
-              menuActions,
-              configurationReloader.current().configuration.keybinds,
+              actionCatalog,
               currentTranslator().t,
             ),
           );
+        };
         rebuildMenu();
+        palette = startCommandPalette({
+          ipcMain,
+          isTrustedSender: terminalIpcRouter.isTrustedSender,
+          selectedContents: () => BrowserWindow.getFocusedWindow()?.webContents,
+          catalog: () => actionCatalog,
+        });
+        app.once("will-quit", palette.dispose);
 
         await terminalApplication.newWindow();
       },

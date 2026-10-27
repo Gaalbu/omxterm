@@ -417,13 +417,47 @@ succeeds ([ADR 0025](adr/0025-use-restty-as-the-terminal-surface.md)).
   output, configuration updates and approved pane/tab/session/
   window closure or Quit remain active. About does not add a configurable
   shortcut, settings service or persistent state.
-- `View -> Toggle Developer Tools` is a menu-only diagnostic action for the
+- `View -> Command Palette…` opens a temporary searchable dialog for core
+  application actions. `commandPalette` is remappable through Settings on every
+  Supported Platform and defaults to `null`, preserving previously valid
+  keybind configurations without reserving a new key or rewriting user files.
+  The palette shows localized labels and effective shortcuts from the internal
+  Action Catalog used by the native menu and main key matcher. It uses
+  case-insensitive substring matching in en-US or pt-BR, not fuzzy matching,
+  aliases, ranking or command history. Up/Down selects a result; Enter or a
+  pointer click invokes it after dismissal. Escape or the backdrop cancels.
+  Enter/Escape repeats and release stay owned by the closing dialog; keyboard
+  invocation waits for the owned Enter release, and blur or a lost release
+  cancels that pending invocation.
+  Copy, Paste, Select All, Find, positional tab selection and Command Palette
+  itself are excluded from results. Find is deliberately omitted because
+  targeting the formerly focused Surface after palette input has not been
+  established. Existing Edit actions and shortcuts remain available outside the
+  palette; while its query owns input, clipboard actions edit that query rather
+  than the terminal. Native role-only Minimize is not a catalog result.
+  The palette captures the selected Application Tab and focused pane before
+  reading its catalog snapshot. Changed selection (including away and back),
+  removed/ended targets or owner disposal prevent dispatch to a replacement.
+  Main validates the selected trusted main frame and a one-shot catalog token;
+  window blur, renderer loss/reload, selection/session lifecycle changes and
+  catalog replacement invalidate pending authorization. Renderer-bound dispatch
+  rechecks the captured target before entering existing action handlers.
+  Existing Busy Session confirmation and action guards remain authoritative.
+  Settings remains retained nonmodal application content beneath the palette:
+  its controls become inert and shortcut recording cancels, without discarding
+  drafts or pending saves. Dismissal restores a surviving interactive prior
+  control when the captured target is still current. The palette does not stack
+  with About, image preview or snippet preview. It adds no persistent toolbar,
+  configuration migration, public action registration or Extension SDK.
+  Labels and bindings are a per-opening snapshot; after changing language or
+  bindings, dismiss and reopen the palette to obtain the current catalog.
+- `View -> Toggle Developer Tools` is a menu/palette diagnostic action for the
   selected Terminal Window in development and packaged applications. It opens or
   closes Electron's local Developer Tools without enabling remote debugging;
   Developer Tools never open automatically. The tools can expose private
   Terminal Payload and runtime state, so diagnostic output, screenshots, traces,
   and profiles require review and redaction before sharing.
-- `File -> Open Local Image…` is a menu-only action for the selected Terminal
+- `File -> Open Local Image…` is a menu/palette action for the selected Terminal
   Window. It opens a native picker and previews one validated local static PNG
   or JPEG in a temporary overlay without writing the file or changing User
   Configuration. Escape, the close button, or the backdrop dismisses the
@@ -1172,7 +1206,9 @@ action vocabulary: `quit`, `copy`, `paste`, `selectAll`, `find`, `newWindow`,
 through `selectTab9`, `zoomIn`, `zoomOut`, `actualSize`, `toggleFullScreen`,
 `toggleSnippets`, `toggleTabBar`, `toggleTitleBar`, `reloadConfig`, `splitRight`,
 `splitDown`, `closePane`, `focusNextPane`, `focusPreviousPane`, `focusPaneLeft`,
-`focusPaneRight`, `focusPaneUp`, `focusPaneDown`, and `equalizePanes`. Each
+`focusPaneRight`, `focusPaneUp`, `focusPaneDown`, `equalizePanes`, and
+`commandPalette`. Command Palette defaults to `null` on every platform; omission
+therefore introduces no shortcut conflict in an otherwise valid configuration. Each
 value is either `null` or a case-insensitive Electron accelerator containing
 exactly one key and at least one non-Shift modifier; bare or Shift-only
 accelerators are rejected so a keybind can never swallow plain typing. Function
@@ -1183,9 +1219,11 @@ accelerator, and OMXTerm no longer consumes that key for the action. It does not
 guarantee delivery to the terminal; another binding or the operating system may
 still consume the key. Linux and Windows default Find to `Ctrl+Shift+F` and
 Toggle Full Screen to `F11`; macOS keeps `Cmd+F` and `Ctrl+Cmd+F`. The
-application menu displays the effective accelerator
-and is the single shortcut registration point; there is no second shortcut
-system, and terminal control sequences inside the PTY are untouched. An
+application menu displays and registers the effective accelerator. One internal
+Action Catalog defines core action labels, effective bindings and invocation
+callbacks for the native menu, Command Palette and main key matcher; the menu
+is not a separate behavior registry. There is no second shortcut system, and
+terminal control sequences inside the PTY are untouched. An
 effective keybind works even when the platform refuses to fire its menu
 accelerator (macOS never delivers `Control+Tab` to a menu item): the main
 process invokes the same action from the key event itself, and a key that

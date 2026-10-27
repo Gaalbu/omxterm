@@ -12,6 +12,7 @@ export const brazilianPortugueseMessages: Readonly<
   "common.close": "Fechar",
 
   "menu.settings": "Configurações…",
+  "action.commandPalette": "Paleta de comandos…",
   "menu.about": "Sobre o OMXTerm",
   "menu.quit": "Sair do {name}",
   "menu.edit": "Editar",
@@ -143,6 +144,11 @@ export const brazilianPortugueseMessages: Readonly<
     "Falha ao inicializar a superfície do terminal do OMXTerm: {detail}",
   "terminal.backendLost":
     "O backend de renderização da superfície do terminal do OMXTerm foi perdido",
+  "palette.title": "Paleta de comandos",
+  "palette.query": "Buscar ações…",
+  "palette.empty": "Nenhuma ação encontrada",
+  "palette.loading": "Carregando ações…",
+  "palette.error": "Ações indisponíveis. Feche e tente novamente.",
   "search.region": "Buscar no histórico do terminal",
   "search.placeholder": "Buscar no histórico",
   "search.clear": "Limpar",

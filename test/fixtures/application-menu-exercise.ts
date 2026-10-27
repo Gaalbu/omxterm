@@ -68,6 +68,7 @@ export async function exerciseApplicationMenu(
     openLocalImage: unexpected,
     showAbout,
     showSettings: unexpected,
+    showCommandPalette: unexpected,
     splitSelectedPane: unexpected,
     closeSelectedPane: unexpected,
     focusSelectedPane: unexpected,

@@ -8,6 +8,7 @@ export const englishMessages = {
   "common.close": "Close",
 
   "menu.settings": "Settings…",
+  "action.commandPalette": "Command Palette…",
   "menu.about": "About OMXTerm",
   "menu.quit": "Quit {name}",
   "menu.edit": "Edit",
@@ -132,6 +133,11 @@ export const englishMessages = {
     "Failed to initialize the OMXTerm Terminal Surface: {detail}",
   "terminal.backendLost":
     "The OMXTerm Terminal Surface rendering backend was lost",
+  "palette.title": "Command Palette",
+  "palette.query": "Search actions…",
+  "palette.empty": "No matching actions",
+  "palette.loading": "Loading actions…",
+  "palette.error": "Actions are unavailable. Close and try again.",
   "search.region": "Search terminal scrollback",
   "search.placeholder": "Find in scrollback",
   "search.clear": "Clear",

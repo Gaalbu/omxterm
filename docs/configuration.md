@@ -51,6 +51,8 @@ actions do nothing there. Copy/Paste/Select All edit the focused Settings field,
 never a hidden terminal. Selecting Settings hides Snippets; returning to a
 terminal does not reopen it. About and menu-opened image previews can appear
 over Settings, making it inert and restoring its focused control on dismissal.
+The [Command Palette](usage.md#command-palette) can also open above Settings;
+its dismissal preserves the retained editor and restores a surviving focused control.
 
 Choose **Settings…** in the OMXTerm application menu. **General → Language** selects **English (United States)** (`en-US`) or **Português (Brasil)** (`pt-BR`), always listed by their own names; it defaults to en-US and is never inferred from the system. A successful save/reload updates the menu and all open windows immediately, including Settings and snippet preview labels. Open editors keep their drafts, selected page, focus, selection/caret, scroll and pending saves; an open preview keeps its captured pane/Surface and disabled state if that terminal ended. Pane menus, close dialogs and existing Surface/separator accessible labels also update; panes completing initialization replay the latest labels. JSON, paths, snippet contents and diagnostic detail remain literal.
 
@@ -69,11 +71,11 @@ The **Config File** page shows `config.json` with an explicit **Save**, using th
 
 The **Shortcuts** page lists every remappable action with the shortcut it uses now and how it is set:
 
-- **Default:** follows OMXTerm's built-in shortcut (no entry in `config.json`). **Default** removes your entry again.
+- **Default:** follows OMXTerm's built-in shortcut (no entry in `config.json`). **Default** removes your entry again. Command Palette has no built-in shortcut on any platform.
 - **Custom:** **Record**, then press the new combination; it is saved as that action's `keybinds` entry. Plain Escape cancels; modified Escape can be recorded. An unsupported combination (including a letter without Ctrl, Alt, Cmd or AltGr, or a layout identity the accelerator cannot represent) asks you to try again; F1–F24 can stand alone. While recording, the keys you press, their held repeats and releases don't run their actions or reach the terminal.
 - **Unbound:** **Unbind** saves `null`, so the action stays in the menu without a key.
 
-**Cancel**, leaving the Shortcuts page or Settings tab, opening a modal preview/About, losing recording-button/window focus, or closing Settings ends recording without saving. While recording, tab-navigation shortcuts are candidate bindings: cancel first, or select another tab with the pointer/menu. Recording also cancels automatically after 30 seconds, and the status changes so it no longer asks you to press a key. A delayed result from an old recording cannot change a replacement recording.
+**Cancel**, leaving the Shortcuts page or Settings tab, opening Command Palette or a modal preview/About, losing recording-button/window focus, or closing Settings ends recording without saving. While recording, tab-navigation shortcuts are candidate bindings: cancel first, or select another tab with the pointer/menu. Recording also cancels automatically after 30 seconds, and the status changes so it no longer asks you to press a key. A delayed result from an old recording cannot change a replacement recording.
 
 A shortcut that collides with another action is rejected with the same message as in `config.json`, and your file stays unchanged. App shortcuts take their key before terminal programs see it, so binding a key a program uses (like `Ctrl+C`) keeps it from reaching that program.
 
@@ -325,6 +327,7 @@ Customize application shortcuts under `keybinds` using [Electron accelerator](ht
 
 | Action                      | macOS default                | Linux/Windows default |
 | --------------------------- | ---------------------------- | --------------------- |
+| `commandPalette`            | `null` (unbound)             | `null` (unbound)      |
 | `quit`                      | `CommandOrControl+Q`         | `Control+Alt+Shift+Q` |
 | `copy`                      | `CommandOrControl+C`         | `Control+Shift+C`     |
 | `paste`                     | `CommandOrControl+V`         | `Control+Shift+V`     |
@@ -355,6 +358,14 @@ Customize application shortcuts under `keybinds` using [Electron accelerator](ht
 | `toggleTabBar`              | `CommandOrControl+Shift+B`   | `Control+Shift+B`     |
 | `toggleTitleBar`            | `CommandOrControl+Shift+D`   | `Control+Shift+D`     |
 | `reloadConfig`              | `CommandOrControl+Shift+,`   | `Control+Shift+,`     |
+
+**Command Palette** is available from **View → Command Palette…** even when
+unbound. Assign it in **Settings → Shortcuts**, or set `keybinds.commandPalette`
+to an unused accelerator. Omitting it or choosing **Default** leaves it unbound
+on macOS, Linux and Windows, so adding this action does not introduce conflicts
+in previously valid configurations. No automatic rewrite or migration occurs.
+After changing bindings or language, reopen an already-open palette to refresh
+its labels and shortcut display.
 
 Example overriding a single shortcut:
 

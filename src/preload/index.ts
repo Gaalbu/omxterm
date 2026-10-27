@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer, webUtils } from "electron";
+import { createPaletteTransport } from "./command-palette-bridge";
 import { createAboutBridge } from "./about-bridge";
 import { createSettingsBridge } from "./settings-bridge";
 import type { TerminalBridge } from "../shared/terminal-bridge";
@@ -52,6 +53,9 @@ import {
   isTerminalFontFamily,
 } from "../shared/terminal-font-data";
 
+const { transport: actionTransport, palette } =
+  createPaletteTransport(ipcRenderer);
+
 let latestConfiguration: TerminalRendererConfiguration | undefined;
 let configurationRevision = 0;
 const configurationUpdateListeners = new Set<
@@ -70,6 +74,7 @@ ipcRenderer.on(terminalIpc.configurationUpdate, (_event, payload: unknown) => {
 });
 
 const terminal: TerminalBridge = {
+  palette,
   async configuration() {
     const revisionAtRequest = configurationRevision;
     const configuration: unknown = await ipcRenderer.invoke(
@@ -102,31 +107,32 @@ const terminal: TerminalBridge = {
     const handler = (_event: Electron.IpcRendererEvent, payload: unknown) => {
       if (payload === undefined) listener();
     };
-    ipcRenderer.on(terminalIpc.snippetsToggle, handler);
+    actionTransport.on(terminalIpc.snippetsToggle, handler);
     return () =>
-      ipcRenderer.removeListener(terminalIpc.snippetsToggle, handler);
+      actionTransport.removeListener(terminalIpc.snippetsToggle, handler);
   },
   onTabBarToggle(listener) {
     const handler = (_event: Electron.IpcRendererEvent, payload: unknown) => {
       if (payload === undefined) listener();
     };
-    ipcRenderer.on(terminalIpc.tabBarToggle, handler);
-    return () => ipcRenderer.removeListener(terminalIpc.tabBarToggle, handler);
+    actionTransport.on(terminalIpc.tabBarToggle, handler);
+    return () =>
+      actionTransport.removeListener(terminalIpc.tabBarToggle, handler);
   },
   onFind(listener) {
     const handler = (_event: Electron.IpcRendererEvent, payload: unknown) => {
       if (payload === undefined) listener();
     };
-    ipcRenderer.on(terminalIpc.find, handler);
-    return () => ipcRenderer.removeListener(terminalIpc.find, handler);
+    actionTransport.on(terminalIpc.find, handler);
+    return () => actionTransport.removeListener(terminalIpc.find, handler);
   },
   onTitleBarToggle(listener) {
     const handler = (_event: Electron.IpcRendererEvent, payload: unknown) => {
       if (payload === undefined) listener();
     };
-    ipcRenderer.on(terminalIpc.titleBarToggle, handler);
+    actionTransport.on(terminalIpc.titleBarToggle, handler);
     return () =>
-      ipcRenderer.removeListener(terminalIpc.titleBarToggle, handler);
+      actionTransport.removeListener(terminalIpc.titleBarToggle, handler);
   },
   windowChrome(command) {
     if (!isWindowChromeCommand(command))
@@ -239,9 +245,9 @@ const terminal: TerminalBridge = {
     const handler = (_event: Electron.IpcRendererEvent, payload: unknown) => {
       if (payload === undefined) listener();
     };
-    ipcRenderer.on(terminalIpc.localImageOpen, handler);
+    actionTransport.on(terminalIpc.localImageOpen, handler);
     return () =>
-      ipcRenderer.removeListener(terminalIpc.localImageOpen, handler);
+      actionTransport.removeListener(terminalIpc.localImageOpen, handler);
   },
   acknowledgeOutput(sessionId: TerminalSessionId, end: number) {
     const payload = { sessionId, end };
@@ -275,8 +281,9 @@ const terminal: TerminalBridge = {
     const handler = (_event: Electron.IpcRendererEvent, payload: unknown) => {
       if (isTerminalTabCommand(payload)) listener(payload);
     };
-    ipcRenderer.on(terminalIpc.tabCommand, handler);
-    return () => ipcRenderer.removeListener(terminalIpc.tabCommand, handler);
+    actionTransport.on(terminalIpc.tabCommand, handler);
+    return () =>
+      actionTransport.removeListener(terminalIpc.tabCommand, handler);
   },
   onTabTitle(listener: (sessionId: TerminalSessionId, title: string) => void) {
     const handler = (_event: Electron.IpcRendererEvent, payload: unknown) => {
@@ -311,8 +318,8 @@ const terminal: TerminalBridge = {
     const handler = (_event: Electron.IpcRendererEvent, command: unknown) => {
       if (isTerminalFontZoom(command)) listener(command);
     };
-    ipcRenderer.on(terminalIpc.fontZoom, handler);
-    return () => ipcRenderer.removeListener(terminalIpc.fontZoom, handler);
+    actionTransport.on(terminalIpc.fontZoom, handler);
+    return () => actionTransport.removeListener(terminalIpc.fontZoom, handler);
   },
   async writeClipboardText(text: string) {
     if (!isNonemptyClipboardText(text))
@@ -379,7 +386,7 @@ contextBridge.exposeInMainWorld(
   "omxterm",
   Object.freeze({
     terminal: Object.freeze(terminal),
-    about: Object.freeze(createAboutBridge(ipcRenderer)),
-    settings: Object.freeze(createSettingsBridge(ipcRenderer)),
+    about: Object.freeze(createAboutBridge(actionTransport)),
+    settings: Object.freeze(createSettingsBridge(actionTransport)),
   }),
 );

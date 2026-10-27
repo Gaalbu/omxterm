@@ -1,3 +1,4 @@
+/* eslint-disable max-lines -- Keep palette coverage in the existing supervised fixture lifecycle. */
 import { app, BrowserWindow, ipcMain, Menu, screen } from "electron";
 import { mkdirSync, writeSync } from "node:fs";
 import assert from "node:assert/strict";
@@ -48,6 +49,20 @@ import {
   type MenuOpening,
 } from "./application-menu-exercise";
 
+import { exerciseCommandPalette } from "./command-palette-exercise";
+import type { startCommandPalette } from "../../src/main/command-palette";
+import type { TrustedWebContents } from "../../src/main/terminal-ipc-types";
+
+let palette: ReturnType<typeof startCommandPalette> | undefined;
+const paletteOnly = process.argv.includes("--fixture-palette-only");
+const sendAction = (
+  sender: TrustedWebContents,
+  channel: string,
+  payload?: unknown,
+) => {
+  if (palette) palette.send(sender, channel, payload);
+  else sender.send(channel, payload);
+};
 type ChromeOptions = Parameters<typeof exerciseWindowChrome>[0];
 const root = __dirname;
 const auxiliaryOnly = process.argv.includes("--fixture-auxiliary-only");
@@ -174,6 +189,22 @@ async function exerciseScenario(
 ) {
   const apply = applyFixtureConfiguration(router);
   try {
+    if (paletteOnly)
+      return await exerciseCommandPalette({
+        window: windows[0]!,
+        application,
+        router,
+        root,
+        apply,
+        showAbout: about.show,
+        get input() {
+          return sessionInputs[0]!;
+        },
+        output: (data) => sessionOutputs[0]!(data),
+        ownPalette: (manager) => {
+          palette = manager;
+        },
+      });
     if (themeAppearance)
       return await exerciseTheme(options, root, apply, sessionOutputs);
     if (featureSmoke.enabled)
@@ -286,7 +317,7 @@ app
       return;
     }
     const nativeExpectation =
-      auxiliaryOnly || featureSmoke.enabled || themeAppearance
+      auxiliaryOnly || featureSmoke.enabled || themeAppearance || paletteOnly
         ? undefined
         : chromeNativeExpectation(process.argv);
     if (nativeExpectation !== undefined)
@@ -294,7 +325,7 @@ app
         `__OMXTERM_CHROME_NATIVE_EXPECTATION__${nativeExpectation}\n`,
       );
     const router = registerTerminalIpcRouter(ipcMain);
-    const about = createAboutExercise(router, () => windows[0]!);
+    const about = createAboutExercise(router, () => windows[0]!, sendAction);
     application = startTerminalApplication<BrowserWindow>({
       createWindow(lifecycle) {
         const nativeOptions = terminalWindowOptions(
@@ -420,7 +451,7 @@ app
       sendTitleBarToggle: (window) =>
         window.webContents.send(terminalIpc.titleBarToggle),
       sendTabBarToggle: (window) =>
-        window.webContents.send(terminalIpc.tabBarToggle),
+        sendAction(window.webContents, terminalIpc.tabBarToggle),
       sendFind: (window) => window.webContents.send(terminalIpc.find),
       sendTabCommand: (window, command) =>
         window.webContents.send(terminalIpc.tabCommand, command),
