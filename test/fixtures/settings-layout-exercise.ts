@@ -204,17 +204,18 @@ export async function exerciseSettingsLayout(
         assert.equal(result.scheme, light ? "light" : "dark");
         assert.equal(result.width, width);
         assert.equal(result.height, height);
-        await evaluate("document.querySelector('.settings-close').focus()");
-        contents.sendInputEvent({
-          type: "keyDown",
-          keyCode: "Tab",
-          modifiers: ["shift"],
-        });
-        contents.sendInputEvent({
-          type: "keyUp",
-          keyCode: "Tab",
-          modifiers: ["shift"],
-        });
+        // Close lives in the header, before the form. Exercise real forward
+        // traversal from the target's preceding enabled control instead of
+        // assuming an absolutely positioned Close comes last in DOM order.
+        await evaluate(`(() => {
+          const panel = globalThis.settingsLayoutTarget.closest('[role="tabpanel"]');
+          const controls = [...panel.querySelectorAll('button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled)')];
+          const index = controls.indexOf(globalThis.settingsLayoutTarget);
+          if (index < 1) throw Error('Settings focus target has no predecessor');
+          controls[index - 1].focus();
+        })()`);
+        contents.sendInputEvent({ type: "keyDown", keyCode: "Tab" });
+        contents.sendInputEvent({ type: "keyUp", keyCode: "Tab" });
         await frame();
         assert.equal(
           await evaluate<boolean>(
