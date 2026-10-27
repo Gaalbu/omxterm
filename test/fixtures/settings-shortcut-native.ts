@@ -273,6 +273,7 @@ export async function exerciseShortcutCapture(options: ShortcutCaptureOptions) {
   ) => contents.sendInputEvent({ type, keyCode, modifiers });
   const open = async () => {
     window.focus();
+    await waitFor(() => window.isFocused(), "Settings owner focused");
     routing.show();
     await waitFor(
       () =>
@@ -430,8 +431,10 @@ export async function exerciseShortcutCapture(options: ShortcutCaptureOptions) {
     {
       const before = sample();
       await open();
-      await record();
+      // The renderer arms its timer during Record, before main's admission
+      // receipt. Measure from the request, not after that asynchronous receipt.
       const start = Date.now();
+      await record();
       await waitFor(
         () =>
           evaluate<boolean>(
@@ -442,7 +445,7 @@ export async function exerciseShortcutCapture(options: ShortcutCaptureOptions) {
       );
       assert.ok(
         Date.now() - start >= 29_900,
-        "Capture ended before its timeout",
+        `Capture ended before its timeout (${Date.now() - start}ms from request)`,
       );
       await close();
       await finishSample(before, "real-timeout");
