@@ -1,7 +1,9 @@
+import { hostedTabOptions } from "./hosted-overlay-subscriptions";
+import type { HostedContentBridge } from "../shared/extension-view";
 import { mountWindowChrome, type WindowChromeBridge } from "./window-chrome";
-import { createCommandPalette, mountWindowPalette } from "./command-palette";
+import { createCommandPalette } from "./command-palette";
 import type { CommandPaletteBridge } from "../shared/command-palette";
-import { mountWindowDialogs } from "./window-dialogs";
+import { mountWindowOverlays } from "./window-dialogs";
 import type { SettingsBridge } from "../shared/settings";
 import type { SettingsTabSelection } from "../shared/terminal-panes";
 import { surfaceLabels, windowLanguage } from "./renderer-language";
@@ -61,6 +63,7 @@ export interface TerminalWindowPageElements {
 }
 
 interface TerminalWindowPageOptions extends TerminalWindowActionSubscriptions {
+  readonly hostedContent?: HostedContentBridge;
   readonly about?: AboutBridge;
   readonly palette?: CommandPaletteBridge;
   readonly settings?: SettingsBridge;
@@ -181,9 +184,10 @@ export function mountTerminalWindowPage(
       options.loadLocalImage,
       previewActive,
       hoverAvailabilityListeners,
-      (source) => {
-        if (!modalActive()) void localImagePreview?.open(source);
-      },
+      (source) =>
+        tabs.openOverlay(() => {
+          if (!disposed && !modalActive()) void localImagePreview?.open(source);
+        }),
     ),
     ...pageLabels.surfaceOptions,
   };
@@ -193,7 +197,9 @@ export function mountTerminalWindowPage(
     {
       language,
       ...(options.settings ? { settings: options.settings } : {}),
-      onSettingsSelected: () => auxiliaryPanel?.deactivate(),
+      ...hostedTabOptions(options.hostedContent, () =>
+        auxiliaryPanel?.deactivate(),
+      ),
       createAdapter: (workingDirectoryOf) =>
         options.createAdapter(fontConfigurationId, workingDirectoryOf),
       canFocus: () => !disposed && !previewActive(),
@@ -240,31 +246,27 @@ export function mountTerminalWindowPage(
       onActivityChange: onOverlayActivity,
     });
     removeLocalImageOpenListener = options.subscribeToLocalImageOpen?.(() => {
-      if (!modalActive()) void localImagePreview?.open();
+      tabs.openOverlay(() => {
+        if (!disposed && !modalActive()) void localImagePreview?.open();
+      });
     });
   }
 
-  const dialogs = mountWindowDialogs(
-    page.document,
-    options,
-    () => !disposed && !previewActive(),
-    {
-      language,
-      focusTerminal: tabs.focusSelected,
-      onActivityChange(active) {
-        dialogsActive = active;
-        onOverlayActivity();
-      },
-    },
-  );
-  palette = mountWindowPalette(
+  const { dialogs, palette: mountedPalette } = mountWindowOverlays(
     page.document,
     options,
     tabs,
     language,
     () => !disposed && !previewActive(),
-    onOverlayActivity,
+    {
+      dialogs(active) {
+        dialogsActive = active;
+        onOverlayActivity();
+      },
+      overlay: onOverlayActivity,
+    },
   );
+  palette = mountedPalette;
   const removeFileDrops = installFileDrops(
     page.document,
     previewActive,
@@ -347,6 +349,7 @@ export function mountTerminalWindowPage(
         tabs,
         previewActive,
         (action) =>
+          (!tabs.isTerminalSelected() && !tabs.isSettingsSelected()) ||
           tabs.editSettingsClipboard(action, options.clipboard) ||
           (auxiliaryPanel?.clipboardAction(action) ?? false),
         (action) => palette?.clipboardAction(action) ?? false,
@@ -369,7 +372,7 @@ export function mountTerminalWindowPage(
         snippetPreview = preview;
         panel.setBlocked(previewActive());
         removeSnippetsToggleListener = snippets.subscribeToToggle(() => {
-          if (!tabs.isSettingsSelected()) panel.toggle("snippets");
+          if (tabs.isTerminalSelected()) panel.toggle("snippets");
         });
       }
       removeSettingsOpen = options.settings?.onOpen(() => {

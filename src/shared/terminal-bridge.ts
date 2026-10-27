@@ -18,6 +18,7 @@ import type { TerminalSnippetsResponse } from "./terminal-snippets";
 import type { LocalImageActivation, LocalImageData } from "./local-image";
 
 export interface TerminalBridge {
+  readonly hostedContent?: import("./extension-view").HostedContentBridge;
   readonly palette?: import("./command-palette").CommandPaletteBridge;
   configuration(): Promise<TerminalRendererConfiguration>;
   fontData(family?: string): Promise<TerminalFontData>;

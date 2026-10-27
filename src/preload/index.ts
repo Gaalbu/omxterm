@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer, webUtils } from "electron";
+import { createHostedContentBridge } from "./extension-view-bridge";
 import { createPaletteTransport } from "./command-palette-bridge";
 import { createAboutBridge } from "./about-bridge";
 import { createSettingsBridge } from "./settings-bridge";
@@ -75,6 +76,7 @@ ipcRenderer.on(terminalIpc.configurationUpdate, (_event, payload: unknown) => {
 
 const terminal: TerminalBridge = {
   palette,
+  hostedContent: createHostedContentBridge(ipcRenderer),
   async configuration() {
     const revisionAtRequest = configurationRevision;
     const configuration: unknown = await ipcRenderer.invoke(

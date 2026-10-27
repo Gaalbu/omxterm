@@ -40,6 +40,9 @@ export function startTerminalWindow(bridge: Window["omxterm"]): void {
           ? { palette: bridge.terminal.palette }
           : {}),
         settings: bridge.settings,
+        ...(bridge.terminal.hostedContent
+          ? { hostedContent: bridge.terminal.hostedContent }
+          : {}),
         chrome: bridge.terminal,
         mount: mountResttyTerminalSurface,
         loadFontData: bridge.terminal.fontData,

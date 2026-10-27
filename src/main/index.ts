@@ -13,6 +13,7 @@ import { userInfo } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { terminalIpc } from "../shared/terminal-ipc";
+import { registerExtensionViewScheme } from "./extension-view-host";
 import type { TrustedWebContents } from "./terminal-ipc-types";
 import { coreActionMenuTemplate } from "./application-menu";
 import {
@@ -121,7 +122,6 @@ const notifyWindow = (channel: string) => (window: BrowserWindow) =>
   sendAction(window.webContents, channel);
 
 let terminalApplication: TerminalApplication<BrowserWindow> | undefined;
-// Settings shortcut recording owns a window's keyboard through key delivery.
 const keybindCapture = createKeybindCapture(process.platform);
 let operationalEvents: OperationalEventLog | undefined;
 let disposeTerminalSessions = () => {};
@@ -130,6 +130,7 @@ const shutdown = registerTerminalShutdown(app, {
   disposeSessions: () => disposeTerminalSessions(),
 });
 
+registerExtensionViewScheme();
 applyChromiumSandboxPolicy(app.commandLine);
 
 applyChromiumGpuPolicy(app.commandLine);
