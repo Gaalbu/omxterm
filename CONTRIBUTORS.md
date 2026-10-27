@@ -7,6 +7,7 @@ Everyone whose contribution is integrated belongs here, including a one-line
 translation or documentation fix. The list is alphabetical by GitHub handle,
 with equal recognition for every contributor:
 
+- [Gabriel Albuquerque Alencar (@Gaalbu)](https://github.com/Gaalbu)
 - [Francisco Juan (@Juan-Severiano)](https://github.com/Juan-Severiano)
 - [Otávio Miranda (@luizomf)](https://github.com/luizomf)
 - [Rafael Ruscher (@ruscher)](https://github.com/ruscher)
