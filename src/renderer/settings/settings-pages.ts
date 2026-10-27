@@ -253,6 +253,7 @@ export function renderControl(
     }
     input = field;
   }
+  input.classList.add("page-control");
   if (control.kind === "toggle") row.append(input, caption);
   else row.append(caption, input);
   return row;

@@ -108,8 +108,14 @@ succeeds ([ADR 0025](adr/0025-use-restty-as-the-terminal-surface.md)).
   invalidates pending clipboard interaction. Close disposes that editor without
   implicit raw Save or a new unsaved-change prompt. Reopen reads through the
   existing serialized service. Escape does not close the ordinary tab; the
-  explicit Close action uses ordinary tab removal and retains its closing Enter
-  gesture through repeats/release. Settings survives last-terminal exit,
+  explicit Close action is in the page header and uses ordinary tab removal,
+  retaining its closing Enter
+  gesture through repeats/release. The internal shared application-page shell
+  provides bounded content/navigation scrolling, explicit control variants and
+  consistent error/warning/result notices. Raw and graphical results retain their
+  severity; symlink recovery directs external editing without offering in-app
+  write-through. Settings remains an opaque theme-derived reading/editing surface,
+  independently of terminal transparency. Settings survives last-terminal exit,
   cancellation or first-mount failure without inventing a shell or reporting
   false renderer emptiness. First-mount readiness still reports the actual
   terminal outcome. Final Application Tab removal commits the existing empty

@@ -239,7 +239,7 @@ export const brazilianPortugueseMessages: Readonly<
   "settings.saving": "Salvando…",
   "settings.requestError": "Não salvo: a solicitação falhou.",
   "settings.fileGuidance":
-    "{problem}. Alterações gráficas são verificadas no arquivo inteiro; corrija aqui ou na página Arquivo de Configuração.",
+    "Alterações gráficas são verificadas no arquivo inteiro. Corrija valores inválidos em Configurações ou edite o Arquivo de Configuração; se não for possível ler o arquivo, repare-o externamente e recarregue.",
   "settings.saved": "Salvo.",
   "settings.notApplied":
     "Salvo em config.json, mas não foi possível aplicar: {notice}",

@@ -15,15 +15,24 @@ const lifetimes = {
 export function describeSettingsResult(
   result: SettingsResult,
   t: Translator["t"] = translatorFor(DEFAULT_LANGUAGE).t,
-): { readonly text: string; readonly error: boolean } {
+): {
+  readonly text: string;
+  readonly error: boolean;
+  readonly severity: "success" | "warning" | "error";
+} {
   if (result.status !== "saved")
-    return { text: settingsMessageText(result.message, t), error: true };
+    return {
+      text: settingsMessageText(result.message, t),
+      error: true,
+      severity: "error",
+    };
   if (!result.application.applied)
     return {
       text: t("settings.notApplied", {
         notice: settingsMessageText(result.application.notice, t),
       }),
       error: true,
+      severity: "error",
     };
   return {
     text: [
@@ -34,5 +43,6 @@ export function describeSettingsResult(
       ),
     ].join(" "),
     error: false,
+    severity: result.application.notices.length > 0 ? "warning" : "success",
   };
 }

@@ -7,6 +7,11 @@ import {
 import type { TerminalClipboardAction } from "../../shared/terminal-contract";
 import type { TerminalClipboard } from "../../terminal-surface/terminal-surface";
 import { retainDismissalGesture } from "../about/about-dialog";
+import {
+  createApplicationPage,
+  createPageButton,
+  setPageNotice,
+} from "../application-page";
 import { renderConfigFile } from "./settings-config-file";
 import { pages, renderControl } from "./settings-pages";
 import {
@@ -88,7 +93,7 @@ export function createSettingsView(
         lastFocus = event.target;
     });
     const live = () => dialog === current;
-    const done = document.createElement("button");
+    const done = createPageButton(document);
     const view = buildSettingsView(
       document,
       bridge,
@@ -100,7 +105,7 @@ export function createSettingsView(
     unbindView = view.dispose;
     releaseView = view.release;
     done.type = "button";
-    done.className = "settings-close";
+    done.classList.add("settings-close");
     done.addEventListener("click", () => {
       if (live()) close(true);
     });
@@ -109,7 +114,7 @@ export function createSettingsView(
       if (event.key === "Enter") keyboard.track(event, done);
       event.stopPropagation();
     });
-    current.append(view.element, done);
+    current.append(view.element);
     (options.container ?? document.body).append(current);
     current.hidden = !selected;
     current.inert = blocked || !selected;
@@ -239,8 +244,6 @@ function buildSettingsView(
     | { key: MessageKey; error: boolean }
     | { result: SettingsResult }
     | undefined;
-  const element = document.createElement("div");
-  element.className = "settings-body";
   const title = document.createElement("h2");
   title.id = "settings-title";
   const status = document.createElement("p");
@@ -262,19 +265,33 @@ function buildSettingsView(
       : "result" in statusMessage
         ? describeSettingsResult(statusMessage.result, t)
         : { text: t(statusMessage.key), error: statusMessage.error };
-    status.textContent =
-      pending > 0
-        ? t("settings.saving") + (message.error ? ` ${message.text}` : "")
-        : message.text;
-    status.classList.toggle("error", message.error);
+    setPageNotice(status, {
+      text:
+        pending > 0
+          ? t("settings.saving") + (message.error ? ` ${message.text}` : "")
+          : message.text,
+      severity: message.error
+        ? "error"
+        : pending > 0
+          ? "info"
+          : statusMessage && "result" in statusMessage
+            ? describeSettingsResult(statusMessage.result, t).severity
+            : "info",
+    });
   };
   const renderProblem = (t: Translate) => {
-    problem.textContent = snapshot?.problem
-      ? t("settings.fileGuidance", {
-          problem: settingsMessageText(snapshot.problem, t),
-        })
-      : "";
-    problem.hidden = snapshot?.problem === undefined;
+    const issue = snapshot?.problem;
+    const detail = issue === undefined ? "" : settingsMessageText(issue, t);
+    const external = typeof issue !== "string" && issue?.kind === "symlink";
+    setPageNotice(problem, {
+      text:
+        issue === undefined
+          ? ""
+          : external
+            ? detail
+            : `${detail}\n${t("settings.fileGuidance")}`,
+      severity: "error",
+    });
   };
   const report = (key?: MessageKey, error = false) => {
     statusMessage = key ? { key, error } : undefined;
@@ -343,7 +360,7 @@ function buildSettingsView(
   };
   const addPage = (id: string, label: MessageKey, panel: HTMLElement) => {
     const index = tabButtons.length;
-    const button = document.createElement("button");
+    const button = createPageButton(document, "text");
     button.type = "button";
     button.id = `settings-tab-${id}`;
     labels.push((t) => {
@@ -412,7 +429,15 @@ function buildSettingsView(
     );
     select(0);
   };
-  element.append(title, problem, tabs, panels, status);
+  const element = createApplicationPage(document, {
+    title,
+    actions: done,
+    notice: problem,
+    navigation: tabs,
+    content: panels,
+    status,
+  });
+  element.classList.add("settings-body");
   report("settings.loading");
   const relabel = (t: Translate) => {
     title.textContent = t("settings.title");

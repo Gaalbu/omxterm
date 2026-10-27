@@ -1,0 +1,189 @@
+.application-page {
+  display: grid;
+  flex: 1 1 auto;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  gap: 16px 24px;
+  width: 100%;
+  max-width: 1440px;
+  min-width: 0;
+  min-height: 0;
+  margin-inline: auto;
+  padding: 24px;
+  color: var(--ui-text);
+  background: var(--ui-surface);
+  color-scheme: var(--ui-color-scheme, dark);
+  font:
+    14px/1.5 system-ui,
+    sans-serif;
+}
+.application-page.has-navigation {
+  grid-template-columns: 168px minmax(0, 1fr);
+}
+.application-page-header {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--ui-decoration);
+}
+.application-page-header h2 {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 600;
+}
+.application-page-header > button {
+  flex: none;
+}
+.application-page-notice,
+.application-page-status {
+  grid-column: 1 / -1;
+  max-height: 20vh;
+  overflow: auto;
+}
+.application-page-notice {
+  grid-row: 2;
+}
+.application-page-status {
+  grid-row: 4;
+}
+.application-page-navigation {
+  grid-row: 3;
+  min-height: 0;
+  overflow: auto;
+}
+.application-page-content {
+  grid-row: 3;
+  min-width: 0;
+  min-height: 0;
+  padding: 4px;
+  overflow: auto;
+  container-type: inline-size;
+  scrollbar-gutter: stable;
+}
+.page-control {
+  box-sizing: border-box;
+  font: inherit;
+  color: inherit;
+  background: var(--ui-raised);
+  border: 1px solid var(--ui-input-border);
+  border-radius: var(--ui-radius);
+  padding: 7px 12px;
+  min-height: 36px;
+  max-width: 100%;
+}
+.page-control option {
+  background: var(--ui-surface);
+}
+.page-control[type="checkbox"] {
+  accent-color: var(--ui-text);
+  min-height: auto;
+}
+.page-button {
+  cursor: pointer;
+  border-color: transparent;
+}
+.page-button:hover:not(:disabled) {
+  background: var(--ui-hover);
+}
+.page-button:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+.page-button-text {
+  background: transparent;
+}
+.page-button-primary {
+  background: var(--ui-text);
+  color: var(--ui-surface);
+}
+.page-button-primary:hover:not(:disabled) {
+  background: var(--ui-secondary);
+}
+.application-page :focus-visible {
+  outline: 2px solid var(--ui-text);
+  outline-offset: 1px;
+}
+.page-notice {
+  margin: 0;
+  padding: 12px 16px;
+  border: 1px solid var(--ui-decoration);
+  border-inline-start: 4px solid var(--ui-secondary);
+  border-radius: var(--ui-radius);
+  background: var(--ui-raised);
+  color: var(--ui-text);
+  overflow-wrap: anywhere;
+}
+.page-notice[data-severity="error"]::before,
+.page-notice[data-severity="warning"]::before {
+  content: "!";
+  display: inline-grid;
+  place-items: center;
+  width: 1.25em;
+  height: 1.25em;
+  margin-inline-end: 8px;
+  border: 1px solid currentColor;
+  border-radius: 50%;
+  font-weight: 700;
+}
+.page-notice[data-severity="error"] {
+  border-inline-start-color: #e35d6a;
+  background: color-mix(in srgb, var(--ui-surface), #e35d6a 12%);
+  font-weight: 600;
+}
+.page-notice[data-severity="warning"] {
+  border-inline-start-color: #c59028;
+  background: color-mix(in srgb, var(--ui-surface), #c59028 12%);
+}
+.page-notice[data-severity="success"] {
+  border-inline-start-color: #509c78;
+}
+.page-notice[hidden] {
+  display: none;
+}
+@media (min-width: 900px) {
+  .application-page.has-navigation {
+    grid-template-columns: 192px minmax(0, 1fr);
+  }
+}
+@media (min-width: 1200px) {
+  .application-page {
+    padding: 32px;
+    gap: 24px 32px;
+  }
+}
+@media (max-height: 360px) {
+  .application-page {
+    overflow-y: auto;
+  }
+  .application-page-content {
+    min-height: 64px;
+  }
+}
+@media (max-width: 639px) {
+  .application-page,
+  .application-page.has-navigation {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto auto minmax(0, 1fr) auto;
+    padding: 8px;
+    gap: 8px;
+  }
+  .application-page-header {
+    padding-bottom: 8px;
+    gap: 12px;
+  }
+  .application-page-header h2 {
+    font-size: 18px;
+  }
+  .application-page-content {
+    grid-row: 4;
+  }
+  .application-page-status {
+    grid-row: 5;
+  }
+  .application-page:not(.has-navigation) .application-page-content {
+    grid-row: 3;
+  }
+}

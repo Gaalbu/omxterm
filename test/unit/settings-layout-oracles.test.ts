@@ -18,12 +18,14 @@ import {
 } from "../fixtures/settings-layout-exercise";
 
 it("uses only the content query container and viewport queries for outer Settings layout", () => {
-  const css = readFileSync("src/renderer/settings/settings-dialog.css", "utf8");
+  const css =
+    readFileSync("src/renderer/settings/settings-dialog.css", "utf8") +
+    readFileSync("src/renderer/application-page.css", "utf8");
   const declarations = [
     ...css.matchAll(/([^{}]+)\{([^{}]*container-type:[^{}]*)\}/gu),
   ];
   expect(declarations.map((match) => match[1]!.trim())).toEqual([
-    ".settings-panels",
+    ".application-page-content",
   ]);
   for (const edge of [
     "min-width: 900px",

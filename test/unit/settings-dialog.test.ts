@@ -283,10 +283,12 @@ describe("settings dialog", () => {
     ).toEqual({
       text: "Saved to config.json, but it could not be applied: reload failed",
       error: true,
+      severity: "error",
     });
     expect(describeSettingsResult(saved(base))).toEqual({
       text: "Saved.",
       error: false,
+      severity: "success",
     });
   });
 
@@ -304,6 +306,7 @@ describe("settings dialog", () => {
     ).toEqual({
       text: "Saved. Restart OMXTerm for existing fonts. A shortcut shadows terminal input.",
       error: false,
+      severity: "warning",
     });
   });
 
