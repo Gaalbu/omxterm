@@ -25,9 +25,30 @@ While the major version is `0`:
 - **MINOR (`0.Y.0`):** new user-facing features or intentional contract changes. Any breaking changes or manual configuration updates are highlighted in the release notes.
 - **`1.0.0`:** marks a stable public contract. Thereafter, breaking changes bump `MAJOR`, backward-compatible features bump `MINOR`, and bug fixes bump `PATCH`.
 
+## Development-version ownership
+
+The maintainer or agent assigned to integrate into `luizomf/omxterm` owns development-version maintenance as part of that integration, without needing separate permission for the bump. This does not authorize an otherwise unassigned integration, release, tag, or publication.
+
+Contribution PRs and forks leave application-version metadata unchanged unless a maintainer explicitly assigns versioning work. The integrator selects the version against current upstream `main`, updates `package.json` and both root version fields in `package-lock.json` together, and records the resulting version with the delivered changes in the integration commit or PR. A coordinated batch receives one bump, not one per contributor commit; concurrent integrations must reconcile against the version that landed first.
+
 ## Development baseline between releases
 
+`MAJOR.MINOR.PATCH` identifies the intended release; `-dev.N` distinguishes application-changing integrations before publication.
+
 - After publishing `X.Y.Z`, `main` advances to `X.Y.(Z+1)-dev.0`.
-- When a PR introduces a new user-facing feature, the baseline advances to `X.(Y+1).0-dev.0` if it has not already moved to the next minor version in the current cycle.
-- Ordinary bug fixes, tests, and documentation changes keep the current `-dev.0` baseline unchanged.
-- At release time, the `-dev.0` suffix is removed so `package.json`, `package-lock.json`, `TERM_PROGRAM_VERSION`, `linux_install.sh --version`, the Git tag `vX.Y.Z`, and all installer filenames match `X.Y.Z`.
+- The first new user-facing feature or intentional `0.x` contract change in that release cycle advances the target to `X.(Y+1).0-dev.0`, relative to the latest published release. Further features in the same cycle do not repeatedly advance the minor number.
+- When the target version stays the same, each integration that changes the application or its packages increments `N` once. This includes fixes, features, runtime dependencies, bundled assets, and packaging changes. A new target version starts at `dev.0` instead of also incrementing `N`.
+- Test-only, documentation-only, and CI-only changes that do not change the application or its packages leave the development version unchanged. Local builds and package commands do not increment it automatically.
+- At release time, remove the `-dev.N` suffix so `package.json`, `package-lock.json`, `TERM_PROGRAM_VERSION`, `linux_install.sh --version`, the Git tag `vX.Y.Z`, and all installer filenames match `X.Y.Z`.
+
+For example, after `0.22.0`:
+
+| Integration                       | Development version        |
+| --------------------------------- | -------------------------- |
+| Post-release baseline             | `0.22.1-dev.0`             |
+| First new feature                 | `0.23.0-dev.0`             |
+| Application fix                   | `0.23.0-dev.1`             |
+| Another feature in the same cycle | `0.23.0-dev.2`             |
+| Tests or documentation only       | `0.23.0-dev.2` (unchanged) |
+
+A development version identifies an integrated application revision, not every local build or uncommitted edit. Keep exact source and artifact identities when diagnosing a package; version numbers do not replace the evidence in [release.md](release.md). A version-only adjustment needs the focused consistency check, not the full behavioral suite; rebuilding and verifying packages is required only when producing new artifacts.
