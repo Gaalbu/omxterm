@@ -47,11 +47,66 @@ published AppImage. No unchanged full-suite retry was performed. A selected
 single-file Prettier check subsequently passed; that does not clear the full
 formatting failure or identify its cause.
 
-## Remaining work
+## Installed helper and desktop entry
 
-Actual per-user helper installation, installed desktop-entry launch and helper
-uninstall preserving configuration await explicit installation consent. They are
-not established by the direct AppImage case or by deleting an isolated home.
-Development-shell, complete portable and x64 package verification remain
-unqualified. Raw local receipts are preserved separately; personal paths and shell
-identity are not included in this report.
+After explicit consent, the exact published helper installed its three per-user
+files without compatibility mode. The installed AppImage hash matched the release.
+There was no prior installation to replace.
+
+The first `gio launch` observer timed out after 10 seconds while capturing pipes;
+it did not produce a window receipt and remains inconclusive. The next controlled
+cycle retained the same deadline but redirected output to a file instead of
+awaiting inherited-pipe EOF. `gio launch` of the exact installed desktop entry
+returned 0. An owned OMXTerm X11 window was identified through its PID and
+AppImage environment and observed as viewable at 960×640. It received the standard
+`WM_DELETE_WINDOW` request and retired. This is desktop-entry launch evidence,
+not a physical launcher-menu click or an installed interactive-shell test.
+
+In both cycles, the actual published helper's `uninstall` returned 0 and all three
+owned files were absent afterward. A valid synthetic `config.json`, created only
+because none existed, retained its exact SHA-256 through uninstall. Only that
+synthetic file was then removed. Generated application profile/cache files and
+empty directories may remain; no preexisting personal configuration was removed.
+A final process-environment audit found no remaining installed-AppImage actor.
+
+## Additional development observations
+
+At source `b47218fc2f8ef5533e13e45d253a790728025027`, the built development shell
+accepted the same synthetic command, displayed the exact marker, produced the
+expected file, resized to 1000×650 and retired after `exit`. Its initial launcher
+also detached, so observation continued through the existing profile endpoint
+without relaunch. Numeric final application exit status was not captured.
+
+Separate lint, typecheck and build commands passed. A full Prettier diagnostic
+with debug logging passed after the earlier segmentation fault; the crash cause
+remains unknown. This does not turn the original `check:portable` into a pass.
+
+One subsequent standalone `npm test` completed: **3,672 passed, 16 failed, 48
+skipped**, across 328 reported files (305 passed, 7 failed, 16 skipped). This is
+separate-stage evidence, not a successful full pipeline. Failure groups:
+
+| File                                  | Failed assertions | Observed boundary                                         |
+| ------------------------------------- | ----------------: | --------------------------------------------------------- |
+| `linux-desktop-launch.test.ts`        |                 3 | Synthetic image architecture rejected on x64              |
+| `linux-installer-lifecycle.test.ts`   |                 3 | Missing actor registration during cleanup; state retained |
+| `restty-appearance-rendering.test.ts` |                 1 | Native appearance fixture assertion                       |
+| `restty-scrollback-rendering.test.ts` |                 1 | Native scroll/selection observation mismatch              |
+| `terminal-popup-native.test.ts`       |                 3 | Provisioned native-input prerequisite absent              |
+| `window-chrome.test.ts`               |                 1 | Native Settings exercise assertion                        |
+| `tab-removal-host-readiness.test.ts`  |                 4 | esbuild service stopped/no longer running                 |
+
+The log includes a Go runtime crash from the esbuild service. Its cause is not
+established. The native-input prerequisite was not bypassed, and neither native
+failures nor retained installer cleanup diagnostics were erased or relabeled.
+No unchanged full-suite retry was performed.
+
+## Disposition
+
+The bounded published-artifact and helper checks above are delivered, with
+synthetic-input and numeric-exit-status limits. Physical input remains unverified.
+Full development qualification is **failed/incomplete**, not waived. No new x64
+package was built: the portable prerequisite failed, and this checkout's
+`check:linux` targets ARM64 packaging; it was not substituted for x64 verification.
+No release, package publication, new release gate or product fix is claimed.
+The remaining failed checks and their causes remain follow-up work under #706;
+this report does not close that issue.
