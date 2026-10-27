@@ -1,6 +1,5 @@
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import type { MessagePort } from "node:worker_threads";
 import {
   InstalledPackages,
   createNativeLeaseAdapter,
@@ -18,7 +17,7 @@ import {
 } from "./protocol.js";
 
 // App-owned code only. No extension bytes are imported before both pin/admission.
-let channel: MessagePort | undefined;
+let channel: Electron.MessagePortMain | undefined;
 let epoch = "";
 let received = 0;
 let sequence = 0;
@@ -236,9 +235,9 @@ process.parentPort.once("message", (event) => {
     void stop();
     return;
   }
-  channel = event.ports[0] as unknown as MessagePort;
-  channel.on("message", (raw: unknown) => {
-    void message(raw).catch(() => {
+  channel = event.ports[0]!;
+  channel.on("message", (event) => {
+    void message(event.data).catch(() => {
       void stop();
     });
   });
