@@ -1,4 +1,5 @@
 import "./terminal-window.css";
+import "./command-palette.css";
 import "./window-chrome.css";
 import "./about/about-dialog.css";
 import "./ui-tokens.css";
@@ -35,6 +36,9 @@ export function startTerminalWindow(bridge: Window["omxterm"]): void {
       {
         configuration,
         about: bridge.about,
+        ...(bridge.terminal.palette
+          ? { palette: bridge.terminal.palette }
+          : {}),
         settings: bridge.settings,
         chrome: bridge.terminal,
         mount: mountResttyTerminalSurface,

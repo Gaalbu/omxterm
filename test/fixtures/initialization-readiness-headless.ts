@@ -94,6 +94,7 @@ export async function initializationReadinessScene(
     runInNewContext(await readFile(path.join(root, "preload.cjs"), "utf8"), {
       TextEncoder,
       TextDecoder,
+      process: { platform: process.platform },
       require(name: string) {
         if (name !== "electron")
           throw new Error(`Unexpected preload import: ${name}`);

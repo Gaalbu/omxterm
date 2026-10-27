@@ -1,4 +1,6 @@
 import { mountWindowChrome, type WindowChromeBridge } from "./window-chrome";
+import { createCommandPalette, mountWindowPalette } from "./command-palette";
+import type { CommandPaletteBridge } from "../shared/command-palette";
 import { mountWindowDialogs } from "./window-dialogs";
 import type { SettingsBridge } from "../shared/settings";
 import type { SettingsTabSelection } from "../shared/terminal-panes";
@@ -60,6 +62,7 @@ export interface TerminalWindowPageElements {
 
 interface TerminalWindowPageOptions extends TerminalWindowActionSubscriptions {
   readonly about?: AboutBridge;
+  readonly palette?: CommandPaletteBridge;
   readonly settings?: SettingsBridge;
   readonly createAdapter: (
     fontConfigurationId?: string,
@@ -134,9 +137,12 @@ export function mountTerminalWindowPage(
   // Buffered bridge opens replay inside construction, before `dialogs` is
   // assigned. Activity must already own exclusion, chrome and hover then.
   let dialogsActive = false;
+  let palette: ReturnType<typeof createCommandPalette> | undefined;
   let snippetPreview: SnippetPreview | undefined;
   const modalActive = () =>
-    dialogsActive || (snippetPreview?.isActive() ?? false);
+    dialogsActive ||
+    (palette?.isActive() ?? false) ||
+    (snippetPreview?.isActive() ?? false);
   const previewActive = () =>
     (localImagePreview?.isActive() ?? false) || modalActive();
   const hoverAvailabilityListeners = new Set<() => void>();
@@ -149,24 +155,11 @@ export function mountTerminalWindowPage(
     ? surfaceConfiguration(options.configuration)
     : undefined;
 
-  const applyPageTheme = (theme: TerminalTheme, transparency: number) =>
-    applyWindowTheme(
-      page.document,
-      elements.tabsContainer,
-      theme,
-      transparency,
-    );
-
-  if (options.configuration) {
-    page.document.documentElement.style.setProperty(
-      "--native-title-inset",
-      `${options.configuration.nativeTitleInset}px`,
-    );
-    applyPageTheme(
-      options.configuration.terminalTheme,
-      options.configuration.transparency,
-    );
-  }
+  const applyPageTheme = bindPageTheme(
+    page.document,
+    elements.tabsContainer,
+    options.configuration,
+  );
 
   const language = windowLanguage(options.configuration);
   const pageLabels = bindTerminalWindowLanguage(
@@ -264,6 +257,14 @@ export function mountTerminalWindowPage(
       },
     },
   );
+  palette = mountWindowPalette(
+    page.document,
+    options,
+    tabs,
+    language,
+    () => !disposed && !previewActive(),
+    onOverlayActivity,
+  );
   const removeFileDrops = installFileDrops(
     page.document,
     previewActive,
@@ -284,6 +285,7 @@ export function mountTerminalWindowPage(
     removeSettingsOpen?.();
     removeSnippetsToggleListener?.();
     removeLocalImageOpenListener?.();
+    palette?.dispose();
     dialogs.dispose();
     chrome?.dispose();
     localImagePreview?.dispose();
@@ -347,6 +349,7 @@ export function mountTerminalWindowPage(
         (action) =>
           tabs.editSettingsClipboard(action, options.clipboard) ||
           (auxiliaryPanel?.clipboardAction(action) ?? false),
+        (action) => palette?.clipboardAction(action) ?? false,
       );
       removeTabCommandListener = options.subscribeToTabCommands?.((command) => {
         if (previewActive() && MODAL_COMPETING_TAB_ACTIONS.has(command.action))
@@ -392,6 +395,23 @@ const MODAL_COMPETING_TAB_ACTIONS = new Set<TerminalTabCommand["action"]>([
   "focus-pane",
   "equalize-panes",
 ]);
+
+function bindPageTheme(
+  document: Document,
+  container: HTMLElement,
+  configuration: TerminalRendererConfiguration | undefined,
+) {
+  const apply = (theme: TerminalTheme, transparency: number) =>
+    applyWindowTheme(document, container, theme, transparency);
+  if (configuration) {
+    document.documentElement.style.setProperty(
+      "--native-title-inset",
+      `${configuration.nativeTitleInset}px`,
+    );
+    apply(configuration.terminalTheme, configuration.transparency);
+  }
+  return apply;
+}
 
 function installFileDrops(
   document: Document,

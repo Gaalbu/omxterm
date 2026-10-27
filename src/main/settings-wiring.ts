@@ -22,6 +22,11 @@ export function startSettings(options: {
   readonly isTrustedSender: (event: IpcEvent) => boolean;
   readonly service: SettingsService;
   readonly selectedContents: () => TrustedWebContents | undefined;
+  readonly sendAction?: (
+    sender: TrustedWebContents,
+    channel: string,
+    payload?: unknown,
+  ) => void;
   readonly capture?: Pick<KeybindCapture, "set">;
 }) {
   let disposed = false;
@@ -61,7 +66,10 @@ export function startSettings(options: {
     show() {
       const sender = options.selectedContents();
       if (sender && trusted({ sender, senderFrame: sender.mainFrame }))
-        sender.send(settingsIpc.open, undefined);
+        (
+          options.sendAction ??
+          ((owner, channel, payload) => owner.send(channel, payload))
+        )(sender, settingsIpc.open);
     },
     dispose() {
       if (disposed) return;

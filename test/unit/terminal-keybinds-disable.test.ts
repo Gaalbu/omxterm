@@ -33,6 +33,30 @@ function validate(
 }
 
 describe("disabled keybinds and bare function keys", () => {
+  it.each(["darwin", "linux", "win32"])(
+    "keeps old configurations valid and permits an explicit palette binding on %s",
+    (platform) => {
+      expect(validate({}, platform).commandPalette).toBeNull();
+      // A previously valid user shortcut is not claimed by the new action.
+      expect(validate({ newWindow: "Control+Alt+P" }, platform).newWindow).toBe(
+        "Control+Alt+P",
+      );
+      const configured = validate(
+        { commandPalette: "Control+Alt+P" },
+        platform,
+      );
+      expect(
+        terminalActionForKeyboardInput(
+          configured,
+          keyInput({ key: "p", control: true, alt: true }),
+          platform,
+        ),
+      ).toBe("commandPalette");
+      expect(
+        validate({ commandPalette: null }, platform).commandPalette,
+      ).toBeNull();
+    },
+  );
   it("ships Ctrl+Shift+F for Find and F11 for full screen on Linux and Windows", () => {
     for (const platform of ["linux", "win32"]) {
       const defaults = terminalDefaultKeybinds(platform);

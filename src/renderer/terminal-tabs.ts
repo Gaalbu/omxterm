@@ -104,6 +104,7 @@ export interface TerminalTabs {
   injectText(text: string): void;
   // The selected live terminal, captured for one snippet action.
   captureSnippetTarget(): SnippetTarget | undefined;
+  captureActionTarget(): { isCurrent(): boolean };
   toggleTabBar(): void;
   focusSelected(): void;
   dispose(): void;
@@ -127,6 +128,8 @@ export function createTerminalTabs(
   );
   let disposed = false;
   let closing = false;
+  let actionGeneration = 0;
+  let lastFocusedPane: TerminalPane | undefined;
 
   const notifyEmpty = (reason?: "rendering-failure") => {
     if (disposed || closing || tabs.length !== 0) return;
@@ -166,6 +169,8 @@ export function createTerminalTabs(
   const notifyFocus = (tab: TerminalTab) => {
     if (disposed || tab !== selectedTab()) return;
     const focused = tab.focused;
+    if (lastFocusedPane !== focused) actionGeneration += 1;
+    lastFocusedPane = focused;
     contextMenu.selectionChanged();
     const sessionId = focused.ended
       ? null
@@ -178,15 +183,9 @@ export function createTerminalTabs(
     // Lifecycle selection stays deliverable; requested navigation is guarded.
     if (!tab || (!passive && options.canFocus?.() === false)) return;
     const changed = selectedApplicationTab() !== tab;
+    if (changed) actionGeneration += 1;
     selectedIndex = index;
-    for (const [position, candidate] of tabs.entries()) {
-      candidate.container.hidden = position !== index;
-      if (candidate.kind === "settings")
-        candidate.view.setSelected(position === index);
-      else
-        for (const pane of tabPanes(candidate))
-          pane.container.hidden = position !== index;
-    }
+    setTabVisibility(tabs, index);
     renderStrip();
     contextMenu.selectionChanged();
     if (tab.kind === "settings") {
@@ -342,6 +341,12 @@ export function createTerminalTabs(
     find: () => focusedPane()?.surface?.find(),
     injectText: (text) => void focusedPane()?.surface?.inject(text),
     captureSnippetTarget: () => snippetTarget(focusedPane()),
+    captureActionTarget: () =>
+      captureActionTarget(
+        selectedApplicationTab,
+        () => actionGeneration,
+        () => !disposed && !closing,
+      ),
     toggleTabBar() {
       if (disposed) return;
       tabBarEnabled = !tabBarEnabled;
@@ -349,11 +354,7 @@ export function createTerminalTabs(
       if (selectedApplicationTab()?.kind !== "settings")
         focusPane(focusedPane(), options, true);
     },
-    focusSelected() {
-      const tab = selectedApplicationTab();
-      if (tab?.kind === "settings") tab.view.focus();
-      else focusPane(focusedPane(), options);
-    },
+    focusSelected: () => focusApplicationTab(selectedApplicationTab(), options),
     dispose() {
       if (disposed) return;
       disposed = true;
@@ -375,6 +376,45 @@ export function createTerminalTabs(
       }
       tabs.length = 0;
     },
+  };
+}
+
+function focusApplicationTab(
+  tab: ApplicationTab | undefined,
+  options: TerminalTabsOptions,
+) {
+  if (tab?.kind === "settings") tab.view.focus();
+  else focusPane(tab?.focused, options);
+}
+
+function setTabVisibility(tabs: readonly ApplicationTab[], index: number) {
+  for (const [position, candidate] of tabs.entries()) {
+    candidate.container.hidden = position !== index;
+    if (candidate.kind === "settings")
+      candidate.view.setSelected(position === index);
+    else
+      for (const pane of tabPanes(candidate))
+        pane.container.hidden = position !== index;
+  }
+}
+
+function captureActionTarget(
+  selected: () => ApplicationTab | undefined,
+  revision: () => number,
+  available: () => boolean,
+): { isCurrent(): boolean } {
+  const tab = selected();
+  const pane = tab?.kind === "terminal" ? tab.focused : undefined;
+  const generation = revision();
+  return {
+    isCurrent: () =>
+      available() &&
+      !!tab &&
+      !tab.removed &&
+      revision() === generation &&
+      selected() === tab &&
+      (tab.kind === "settings" ||
+        (!!pane && tab.focused === pane && !pane.removed && !pane.ended)),
   };
 }
 

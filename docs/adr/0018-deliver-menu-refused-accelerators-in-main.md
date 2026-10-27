@@ -2,10 +2,11 @@
 
 ## Decision
 
-The native application menu is the single registration, display and behavior
-definition for application shortcuts. Each Terminal Window's main-owned
-`before-input-event` matcher derives its actions from that menu and the effective
-keybind map. Recognized keys invoke the same action and are consumed before
+One internal Action Catalog defines core action IDs, localized labels, effective
+accelerators and invocation callbacks. Native-menu layout, Command Palette
+results and each Terminal Window's main-owned `before-input-event` matcher
+project that same catalog snapshot. The native menu registers and displays
+accelerators but no longer owns a separate behavior definition. Recognized keys invoke the same action and are consumed before
 Terminal Surface/PTY input. `preventDefault` suppresses page input and menu
 shortcut dispatch, preventing duplicate invocation. Unrecognized keys retain
 native menu and terminal routing.
@@ -26,13 +27,45 @@ arbitrary keyboard layouts.
 Logical Plus delivery is an additional convenience: without explicit Shift it
 accepts unshifted `+`, including keypad input. Logical keypad delivery follows
 the configured character and explicit Shift; explicit keypad identities take
-precedence. Bare `Ctrl+=` is not a Plus alias. These rules derive from the menu
+precedence. Bare `Ctrl+=` is not a Plus alias. These rules use the catalog's effective keybind
 map, not a second shortcut registry.
 
 AltGr is distinct from Alt and Control+Alt. Main reads the pinned Chromium
 `kAltGrKey` bit (`1 << 15`) from Electron's raw `_modifiers`, since the public
 `Input.modifiers` does not expose that identity. It passes an explicit boolean
 to the shared matcher rather than inferring AltGr from held keys or a layout.
+
+## Core Command Palette
+
+The native View menu exposes Command Palette on every Supported Platform.
+`commandPalette` is part of the ordinary remappable Settings/keybind vocabulary,
+with a `null` default everywhere. Reserving no new key preserves previously
+valid configurations; no automatic rewrite or migration is needed.
+
+The catalog is rebuilt for effective binding/language changes. The palette reads
+one localized snapshot per opening, shows current accelerator labels, and uses
+simple case-insensitive substring matching (en-US/pt-BR). It adds no fuzzy
+ranking, history, persistent toolbar or public registration SDK. Native
+role-only items remain native; Copy/Paste/Select All, positional tab selection,
+self-opening and Find are excluded from palette results. Find remains a direct
+menu/shortcut action because formerly focused Surface targeting across palette
+input has not been established.
+
+The renderer captures selected content before the asynchronous snapshot. Main
+admits only the selected trusted main frame, consumes a one-shot token, rejects
+stale catalog identity and invokes the catalog's existing callback. Tagged
+renderer-bound deliveries recheck that captured tab/pane before the original
+validated subscription runs. Selection generations prevent away-and-back reuse;
+ended/removed targets cannot become replacements. Existing action guards and
+Busy Session decisions remain in their owners, not a parallel palette dispatcher.
+The dialog dismisses before invoking; keyboard acceptance retains repeats and
+release and invokes only after release, cancelling on blur/lost release.
+Settings remains retained application content, temporarily inert beneath the
+palette; it is not reclassified as a competing modal.
+
+This is the bounded core palette contribution to
+[#669](https://github.com/luizomf/omxterm/issues/669), not completion of its broader
+contributions or the planned Extension architecture.
 
 ## Maintenance boundary
 

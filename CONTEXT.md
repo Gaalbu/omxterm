@@ -75,6 +75,21 @@ themed title row with native window actions.
 its native floating behavior. The menu toggles the selected window;
 configuration sets the default for new windows.
 
+**Command Palette** — A temporary window-owned dialog for searching and invoking
+core application actions from the native View menu or an explicitly configured
+`commandPalette` shortcut (unbound by default on every platform). It uses
+localized substring matching without fuzzy search or history and validates its
+captured selected tab/pane rather than retargeting a replacement. Copy, Paste,
+Select All, Find, positional tab selection and self-opening are excluded. Find
+awaits an established formerly focused Surface targeting contract. Settings
+remains retained application content underneath, not another modal.
+
+**Action Catalog** — The internal core action definitions shared by native-menu
+presentation, Command Palette results and main-process key delivery. It owns
+localized labels, effective bindings and callbacks into existing guarded actions;
+it is neither a public registration API nor an Extension SDK. The core palette
+does not complete the broader planned Extension work.
+
 **Window Font Zoom** — A temporary font-size adjustment shared by all tabs in
 one window, relative to its configured baseline.
 
