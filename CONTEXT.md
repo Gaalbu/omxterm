@@ -213,6 +213,24 @@ destinations are not used. Wide-wrap spacers contribute no text; only exact
 core-proven, fully visible soft wraps join a destination. Uncertain viewport
 continuations remain refused; see the [terminal contract](docs/spec.md#terminal-behavior).
 
+## Extensions (planned)
+
+These terms describe product direction, not a shipped extension interface.
+
+**Extension** — An optional, separately installed and user-enabled addition that
+keeps nonessential features outside the mandatory terminal core, including
+terminal-data and session workflows rather than only graphical tools. Enabling
+third-party code is a trust choice, not a promise of sandboxing or protection
+from its effects.
+_Avoid_: Plugin (historical name).
+
+**Official Extension** — An Extension maintained by the OMXTerm project, which
+may also serve as a practical example for extension authors.
+
+**Third-party Extension** — An Extension maintained by its author rather than
+by the OMXTerm project. Compatibility with OMXTerm does not imply project
+review, support or a safety guarantee.
+
 ## Diagnostics and distribution
 
 **Operational Event** — Safe structured metadata about OMXTerm lifecycle,
