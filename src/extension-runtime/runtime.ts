@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { PackageError } from "../installed-packages/archive.js";
 import type {
   InstalledPackages,
   OpenVersion,
@@ -6,6 +7,7 @@ import type {
 } from "../installed-packages/installed-packages.js";
 import {
   boundedValue,
+  captureValue,
   decode,
   encode,
   exact,
@@ -74,7 +76,7 @@ class Activation {
   private received = 0;
   private request = 0;
   private pending = new Map<number, Pending>();
-  private admissions = new Map<Promise<void>, () => void>();
+  private admissions = new Map<object, () => void>();
   private stopPromise?: Promise<Retirement>;
   private activationTimer: ReturnType<typeof setTimeout>;
   private startupFinished = false;
@@ -145,7 +147,8 @@ class Activation {
       this.send("initialize", {
         bootstrap: { ...this.options.bootstrap, selection: this.selection },
       });
-    } catch {
+    } catch (error) {
+      this.recordCleanupFailure(error);
       this.fail("activation-failed");
       if (!this.child) await this.releaseGuard();
     }
@@ -220,20 +223,30 @@ class Activation {
     }
     throw new RuntimeError("protocol");
   }
+  private recordCleanupFailure(error: unknown): void {
+    this.cleanupFailed ||= error instanceof PackageError && error.cleanupFailed;
+  }
   private async admitImport(): Promise<void> {
     this.phase = "checking";
-    const valid = await this.guard!.revalidate();
-    // Admission linearizes at this short writer-protected read. A later disable
-    // cannot retroactively revoke already admitted ordinary trusted code.
-    if (this.phase !== "checking" || this.options.owner.aborted || !valid) {
-      this.fail("unavailable");
+    const owned = {};
+    this.admissions.set(owned, () => {});
+    try {
+      const valid = await this.guard!.revalidate();
+      // Admission linearizes at this short writer-protected read. A later disable
+      // cannot retroactively revoke already admitted ordinary trusted code.
+      if (this.phase !== "checking" || this.options.owner.aborted || !valid)
+        return this.fail("unavailable");
+      this.phase = "importing";
+      this.send("admit");
+    } catch (error) {
+      this.recordCleanupFailure(error);
+      this.fail("protocol");
+    } finally {
       await this.releaseGuard();
-      return;
+      if (this.cleanupFailed) this.fail("outcome-unknown");
+      this.admissions.delete(owned);
+      this.maybeFinish();
     }
-    this.phase = "importing";
-    this.send("admit");
-    await this.releaseGuard();
-    if (this.cleanupFailed) this.fail("outcome-unknown");
   }
   private response(message: Message): void {
     if (
@@ -257,11 +270,9 @@ class Activation {
     if (this.phase !== "active") return this.ready.promise;
     return this.admit(() => this.ready.promise);
   }
-  private call(value: Value, signal?: AbortSignal): Promise<Value> {
-    if (!boundedValue(value))
-      return Promise.reject(new RuntimeError("protocol"));
+  private async call(value: Value, signal?: AbortSignal): Promise<Value> {
     // Capture before async admission: caller mutation cannot retarget an operation.
-    const captured = JSON.parse(JSON.stringify(value)) as Value;
+    const captured = captureValue(value);
     return this.admit(() => this.dispatch(captured, signal), signal);
   }
   private admit<T>(
@@ -275,7 +286,15 @@ class Activation {
       return Promise.reject(new RuntimeError("busy"));
     const result = deferred<T>();
     let cancelled = false;
+    let cleaned = false;
+    const cleanup = () => {
+      if (cleaned) return;
+      cleaned = true;
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", abort);
+    };
     const cancel = (code: "unavailable" | "cancelled") => {
+      cleanup();
       cancelled = true;
       result.reject(new RuntimeError(code));
     };
@@ -296,8 +315,7 @@ class Activation {
     })();
     this.admissions.set(work, () => cancel("unavailable"));
     const done = () => {
-      clearTimeout(timer);
-      signal?.removeEventListener("abort", abort);
+      cleanup();
       this.admissions.delete(work);
       this.maybeFinish();
     };
@@ -315,14 +333,12 @@ class Activation {
           result.reject(new RuntimeError("outcome-unknown"));
         }
       },
-      () => {
+      (error: unknown) => {
+        this.recordCleanupFailure(error);
+        const code = this.cleanupFailed ? "outcome-unknown" : "unavailable";
         done();
-        this.fail(this.cleanupFailed ? "outcome-unknown" : "unavailable");
-        result.reject(
-          new RuntimeError(
-            this.cleanupFailed ? "outcome-unknown" : "unavailable",
-          ),
-        );
+        this.fail(code);
+        result.reject(new RuntimeError(code));
       },
     );
     return result.promise;
@@ -385,8 +401,7 @@ class Activation {
     } catch {
       /* Still join actual lifetime. */
     }
-    this.stopPromise = this.retire();
-    return this.stopPromise;
+    return (this.stopPromise = this.retire());
   }
   private async retire(): Promise<Retirement> {
     await within(this.startSettled.promise, 2000, () => undefined);
@@ -419,29 +434,23 @@ class Activation {
     await this.releaseGuard();
     this.maybeFinish();
   }
+  private get ownershipSettled(): boolean {
+    return (
+      (!this.child
+        ? this.startupFinished
+        : (this.exitObserved || this.spawnFailed) && this.streamsClosed) &&
+      (!this.guard || this.guardSettled) &&
+      this.admissions.size === 0
+    );
+  }
   private maybeFinish(): void {
-    const processSettled = !this.child
-      ? this.startupFinished
-      : (this.exitObserved || this.spawnFailed) && this.streamsClosed;
-    if (
-      !processSettled ||
-      (this.guard && !this.guardSettled) ||
-      this.admissions.size
-    )
-      return;
+    if (!this.ownershipSettled) return;
     this.ended.resolve(this.result());
     if (!this.cleanupFailed) this.finished();
   }
   private result(): Retirement {
-    const processSettled = !this.child
-      ? this.startupFinished
-      : (this.exitObserved || this.spawnFailed) && this.streamsClosed;
     return {
-      settled:
-        processSettled &&
-        (this.guardSettled || !this.guard) &&
-        this.admissions.size === 0 &&
-        !this.cleanupFailed,
+      settled: this.ownershipSettled && !this.cleanupFailed,
       processStarted: this.spawned,
       exitObserved: this.exitObserved,
       exitCode: this.exitCode,

@@ -153,7 +153,7 @@ async function invoke(
     )
       throw new Error("unavailable");
     const result = await backend!.invoke(value, abort.signal);
-    if (!boundedValue(result)) throw new Error("result");
+    // send/encode captures the result once without invoking serialization hooks.
     if (!owner.signal.aborted)
       send("result", { request, ok: true, value: result });
   } catch {

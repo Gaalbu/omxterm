@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { PackageError } from "../../src/installed-packages/archive.js";
 import type { OpenVersion } from "../../src/installed-packages/installed-packages.js";
 import {
   active,
@@ -13,6 +14,52 @@ beforeEach(() => vi.useFakeTimers());
 afterEach(() => {
   vi.clearAllTimers();
   vi.useRealTimers();
+});
+
+describe("author correction ownership regressions", () => {
+  it.each(["resolve", "reject", "cleanup-failed"])(
+    "retains held import revalidation across exit/close until %s",
+    async (outcome) => {
+      const f = fixture();
+      const checked = deferred<boolean>();
+      vi.mocked(f.guard.revalidate).mockReturnValue(checked.promise);
+      const activation = observe(f.runtime.activate(selection.id));
+      await flush();
+      const child = f.children[0]!;
+      child.spawn();
+      child.reply("pinned");
+      await flush();
+      const retirement = f.runtime.retire(selection.id);
+      child.exit(0, null);
+      child.close();
+      await vi.advanceTimersByTimeAsync(2000);
+      expect(await retirement).toMatchObject({ settled: false });
+      expect(await activation).toMatchObject({ code: "unavailable" });
+      expect(await observe(f.runtime.activate(selection.id))).toMatchObject({
+        code: "unavailable",
+      });
+      expect(f.spawn).toHaveBeenCalledTimes(1);
+      if (outcome === "resolve") checked.resolve(true);
+      else
+        checked.reject(
+          Object.assign(new PackageError("invalid-store"), {
+            cleanupFailed: outcome === "cleanup-failed",
+          }),
+        );
+      await flush();
+      expect(child.kinds()).not.toContain("admit");
+      if (outcome === "cleanup-failed") {
+        expect(await observe(f.runtime.activate(selection.id))).toMatchObject({
+          code: "unavailable",
+        });
+        expect(f.spawn).toHaveBeenCalledTimes(1);
+      } else {
+        void observe(f.runtime.activate(selection.id));
+        await flush();
+        expect(f.spawn).toHaveBeenCalledTimes(2);
+      }
+    },
+  );
 });
 
 describe("extension runtime admission", () => {

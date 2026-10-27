@@ -1,3 +1,4 @@
+import { types } from "node:util";
 import type {
   PackageRuntime,
   VersionSelection,
@@ -33,40 +34,79 @@ export class RuntimeError extends Error {
     this.name = "RuntimeError";
   }
 }
-/** Conservative serialized upper bound: no unbounded stringify before admission. */
-export function boundedValue(value: unknown): value is Value {
+/** Capture data once under a conservative serialized budget, without user hooks. */
+export function captureValue(value: unknown): Value {
   let budget = MESSAGE_BYTES - 1024;
-  function visit(item: unknown, depth: number): boolean {
+  function visit(item: unknown, depth: number): Value {
     budget -= 8;
-    if (budget < 0 || depth > 16) return false;
-    if (item === null || typeof item === "boolean") return true;
+    if (budget < 0 || depth > 16) throw new RuntimeError("protocol");
+    if (item === null || typeof item === "boolean") return item;
     if (typeof item === "number") {
       budget -= 32;
-      return Number.isFinite(item) && budget >= 0;
+      if (!Number.isFinite(item) || budget < 0)
+        throw new RuntimeError("protocol");
+      return item;
     }
     if (typeof item === "string") {
       budget -= item.length * 6 + 2;
-      return budget >= 0;
+      if (budget < 0) throw new RuntimeError("protocol");
+      return item;
     }
-    if (typeof item !== "object") return false;
-    if (Array.isArray(item))
-      return (
-        item.length <= 256 && item.every((entry) => visit(entry, depth + 1))
-      );
+    if (typeof item !== "object" || types.isProxy(item))
+      throw new RuntimeError("protocol");
+    const array = Array.isArray(item);
+    const prototype: unknown = Object.getPrototypeOf(item);
     if (
-      Object.getPrototypeOf(item) !== Object.prototype &&
-      Object.getPrototypeOf(item) !== null
+      prototype !== null &&
+      prototype !== (array ? Array.prototype : Object.prototype)
     )
-      return false;
-    const entries = Object.entries(item);
-    return (
-      entries.length <= 256 &&
-      entries.every(
-        ([key, entry]) => visit(key, depth + 1) && visit(entry, depth + 1),
-      )
-    );
+      throw new RuntimeError("protocol");
+    const keys = Reflect.ownKeys(item);
+    if (keys.length > (array ? 257 : 256)) throw new RuntimeError("protocol");
+    if (array) return captureArray(item, depth, keys.length);
+    const captured = Object.create(null) as Record<string, Value>;
+    for (const key of keys) {
+      if (typeof key !== "string") throw new RuntimeError("protocol");
+      visit(key, depth + 1);
+      const descriptor = Object.getOwnPropertyDescriptor(item, key)!;
+      if (!("value" in descriptor) || !descriptor.enumerable)
+        throw new RuntimeError("protocol");
+      captured[key] = visit(descriptor.value, depth + 1);
+    }
+    return captured;
   }
-  return visit(value, 0);
+  function captureArray(
+    item: unknown[],
+    depth: number,
+    members: number,
+  ): Value[] {
+    const length = Object.getOwnPropertyDescriptor(item, "length")!
+      .value as number;
+    if (length > 256 || members !== length + 1)
+      throw new RuntimeError("protocol");
+    const captured: Value[] = [];
+    Object.setPrototypeOf(captured, null); // JSON arrays must not inherit toJSON.
+    for (let i = 0; i < length; i++) {
+      const descriptor = Object.getOwnPropertyDescriptor(item, String(i));
+      if (!descriptor || !("value" in descriptor))
+        throw new RuntimeError("protocol");
+      captured[i] = visit(descriptor.value, depth + 1);
+    }
+    return captured;
+  }
+  try {
+    return visit(value, 0);
+  } catch {
+    throw new RuntimeError("protocol");
+  }
+}
+export function boundedValue(value: unknown): value is Value {
+  try {
+    captureValue(value);
+    return true;
+  } catch {
+    return false;
+  }
 }
 export function decode(raw: unknown): Message {
   if (
@@ -95,8 +135,7 @@ export function decode(raw: unknown): Message {
   return message;
 }
 export function encode(message: Message): string {
-  if (!boundedValue(message)) throw new RuntimeError("protocol");
-  const result = JSON.stringify(message);
+  const result = JSON.stringify(captureValue(message));
   if (Buffer.byteLength(result) > MESSAGE_BYTES)
     throw new RuntimeError("protocol");
   return result;

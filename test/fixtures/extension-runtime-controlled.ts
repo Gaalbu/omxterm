@@ -11,10 +11,12 @@ import { decode, type Message } from "../../src/extension-runtime/protocol.js";
 
 export function deferred<T>() {
   let resolve!: (value: T) => void;
-  const promise = new Promise<T>((yes) => {
+  let reject!: (reason: unknown) => void;
+  const promise = new Promise<T>((yes, no) => {
     resolve = yes;
+    reject = no;
   });
-  return { promise, resolve };
+  return { promise, resolve, reject };
 }
 // Only external process/store events are controlled; all state decisions are production APIs.
 class Process implements BackendProcess {
