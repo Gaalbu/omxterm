@@ -327,7 +327,7 @@ Customize application shortcuts under `keybinds` using [Electron accelerator](ht
 
 | Action                      | macOS default                | Linux/Windows default |
 | --------------------------- | ---------------------------- | --------------------- |
-| `commandPalette`            | `null` (unbound)             | `null` (unbound)      |
+| `commandPalette`            | `CommandOrControl+Shift+P`   | `Control+Shift+P`     |
 | `quit`                      | `CommandOrControl+Q`         | `Control+Alt+Shift+Q` |
 | `copy`                      | `CommandOrControl+C`         | `Control+Shift+C`     |
 | `paste`                     | `CommandOrControl+V`         | `Control+Shift+V`     |
@@ -360,10 +360,13 @@ Customize application shortcuts under `keybinds` using [Electron accelerator](ht
 | `reloadConfig`              | `CommandOrControl+Shift+,`   | `Control+Shift+,`     |
 
 **Command Palette** is available from **View → Command Palette…** even when
-unbound. Assign it in **Settings → Shortcuts**, or set `keybinds.commandPalette`
-to an unused accelerator. Omitting it or choosing **Default** leaves it unbound
-on macOS, Linux and Windows, so adding this action does not introduce conflicts
-in previously valid configurations. No automatic rewrite or migration occurs.
+unbound. Its default is **Cmd+Shift+P** on macOS and **Ctrl+Shift+P** on Linux/Windows.
+Change it in **Settings → Shortcuts**, or set `keybinds.commandPalette` to an
+unused accelerator or `null`. Omitting it or choosing **Default** uses the platform
+default; explicit remaps and `null` are preserved. If another custom action already
+uses that combination (including equivalent aliases), standard collision validation
+rejects the configuration with an actionable error. Remap either action or set
+one to `null`; OMXTerm does not silently reassign keys or rewrite your file.
 After changing bindings or language, reopen an already-open palette to refresh
 its labels and shortcut display.
 

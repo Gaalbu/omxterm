@@ -82,9 +82,12 @@ On Linux and Windows, press and release **Alt** to open the application menu (ev
 
 Choose **View → Command Palette…** to search core application actions. On Linux
 and Windows, release **Alt** to reach the native menu; on macOS, use the system
-menu bar. There is **no default palette shortcut** on any platform. To assign
-one, use **Settings → Shortcuts → Command Palette…** or
-[`keybinds.commandPalette`](configuration.md#keybinds).
+menu bar. The default shortcut is **Cmd+Shift+P** on macOS and **Ctrl+Shift+P** on
+Linux/Windows. Remap or disable it in **Settings → Shortcuts → Command Palette…**
+or [`keybinds.commandPalette`](configuration.md#keybinds). Explicit remaps and
+`null` are preserved. If a custom action already uses this combination, resolve
+the standard configuration collision error by remapping or disabling either
+binding; no automatic config rewrite occurs.
 
 Type part of an action's displayed name, use **↑/↓** to select a result, then
 press and release **Enter**, or click a result. The dialog closes before the

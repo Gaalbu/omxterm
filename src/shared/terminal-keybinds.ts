@@ -57,7 +57,7 @@ type DefaultTerminalKeybinds = TerminalKeybinds;
 // the window moved to Cmd+Shift+W (ADR 0016).
 export const DEFAULT_TERMINAL_KEYBINDS: DefaultTerminalKeybinds = Object.freeze(
   {
-    commandPalette: null,
+    commandPalette: "CommandOrControl+Shift+P",
     quit: "CommandOrControl+Q",
     copy: "CommandOrControl+C",
     paste: "CommandOrControl+V",
@@ -102,7 +102,7 @@ export const DEFAULT_TERMINAL_KEYBINDS: DefaultTerminalKeybinds = Object.freeze(
 // Linux and Windows share the conventional shifted terminal shortcuts so
 // ordinary Ctrl shell and TUI input remains PTY input (#61).
 const SHIFTED_TERMINAL_KEYBINDS: DefaultTerminalKeybinds = Object.freeze({
-  commandPalette: null,
+  commandPalette: "Control+Shift+P",
   quit: "Control+Alt+Shift+Q",
   copy: "Control+Shift+C",
   paste: "Control+Shift+V",

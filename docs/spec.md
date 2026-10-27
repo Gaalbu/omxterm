@@ -419,8 +419,10 @@ succeeds ([ADR 0025](adr/0025-use-restty-as-the-terminal-surface.md)).
   shortcut, settings service or persistent state.
 - `View -> Command Palette…` opens a temporary searchable dialog for core
   application actions. `commandPalette` is remappable through Settings on every
-  Supported Platform and defaults to `null`, preserving previously valid
-  keybind configurations without reserving a new key or rewriting user files.
+  Supported Platform and defaults to `CommandOrControl+Shift+P` on macOS and
+  `Control+Shift+P` on Linux/Windows. Explicit remaps and `null` remain effective;
+  an existing custom binding on that combination produces the standard actionable
+  collision error, not an automatic rewrite or silent reassignment.
   The palette shows localized labels and effective shortcuts from the internal
   Action Catalog used by the native menu and main key matcher. It uses
   case-insensitive substring matching in en-US or pt-BR, not fuzzy matching,
@@ -1207,8 +1209,10 @@ through `selectTab9`, `zoomIn`, `zoomOut`, `actualSize`, `toggleFullScreen`,
 `toggleSnippets`, `toggleTabBar`, `toggleTitleBar`, `reloadConfig`, `splitRight`,
 `splitDown`, `closePane`, `focusNextPane`, `focusPreviousPane`, `focusPaneLeft`,
 `focusPaneRight`, `focusPaneUp`, `focusPaneDown`, `equalizePanes`, and
-`commandPalette`. Command Palette defaults to `null` on every platform; omission
-therefore introduces no shortcut conflict in an otherwise valid configuration. Each
+`commandPalette`. Command Palette defaults to `CommandOrControl+Shift+P` on macOS
+and `Control+Shift+P` on Linux/Windows. If an existing user mapping occupies that
+combination, normal canonical collision validation rejects the configuration;
+remap either action or set one to `null`. No automatic migration occurs. Each
 value is either `null` or a case-insensitive Electron accelerator containing
 exactly one key and at least one non-Shift modifier; bare or Shift-only
 accelerators are rejected so a keybind can never swallow plain typing. Function

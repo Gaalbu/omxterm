@@ -18,6 +18,15 @@ import { waitFor } from "./window-chrome-exercise";
 
 // Uses production preload, renderer, catalog, matcher and palette capability owner.
 // Input is synthetic Chromium delivery, not physical keyboard/menu navigation.
+function find(menu: Menu, label: string): Electron.MenuItem | undefined {
+  for (const item of menu.items) {
+    if (item.label === label) return item;
+    const nested = item.submenu && find(item.submenu, label);
+    if (nested) return nested;
+  }
+  return undefined;
+}
+
 export async function exerciseCommandPalette(options: {
   window: BrowserWindow;
   application: TerminalApplication<BrowserWindow>;
@@ -99,14 +108,6 @@ export async function exerciseCommandPalette(options: {
   );
   const install = () =>
     installApplicationMenu(coreActionMenuTemplate("OMXTerm", catalog));
-  const find = (menu: Menu, label: string): Electron.MenuItem | undefined => {
-    for (const item of menu.items) {
-      if (item.label === label) return item;
-      const nested = item.submenu && find(item.submenu, label);
-      if (nested) return nested;
-    }
-    return undefined;
-  };
   const opened = () =>
     until(
       "document.querySelectorAll('.command-palette [role=option]').length > 1",
@@ -136,10 +137,15 @@ export async function exerciseCommandPalette(options: {
     await until(
       "document.querySelector('.settings-dialog').closest('[hidden]') !== null",
     );
-    assert.equal(bindings.commandPalette, null);
+    assert.equal(
+      bindings.commandPalette,
+      process.platform === "darwin"
+        ? "CommandOrControl+Shift+P"
+        : "Control+Shift+P",
+    );
     const item = find(install(), catalog.commandPalette.label);
-    assert.ok(item, "default unbound palette remains in native menu");
-    assert.ok(!item.accelerator);
+    assert.ok(item, "palette remains in native menu");
+    assert.equal(item.accelerator, bindings.commandPalette);
     const click = item.click as (
       item: Electron.MenuItem,
       window: BrowserWindow,
@@ -174,6 +180,27 @@ export async function exerciseCommandPalette(options: {
       inputs.join("").slice(beforeCancel.length),
       "\u001b",
       "held palette Escape must not reach PTY",
+    );
+
+    const beforeDefault = inputs.join("");
+    const modifiers: Electron.KeyboardInputEvent["modifiers"] = [
+      process.platform === "darwin" ? "meta" : "control",
+      "shift",
+    ];
+    contents.sendInputEvent({ type: "keyDown", keyCode: "P", modifiers });
+    contents.sendInputEvent({ type: "keyUp", keyCode: "P", modifiers });
+    await opened();
+    held("Escape");
+    await closed();
+    key("Escape");
+    await waitFor(
+      () => inputs.join("").length > beforeDefault.length,
+      "default palette terminal receipt",
+    );
+    assert.equal(
+      inputs.join("").slice(beforeDefault.length),
+      "\u001b",
+      "default palette chord must not reach PTY",
     );
 
     bindings = { ...bindings, commandPalette: "F6" };

@@ -476,7 +476,7 @@ describe("core action catalog", () => {
       "Toggle Developer Tools",
       "Toggle Full Screen",
     ]);
-    expect(view[0]).not.toHaveProperty("accelerator");
+    expect(view[0]).toHaveProperty("accelerator", "CommandOrControl+Shift+P");
     expect(flattenMenuItems(menu).filter((item) => item.role)).toEqual([
       { role: "minimize", label: "Minimize" },
     ]);
