@@ -46,6 +46,7 @@ source/test boundaries and known limitations.
 | 0035 | [Select the interface language explicitly](0035-select-the-interface-language-explicitly.md)                                   |
 | 0036 | [Distribute build-only x64 CI artifacts](0036-distribute-build-only-x64-ci-artifacts.md)                                       |
 | 0037 | [Allow the Linux software WebGL fallback](0037-allow-the-linux-software-webgl-fallback.md)                                     |
+| 0038 | [Serialize installation transactions and pin immutable package versions](0038-pin-immutable-installed-packages.md)             |
 
 ## Related boundaries
 
