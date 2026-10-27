@@ -183,7 +183,13 @@
   .application-page-status {
     grid-row: 5;
   }
+  .application-page:not(.has-navigation) {
+    grid-template-rows: auto auto minmax(0, 1fr) auto;
+  }
   .application-page:not(.has-navigation) .application-page-content {
     grid-row: 3;
+  }
+  .application-page:not(.has-navigation) .application-page-status {
+    grid-row: 4;
   }
 }

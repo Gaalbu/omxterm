@@ -5,7 +5,13 @@ import {
   createPageButton,
 } from "../../src/renderer/application-page";
 import { createRendererLanguage } from "../../src/renderer/renderer-language";
-import { base, button, open, saved } from "../fixtures/settings-dialog-dom";
+import {
+  base,
+  button,
+  deferred,
+  open,
+  saved,
+} from "../fixtures/settings-dialog-dom";
 import type { SettingsResult } from "../../src/shared/settings";
 
 afterEach(() => document.body.replaceChildren());
@@ -98,7 +104,28 @@ it.each([
   },
 );
 
-it("marks rejected raw transport and stale drafts distinctly, clearing severity on reload", async () => {
+it("retains error precedence over newer unsaved typing after application failure", async () => {
+  const pending = deferred<SettingsResult>();
+  const language = createRendererLanguage();
+  const view = await open({ saveText: () => pending.promise }, language);
+  const editor = view.query<HTMLTextAreaElement>("textarea");
+  button("Save").click();
+  editor.value = "newer draft";
+  editor.dispatchEvent(new Event("input"));
+  pending.resolve(saved(base, { applied: false, notice: "Reload failed" }));
+  await view.settle();
+  const notice = view.query(".settings-config-file [role=status]");
+  for (const locale of ["en-US", "pt-BR"] as const) {
+    language.set(locale);
+    expect(notice.dataset.severity).toBe("error");
+    expect(notice.textContent).toContain(language.t("settings.newer"));
+    expect(notice.textContent).toContain("Reload failed");
+    expect(editor.value).toBe("newer draft");
+  }
+  view.dialog.dispose();
+});
+
+it("marks rejected raw transport distinctly, clearing severity on reload", async () => {
   const view = await open({
     saveText: vi.fn(async () => {
       throw new Error("transport");

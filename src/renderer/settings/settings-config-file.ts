@@ -54,24 +54,24 @@ export function renderConfigFile(
   const paint = (t: Translate) => {
     save.textContent = t("settings.save");
     revert.textContent = t("settings.reload");
-    const result =
-      status && "result" in status
-        ? describeSettingsResult(status.result, t)
-        : undefined;
-    setPageNotice(message, {
-      text: !status
-        ? ""
-        : "key" in status
-          ? t(status.key)
-          : result!.text + (status.newer ? ` ${t("settings.newer")}` : ""),
-      severity: !status
-        ? "info"
-        : "key" in status
-          ? status.severity
+    if (!status) {
+      setPageNotice(message, { text: "", severity: "info" });
+    } else if ("key" in status) {
+      setPageNotice(message, {
+        text: t(status.key),
+        severity: status.severity,
+      });
+    } else {
+      const result = describeSettingsResult(status.result, t);
+      setPageNotice(message, {
+        text: result.text + (status.newer ? ` ${t("settings.newer")}` : ""),
+        severity: result.error
+          ? "error"
           : status.newer
             ? "warning"
-            : result!.severity,
-    });
+            : result.severity,
+      });
+    }
   };
   labels.push(paint);
   const report = (key?: MessageKey, severity: NoticeSeverity = "info") => {
