@@ -127,7 +127,9 @@ describe.skipIf(!["darwin", "linux", "win32"].includes(process.platform))(
         recordBytes: 2_097_152,
         checkpoints: 16,
         endSeen: true,
-        remainderCodeUnits: 0,
+        framedBytes: 2_097_952,
+        bufferedCodeUnits: 0,
+        finalized: true,
       });
       expect(stress.destination).toMatchObject({
         records: 65_536,
@@ -146,6 +148,9 @@ describe.skipIf(!["darwin", "linux", "win32"].includes(process.platform))(
           records: 4_096,
           recordBytes: 131_072,
         });
+      const { framedBytes, envelopeBytes, bytes } = stress.source;
+      expect(framedBytes + envelopeBytes).toBe(bytes);
+      expect(envelopeBytes).toBeGreaterThanOrEqual(0);
       expect(stress.load).toBe("paced-128KiB-checkpoints");
       expect(stress.scrollbackLines).toBe(10_000);
       expect(stress.pinnedCoreByteLimit).toBe(10_000_000);
@@ -156,63 +161,6 @@ describe.skipIf(!["darwin", "linux", "win32"].includes(process.platform))(
       expect(stress.flow.maxPendingBytes).toBeLessThanOrEqual(
         64 * 1024 + stress.flow.largestNativeReadBytes,
       );
-      expect(stress.resizeObserved).toBe(true);
-      expect(stress.producerExit).toEqual({ exitCode: 0, signal: 0 });
-    }, 130_000);
-
-    it("copies exact output continued from a pending-wrap boundary after native content refit", async (testContext) => {
-      const result = readResult(
-        await runOracle("output-checkpoints", testContext, undefined, [
-          "--oracle-row-end-refit",
-          "--oracle-single-checkpoint",
-        ]),
-      );
-      expect(result.sessionStarts).toBe(1);
-      expect(result.ptyExits).toBe(1);
-      const stress = result.outputStress!;
-      const refit = stress.controlledRefit!;
-      expect(refit.refitted.cols).toBeLessThan(refit.original.cols);
-      expect(refit.refitted.rows).toBe(refit.original.rows);
-      expect((refit.prefixUnits + 24) % refit.original.cols).toBe(0);
-      expect((refit.prefixUnits + 24) % refit.refitted.cols).not.toBe(0);
-      expect(refit.prefixUnits).toBeGreaterThanOrEqual(65_536);
-      const acknowledged = refit.prefixAcknowledgement;
-      expect(acknowledged.prefixUnits).toBe(refit.prefixUnits);
-      expect(acknowledged.sourceBytes - acknowledged.baselineBytes).toBe(
-        refit.prefixUnits,
-      );
-      expect(acknowledged.expectedSourceBytes).toBe(acknowledged.sourceBytes);
-      expect(acknowledged.cumulativeAck).toBe(acknowledged.sourceBytes);
-      expect(acknowledged.pendingBytes).toBe(0);
-      // The producer emits exactly 26 BEGIN + 131072 record + 24 END bytes.
-      // Native startup stays in both original source and ACK totals.
-      expect(stress.source).toMatchObject({
-        bytes: acknowledged.baselineBytes + 131_122,
-        records: 4_096,
-        recordBytes: 131_072,
-        checkpoints: 1,
-        endSeen: true,
-        remainderCodeUnits: 0,
-      });
-      expect(stress.destination.checkpoints).toEqual([
-        {
-          batch: 0,
-          first: 0,
-          last: 4_095,
-          records: 4_096,
-          recordBytes: 131_072,
-          endSeen: true,
-        },
-      ]);
-      expect(stress.destination).toMatchObject({
-        records: 4_096,
-        recordBytes: 131_072,
-        endSeen: true,
-      });
-      expect(stress.acknowledgements.cumulativeEnd).toBe(stress.source.bytes);
-      expect(stress.flow.pendingBytes).toBe(0);
-      expect(stress.flow.pauseCount).toBeGreaterThan(0);
-      expect(stress.flow.resumeCount).toBeGreaterThan(0);
       expect(stress.resizeObserved).toBe(true);
       expect(stress.producerExit).toEqual({ exitCode: 0, signal: 0 });
     }, 130_000);

@@ -12,7 +12,10 @@ interface TerminalIo {
 export function createFixtureMetricReplyRouter<T extends TerminalIo>(
   terminal: T,
   deliverOutput: (data: string) => void,
-  evidence: { inputs: string[]; resizes: Size[] },
+  evidence: {
+    inputs: string[];
+    resizes: Size[];
+  },
 ) {
   let pending = false;
   return {

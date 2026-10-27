@@ -7,11 +7,75 @@ import {
   assertSettingsLayout,
   observeSettingsLayout,
   type SettingsLayoutObservation,
+  type SettingsCompactGeometry,
+  type SettingsGeometrySize,
 } from "./settings-layout-observation";
 import {
   captureSettingsLayoutFailure,
   type SettingsLayoutContext,
 } from "./settings-layout-failure";
+
+const sizeOf = ({
+  width,
+  height,
+}: SettingsGeometrySize): SettingsGeometrySize => ({ width, height });
+const assertPositiveSize = (size: SettingsGeometrySize) =>
+  assert.ok(
+    Object.values(size).every((value) => Number.isFinite(value) && value > 0),
+    "Settings invalid geometry",
+  );
+
+function assertCompactGeometry(
+  compact: SettingsCompactGeometry,
+  original: SettingsGeometrySize,
+) {
+  for (const size of [
+    compact.requestedMinimum,
+    compact.outer,
+    compact.content,
+    compact.viewport,
+  ])
+    assertPositiveSize(size);
+  assert.ok(
+    compact.outer.width >= compact.requestedMinimum.width &&
+      compact.outer.height >= compact.requestedMinimum.height,
+    "Settings outer bounds are below native minimum",
+  );
+  assert.ok(
+    compact.viewport.width <= 639 &&
+      compact.viewport.height <= 360 &&
+      compact.viewport.width < original.width &&
+      compact.viewport.height < original.height,
+    "Settings native-minimum request did not reach compact viewport",
+  );
+}
+
+// Shared by viewport and panel-breakpoint targeting; each set keeps the same
+// two-frame boundary. Corrections accumulate from requests, not biased results.
+export async function targetSettingsGeometry(options: {
+  readonly initial: readonly [number, number];
+  readonly target: readonly [number, number];
+  readonly setSize: (width: number, height: number) => void;
+  readonly frame: () => Promise<unknown>;
+  readonly measure: () => Promise<readonly [number, number]>;
+}) {
+  const requested: [number, number] = [...options.initial];
+  for (let correction = 0; correction <= 2; correction++) {
+    assert.ok(
+      requested.every((value) => Number.isFinite(value) && value > 0),
+      "Settings invalid geometry request",
+    );
+    options.setSize(...requested);
+    await options.frame();
+    const observed = await options.measure();
+    if (observed[0] === options.target[0] && observed[1] === options.target[1])
+      return;
+    if (correction === 2) break;
+    requested[0] += options.target[0] - observed[0];
+    requested[1] += options.target[1] - observed[1];
+  }
+  assert.fail("Settings exact geometry target was not reached");
+}
 
 // Real Chromium layout/focus over the retained production Settings view. This
 // establishes synthetic native input, not physical keyboard or OS widgets.
@@ -31,23 +95,25 @@ export async function exerciseSettingsLayout(
     evaluate<SettingsLayoutObservation>(
       `(${observeSettingsLayout.toString()})(${focus})`,
     );
-  const original = window.getContentBounds();
-  const minimum = window.getMinimumSize();
+  const original = { ...window.getBounds() };
+  const minimum = [...window.getMinimumSize()];
+  const assertMinimum = () =>
+    assert.deepEqual(
+      window.getMinimumSize(),
+      minimum,
+      "Settings changed native minimum bounds",
+    );
+  const compact: SettingsCompactGeometry[] = [];
   const matrix = (["en-US", "pt-BR"] as const).flatMap((language) =>
     [false, true].flatMap((light) =>
       [
-        [320, 200],
+        "native-minimum-request" as const,
         [640, 480],
         [800, 600],
         [960, 640],
         [1280, 800],
         [1920, 1080],
-      ].map(([width, height]) => ({
-        language,
-        light,
-        width: width!,
-        height: height!,
-      })),
+      ].map((size) => ({ language, light, size })),
     ),
   );
   const evidence = process.env.OMXTERM_SETTINGS_EVIDENCE_DIR;
@@ -61,6 +127,7 @@ export async function exerciseSettingsLayout(
   if (evidence) await mkdir(evidence, { recursive: true });
   let context: SettingsLayoutContext = { phase: "matrix" };
   let cases = 0;
+  let failed = false;
   const checkCategory = async (category: string) => {
     await evaluate(
       `document.querySelector('#settings-tab-${category}').click()`,
@@ -72,12 +139,52 @@ export async function exerciseSettingsLayout(
     return result;
   };
   try {
-    for (const { language, light, width, height } of matrix) {
-      context = { phase: "matrix", language, light, width, height };
+    const [originalWidth, originalHeight] = await evaluate<[number, number]>(
+      "[innerWidth, innerHeight]",
+    );
+    const originalViewport = { width: originalWidth, height: originalHeight };
+    assertPositiveSize(originalViewport);
+    assertPositiveSize(sizeOf(original));
+    assertPositiveSize({ width: minimum[0]!, height: minimum[1]! });
+    for (const { language, light, size } of matrix) {
+      const targetKind =
+        size === "native-minimum-request" ? size : "exact-viewport";
+      context = { phase: "matrix", language, light, targetKind };
       configure(language, light);
       await frame();
-      window.setContentSize(width, height);
-      await frame();
+      let width: number, height: number;
+      if (size !== "native-minimum-request") {
+        [width, height] = [size[0]!, size[1]!];
+        context = { ...context, width, height };
+        await targetSettingsGeometry({
+          initial: [width, height],
+          target: [width, height],
+          setSize: (w, h) => window.setContentSize(w, h),
+          frame,
+          measure: () =>
+            evaluate<[number, number]>("[innerWidth, innerHeight]"),
+        });
+      } else {
+        assertMinimum();
+        window.setSize(minimum[0]!, minimum[1]!);
+        await frame();
+        [width, height] = await evaluate<[number, number]>(
+          "[innerWidth, innerHeight]",
+        );
+        const measured: SettingsCompactGeometry = {
+          kind: "native-minimum-request",
+          language,
+          light,
+          requestedMinimum: { width: minimum[0]!, height: minimum[1]! },
+          outer: sizeOf(window.getBounds()),
+          content: sizeOf(window.getContentBounds()),
+          viewport: { width, height },
+        };
+        context = { ...context, compact: measured };
+        assertCompactGeometry(measured, originalViewport);
+        assertMinimum();
+        compact.push(measured);
+      }
       await evaluate(`(() => {
         const editor = document.querySelector('.settings-config-file textarea');
         globalThis.settingsLayoutEditor ??= editor;
@@ -131,26 +238,21 @@ export async function exerciseSettingsLayout(
       }
     }
     context = { phase: "minimum" };
-    assert.deepEqual(
-      window.getMinimumSize(),
-      minimum,
-      "Settings changed native minimum bounds",
-    );
+    assertMinimum();
     for (const target of [559, 560, 759, 760]) {
       context = { phase: "breakpoint", contentTarget: target };
-      window.setContentSize(1000, 640);
-      await frame();
       const panelWidth =
         "(() => { const e = document.querySelector('.settings-panels'); const s = getComputedStyle(e); return e.clientWidth - parseFloat(s.paddingLeft) - parseFloat(s.paddingRight); })()";
       // One correction can cross the outer 900 px viewport budget. The second
       // is a bounded geometry correction, never a retry of an oracle failure.
-      for (let correction = 0; correction < 2; correction += 1) {
-        const [viewport, width] = await evaluate<[number, number]>(
-          `[innerWidth, ${panelWidth}]`,
-        );
-        window.setContentSize(viewport + target - width, 640);
-        await frame();
-      }
+      await targetSettingsGeometry({
+        initial: [1000, 640],
+        target: [target, 640],
+        setSize: (w, h) => window.setContentSize(w, h),
+        frame,
+        measure: () =>
+          evaluate<[number, number]>(`[${panelWidth}, innerHeight]`),
+      });
       assert.equal(
         await evaluate<number>(panelWidth),
         target,
@@ -164,10 +266,20 @@ export async function exerciseSettingsLayout(
           target,
           "Settings breakpoint observation drifted",
         );
+        assert.equal(result.height, 640, "Settings breakpoint height drifted");
       }
     }
-    return { cases, breakpoints: 4, synthetic: true, physicalKeyboard: false };
+    assertMinimum();
+    return {
+      cases,
+      breakpoints: 4,
+      synthetic: true,
+      physicalKeyboard: false,
+      originalViewport,
+      compact,
+    };
   } catch (error) {
+    failed = true;
     // Observe without refocusing or scrolling: preserve the actual failing frame
     // before finally restores the palette, size and selected category.
     const observation = await observe(false).catch(() => null);
@@ -183,9 +295,18 @@ export async function exerciseSettingsLayout(
     });
     throw error;
   } finally {
-    restore();
-    window.setContentSize(original.width, original.height);
-    await frame();
-    await evaluate("document.querySelector('#settings-tab-general').click()");
+    try {
+      try {
+        restore();
+      } finally {
+        window.setBounds(original);
+        await frame();
+        await evaluate(
+          "document.querySelector('#settings-tab-general').click()",
+        );
+      }
+    } catch (error) {
+      if (!failed) throw error;
+    }
   }
 }

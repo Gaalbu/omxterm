@@ -13,7 +13,7 @@ export const FIXTURE_PROCESS_DIRECTORY = "native-process-ownership";
 
 function publishRegistration(
   record: string,
-  branch: "normal" | "early-exit",
+  branch: Parameters<typeof recordFixtureRegistrationFailure>[0],
   data: {
     readonly owner: FixtureProcess;
     readonly processes?: readonly FixtureProcess[];
@@ -39,7 +39,13 @@ function publishRegistration(
 // cooperative test-fixture protocol, not containment for arbitrary programs.
 export function spawnFixtureProcess<T extends { readonly pid: number }>(
   spawn: () => T,
-  observeEarlyExit?: (child: T, completed: () => void) => void,
+  observeLifecycle?: (
+    child: T,
+    exited: () => void,
+    ready: () => boolean,
+    failedStart: () => void,
+  ) => (() => void) | void,
+  registered?: (child: T) => void,
 ): T {
   const root = process.env["OMXTERM_NATIVE_FIXTURE_ROOT"];
   if (!root) throw new Error("Native fixture ownership root is missing");
@@ -52,31 +58,114 @@ export function spawnFixtureProcess<T extends { readonly pid: number }>(
   );
   publishRegistration(record, "normal", { owner });
   const child = spawn();
-  const rows = fixtureProcesses();
   const owned = new Map([[owner.pid, owner]]);
-  collectFixtureDescendants(rows, owned);
-  if (!owned.has(child.pid)) {
-    if (!observeEarlyExit)
-      throw new Error("Cannot establish ownership of spawned fixture process");
-    // A real native exit callback can prove that a short-lived PTY was reaped
-    // before the inventory. Keep the write-ahead record pending until then;
-    // absence in one process snapshot alone never completes registration.
-    observeEarlyExit(child, () => {
-      const remaining = fixtureProcesses();
-      if (remaining.some((row) => row.pid === child.pid))
-        throw new Error("Early-exit fixture PID remains observable");
-      collectFixtureDescendants(remaining, owned);
-      publishRegistration(record, "early-exit", {
+  let settled = false;
+  let failed = false;
+  let retire: (() => void) | void;
+  const failObservation = (
+    branch: Parameters<typeof recordFixtureRegistrationFailure>[0],
+    phase:
+      "ready-observation" | "exit-observation" | "failed-start-observation",
+    error: unknown,
+  ) => {
+    // Keep the write-ahead record pending. The supervisor must retain/block this
+    // scope even if downstream sessions consume their actual exit notification.
+    failed = true;
+    recordFixtureRegistrationFailure(branch, phase, error);
+    retire?.();
+  };
+  const ready = (observed = false) => {
+    if (settled) return true;
+    if (failed) return false;
+    if (!Number.isSafeInteger(child.pid) || child.pid <= 0) return false;
+    try {
+      const rows = fixtureProcesses();
+      collectFixtureDescendants(rows, owned);
+      if (!owned.has(child.pid)) return false;
+      publishRegistration(record, "normal", {
         owner,
         processes: [...owned.values()],
       });
-    });
-    return child;
-  }
-  publishRegistration(record, "normal", {
-    owner,
-    processes: [...owned.values()],
-  });
+    } catch (error) {
+      // Initial synchronous registration still throws to its caller. Only the
+      // event observer must preserve the dependency's remaining listener queue.
+      if (!observed) throw error;
+      failObservation("normal", "ready-observation", error);
+      return false;
+    }
+    settled = true;
+    retire?.();
+    registered?.(child);
+    return true;
+  };
+  // Install the observer before inspecting a potentially delayed PID. Only an
+  // actual exit plus reinspection can settle a child that vanished before ready.
+  retire = observeLifecycle?.(
+    child,
+    () => {
+      if (settled || failed) return;
+      try {
+        // An ordinary exit needs a positive child and disappearance. Only the
+        // adapter's distinct terminal failed-start path can acquire at PID 0.
+        if (!Number.isSafeInteger(child.pid) || child.pid <= 0)
+          throw new Error("Early-exit fixture has no verified positive PID");
+        const remaining = fixtureProcesses();
+        if (remaining.some((row) => row.pid === child.pid))
+          throw new Error("Early-exit fixture PID remains observable");
+        collectFixtureDescendants(remaining, owned);
+        publishRegistration(record, "early-exit", {
+          owner,
+          processes: [...owned.values()],
+        });
+      } catch (error) {
+        failObservation("early-exit", "exit-observation", error);
+        return;
+      }
+      settled = true;
+      retire?.();
+    },
+    () => ready(true),
+    () => {
+      if (settled || failed) return;
+      try {
+        // The pinned adapter establishes terminal connect admission, not native
+        // quiescence. A post-creation throw may leave live descendants at PID 0.
+        if (child.pid !== 0)
+          throw new Error(
+            "Failed-start fixture has a contradictory public PID",
+          );
+        const rows = fixtureProcesses().filter((row) => row.pid !== 0);
+        if (
+          !isProcess(owner) ||
+          // This path is Windows-only: creation identities must retain numeric
+          // tick ordering, not bypass ancestry checks with malformed strings.
+          !rows.every((row) => isProcess(row) && /^\d+$/u.test(row.identity)) ||
+          new Set(rows.map((row) => row.pid)).size !== rows.length ||
+          !rows.some(
+            (row) => row.pid === owner.pid && row.identity === owner.identity,
+          )
+        )
+          throw new Error(
+            "Cannot verify live failed-start fixture owner/inventory",
+          );
+        const acquired = new Map([[owner.pid, owner]]);
+        collectFixtureDescendants(rows, acquired);
+        publishRegistration(record, "failed-start", {
+          owner,
+          processes: [...acquired.values()],
+        });
+      } catch (error) {
+        failObservation("failed-start", "failed-start-observation", error);
+        return;
+      }
+      settled = true;
+      retire?.();
+      // No successful terminal readiness was observed; do not call registered.
+    },
+  );
+  if (settled || failed) retire?.();
+  else if (!ready() && !observeLifecycle)
+    throw new Error("Cannot establish ownership of spawned fixture process");
   return child;
 }
 

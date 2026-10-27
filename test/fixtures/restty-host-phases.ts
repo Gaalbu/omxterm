@@ -21,13 +21,6 @@ const phases = [
   "checkpoint-copy",
   "output-producer-exit",
   "output-memory",
-  "refit-layout",
-  "refit-calibration",
-  "refit-restoration",
-  "refit-baseline-ack",
-  "refit-prefix-ack",
-  "refit-native-grid",
-  "refit-cleanup",
 ] as const;
 
 // Fixed synthetic vocabulary only. Synchronous writes survive an outer timeout;

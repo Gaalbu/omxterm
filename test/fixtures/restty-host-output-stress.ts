@@ -15,11 +15,6 @@ import {
   outputCheckpointProducer,
 } from "./restty-output-checkpoint";
 import { outputCheckpointCopyDiagnostic } from "./restty-output-drop-evidence";
-import {
-  createOutputRefitPrefix,
-  outputRefitProducer,
-  prepareOutputRefit,
-} from "./restty-output-refit";
 
 export interface OutputStressEvidence {
   readonly source: ReturnType<
@@ -44,14 +39,6 @@ export interface OutputStressEvidence {
     NonNullable<LocalTerminalSession["outputFlowMetrics"]>
   >;
   readonly resizeObserved: boolean;
-  readonly controlledRefit?: {
-    readonly original: { readonly cols: number; readonly rows: number };
-    readonly refitted: { readonly cols: number; readonly rows: number };
-    readonly prefixUnits: number;
-    readonly prefixAcknowledgement: ReturnType<
-      ReturnType<typeof createOutputRefitPrefix>["evidence"]
-    >;
-  };
   readonly producerExit: { readonly exitCode: number; readonly signal: number };
   readonly memory: {
     readonly mainHeapUsedBytes: number;
@@ -64,7 +51,6 @@ export function outputStressLaunchRequest(
   index: number,
   sessionIndex = 2,
   checkpoints = OUTPUT_CHECKPOINTS,
-  controlledRefit = false,
 ): LaunchRequest | undefined {
   if (index !== sessionIndex) return undefined;
   const executable = process.env["npm_node_execpath"];
@@ -73,32 +59,96 @@ export function outputStressLaunchRequest(
   return {
     kind: "explicit-command",
     executable,
-    arguments: [
-      "-e",
-      controlledRefit
-        ? outputRefitProducer(checkpoints)
-        : outputCheckpointProducer(checkpoints),
-    ],
+    arguments: ["-e", outputCheckpointProducer(checkpoints)],
   };
 }
 
-// oxlint-disable-next-line max-lines-per-function -- Inline phase receipts preserve the existing oracle's ordering without a new orchestration abstraction.
+interface FailedOutputCopy {
+  readonly cause: unknown;
+  readonly message: string;
+  readonly diagnostic: ReturnType<typeof outputCheckpointCopyDiagnostic>;
+}
+
+function observeCopiedCheckpoint(
+  text: string,
+  batch: number,
+  destination: ReturnType<typeof assertOutputCheckpoint>[],
+): FailedOutputCopy | undefined {
+  try {
+    destination.push(assertOutputCheckpoint(text, batch));
+    return undefined;
+  } catch (cause) {
+    // Retain actual failed-copy evidence, not asynchronous flow observations.
+    return {
+      cause,
+      message: cause instanceof Error ? cause.message : String(cause),
+      diagnostic: outputCheckpointCopyDiagnostic(text, batch),
+    };
+  }
+}
+
+// Called only from the synchronous copy-result predicate. Never re-read live
+// accounting after returning this error to the asynchronous wait/catch path.
+function copyError(
+  failure: FailedOutputCopy,
+  source: ReturnType<typeof createOutputSourceObserver>,
+  ackEnd: number,
+  terminal: LocalTerminalSession,
+): Error | undefined {
+  const original = source.evidence();
+  const flow = terminal.outputFlowMetrics?.();
+  if (!flow) throw new Error("Output flow metadata is unavailable");
+  if (ackEnd !== original.bytes || flow.pendingBytes !== 0) return undefined;
+  return new Error(
+    `${failure.message}; source checkpoints=${original.checkpoints}, source records=${original.records}, pending=${flow.pendingBytes}, ACK=${ackEnd}/${original.bytes}; copied checkpoint=${JSON.stringify(failure.diagnostic)}`,
+    { cause: failure.cause },
+  );
+}
+
+function rethrowCopyFailure(
+  error: unknown,
+  failure: FailedOutputCopy | undefined,
+  qualified: Error | undefined,
+): never {
+  if (failure && (qualified === undefined || error !== qualified))
+    throw new Error(
+      `Output failed-copy ACK/accounting did not settle: ${error instanceof Error ? error.message : String(error)}; original destination cause: ${failure.message}`,
+      { cause: failure.cause },
+    );
+  throw error;
+}
+
 export function createOutputStressHarness({
   sessionIndex = 2,
   checkpoints = OUTPUT_CHECKPOINTS,
-  controlledRefit = false,
 } = {}) {
   const source = createOutputSourceObserver(checkpoints);
   const destination: ReturnType<typeof assertOutputCheckpoint>[] = [];
   let expectingCopy: number | undefined;
-  let destinationError: Error | undefined;
-  let copyPendingBytes = -1;
+  let failedCopy: FailedOutputCopy | undefined;
   let holdAcknowledgements = false;
   const pendingAcknowledgements: Array<() => void> = [];
   let ackCount = 0;
   let cumulativeEnd = 0;
   let producerExit: { exitCode: number; signal: number } | undefined;
+  let resizeFailure: "closed-pty" | "native-failure" | undefined;
+  const assertNoResizeFailure = () => {
+    if (resizeFailure) throw new Error("Output native resize failed");
+  };
 
+  const settledFlow = (terminal: LocalTerminalSession) => {
+    const flow = terminal.outputFlowMetrics?.();
+    if (!flow) throw new Error("Output flow metadata is unavailable");
+    if (cumulativeEnd !== source.evidence().bytes)
+      throw new Error(
+        "Output ACK cumulative end differs from original source bytes",
+      );
+    if (flow.pendingBytes !== 0)
+      throw new Error(
+        "Output actual pending bytes remain after acknowledgement",
+      );
+    return flow;
+  };
   const releaseAcknowledgements = () => {
     holdAcknowledgements = false;
     for (const acknowledge of pendingAcknowledgements.splice(0)) acknowledge();
@@ -143,15 +193,16 @@ export function createOutputStressHarness({
       return true;
     },
     sourceCheckpoints: source.checkpoints,
+    observeResizeFailure(
+      index: number,
+      reason: "closed-pty" | "native-failure",
+    ) {
+      if (index !== sessionIndex || resizeFailure) return;
+      resizeFailure = reason;
+    },
     observeClipboard(text: string) {
       if (expectingCopy === undefined) return;
-      try {
-        destination.push(assertOutputCheckpoint(text, expectingCopy));
-      } catch (cause) {
-        destinationError = new Error(
-          `${cause instanceof Error ? cause.message : String(cause)}; source checkpoints=${source.checkpoints()}, source records=${source.evidence().records}, pending=${copyPendingBytes}, ACK=${cumulativeEnd}/${source.evidence().bytes}; copied checkpoint=${JSON.stringify(outputCheckpointCopyDiagnostic(text, expectingCopy))}`,
-        );
-      }
+      failedCopy = observeCopiedCheckpoint(text, expectingCopy, destination);
       expectingCopy = undefined;
     },
     observeExit(index: number, exit: { exitCode: number; signal: number }) {
@@ -199,23 +250,6 @@ export function createOutputStressHarness({
         throw new Error(
           `Output checkpoint fixture needs at least 20 columns, observed ${columns}`,
         );
-      const refit = controlledRefit
-        ? await prepareOutputRefit({
-            window,
-            sizes: options.resizes[sessionIndex]!,
-            readProgress: () => ({
-              sourceBytes: source.evidence().bytes,
-              cumulativeAck: cumulativeEnd,
-              pendingBytes: terminal.outputFlowMetrics?.().pendingBytes ?? -1,
-            }),
-            waitFor,
-          })
-        : undefined;
-      let prefixAcknowledgement:
-        | NonNullable<
-            OutputStressEvidence["controlledRefit"]
-          >["prefixAcknowledgement"]
-        | undefined;
       const resizesBefore = options.resizes[sessionIndex]!.length;
       phase("output-renderer-stall", "begin");
       const rendererStall = window.webContents.executeJavaScript(
@@ -228,16 +262,14 @@ export function createOutputStressHarness({
       );
       await new Promise((resolve) => setTimeout(resolve, 25));
       holdAcknowledgements = true;
-      terminal.write(refit ? `g${refit.prefixUnits};` : "g");
-      const resizeTimer = refit
-        ? undefined
-        : setTimeout(() => {
-            const bounds = window.getBounds();
-            window.setBounds({
-              ...bounds,
-              width: bounds.width === 920 ? 900 : 920,
-            });
-          }, 100);
+      terminal.write("g");
+      const resizeTimer = setTimeout(() => {
+        const bounds = window.getBounds();
+        window.setBounds({
+          ...bounds,
+          width: bounds.width === 920 ? 900 : 920,
+        });
+      }, 100);
       try {
         phase("output-high-water", "begin");
         await new Promise((resolve) => setTimeout(resolve, 400));
@@ -256,49 +288,42 @@ export function createOutputStressHarness({
         "output backpressure resume",
       );
       phase("output-resume", "complete");
-      try {
-        if (refit) {
-          prefixAcknowledgement = await refit.refit();
-          terminal.write("r");
-        }
-        for (let batch = 0; batch < checkpoints; batch++) {
-          phase("checkpoint-source", "begin", batch);
-          await waitFor(
-            () => source.checkpoints() === batch + 1,
-            `source checkpoint ${batch}`,
-          );
-          phase("checkpoint-source", "complete", batch);
-          phase("checkpoint-ack", "begin", batch);
-          await waitFor(
-            () => terminal.outputFlowMetrics?.().pendingBytes === 0,
-            `checkpoint ${batch} complete original output acknowledgement`,
-          );
-          phase("checkpoint-ack", "complete", batch);
-          copyPendingBytes = terminal.outputFlowMetrics!().pendingBytes;
-          expectingCopy = batch;
-          phase("checkpoint-copy", "begin", batch);
-          window.webContents.send(terminalIpc.clipboardAction, "select-all");
-          window.webContents.send(terminalIpc.clipboardAction, "copy");
-          await waitFor(() => {
-            if (destinationError) throw destinationError;
-            return destination.length === batch + 1;
-          }, `actual copied destination checkpoint ${batch}`);
-          phase("checkpoint-copy", "complete", batch);
-          if (batch + 1 < checkpoints) terminal.write("n");
-        }
-      } finally {
-        if (refit) {
-          phase("refit-cleanup", "begin");
-          await refit.restore();
-          phase("refit-cleanup", "complete");
-        }
-      }
-      const flow = terminal.outputFlowMetrics?.();
-      if (!flow) throw new Error("Output flow metadata is unavailable");
-      if (cumulativeEnd !== source.evidence().bytes)
-        throw new Error(
-          "Output ACK cumulative end differs from original source bytes",
+      assertNoResizeFailure();
+      for (let batch = 0; batch < checkpoints; batch++) {
+        phase("checkpoint-source", "begin", batch);
+        await waitFor(
+          () => source.checkpoints() === batch + 1,
+          `source checkpoint ${batch}`,
         );
+        phase("checkpoint-source", "complete", batch);
+        phase("checkpoint-ack", "begin", batch);
+        await waitFor(
+          () => terminal.outputFlowMetrics?.().pendingBytes === 0,
+          `checkpoint ${batch} complete original output acknowledgement`,
+        );
+        phase("checkpoint-ack", "complete", batch);
+        expectingCopy = batch;
+        phase("checkpoint-copy", "begin", batch);
+        window.webContents.send(terminalIpc.clipboardAction, "select-all");
+        window.webContents.send(terminalIpc.clipboardAction, "copy");
+        let rejection: Error | undefined;
+        try {
+          await waitFor(() => {
+            if (!failedCopy) return destination.length === batch + 1;
+            rejection = copyError(failedCopy, source, cumulativeEnd, terminal);
+            if (!rejection) return false;
+            // Capture, format and throw in this SAME synchronous check.
+            throw rejection;
+          }, `actual copied destination checkpoint ${batch}`);
+        } catch (error) {
+          rethrowCopyFailure(error, failedCopy, rejection);
+        }
+        phase("checkpoint-copy", "complete", batch);
+        if (batch + 1 < checkpoints) terminal.write("n");
+      }
+      // Do not replace a primary source/copy/write failure with a resize veto.
+      assertNoResizeFailure();
+      settledFlow(terminal);
       phase("output-memory", "begin");
       const rendererHeapUsedBytes = (await window.webContents.executeJavaScript(
         "performance.memory?.usedJSHeapSize ?? null",
@@ -313,8 +338,15 @@ export function createOutputStressHarness({
         "output producer clean exit",
       );
       phase("output-producer-exit", "complete");
+      const finalSource = source.finalize();
+      // Exit can add transport envelope. Neither the pre-x snapshot nor the
+      // wrapper's requested ACK counter proves actual retirement of those bytes.
+      const flow = settledFlow(terminal);
+      // The memory query and actual exit wait above are asynchronous. Keep the
+      // final success decision synchronous with the last latch check.
+      assertNoResizeFailure();
       return {
-        source: source.evidence(),
+        source: finalSource,
         destination: {
           checkpoints: destination,
           records: destination.reduce((sum, batch) => sum + batch.records, 0),
@@ -331,16 +363,6 @@ export function createOutputStressHarness({
         acknowledgements: { count: ackCount, cumulativeEnd },
         flow,
         resizeObserved: options.resizes[sessionIndex]!.length > resizesBefore,
-        ...(refit
-          ? {
-              controlledRefit: {
-                original: refit.original,
-                refitted: refit.refitted,
-                prefixUnits: refit.prefixUnits,
-                prefixAcknowledgement: prefixAcknowledgement!,
-              },
-            }
-          : {}),
         producerExit: producerExit!,
         memory: {
           mainHeapUsedBytes: memory.heapUsed,

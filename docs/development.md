@@ -111,6 +111,96 @@ npm.cmd ci
 npm.cmd run check:portable
 ```
 
+## Pinned PTY runtime
+
+OMXTerm pins the official `node-pty@1.2.0-beta.18` archive, not a floating beta
+channel or custom Windows fork. Its npm integrity is
+`sha512-3Rej3788OnasAwoSmTZhlCeUraJ9CQldtL5b571b9+3Nv47+PaxA5VPIGOOs+16OYQePTrC1Lrs8a9/df5WPRg==`.
+This dependency maintenance incorporates upstream's merged ConPTY synchronization
+and readiness corrections; it does not attribute historical crashes or establish
+native/package qualification by source inspection alone. Electron stays locked
+independently.
+
+Postinstall guards complete input, intermediate and final JavaScript bytes,
+applies exact replacements, and rejects unknown or partially modified sources.
+It retains literal Windows argv, pause-aware Unix output-tail closure,
+unavailable Linux foreground reads, and explicit boolean startup-failure
+forwarding. The Windows agent-error handler supplies that boolean for deferred
+connection failures; ordinary numeric exits never imply startup failure.
+
+On macOS ARM64 and Linux ARM64/x64, preparation patches a temporary copy of the
+pinned Unix sources with zero fuzz, verifies the patched digests, and builds with
+C++17, Node-API 8 and locked headers. Installed upstream C++ sources remain
+unchanged. macOS targets 12.0 and installs the rebuilt addon and matched executable
+spawn helper in both `build/Release` and `prebuilds/darwin-arm64`. Linux installs
+the same corrected addon in `build/Release` and the matching Linux prebuild, so
+loader fallback cannot lose exec-status reporting even when upstream's install
+hook skips compilation.
+
+Windows ARM64/x64 retain unmodified official `conpty.node`,
+`conpty_console_list.node`, and sibling `conpty/{conpty.dll,OpenConsole.exe}`
+(bundled ConPTY `1.25.260303002`, selected with `useConptyDll: true`). Preparation
+checks their archive-derived hashes and rejects any shadowing `build/Release` or
+`build/Debug` addon. A DLL-only directory from upstream postinstall is not an
+addon shadow. Windows source builds are not a supported fallback for this pin.
+
+Packages exclude foreign prebuilds, Windows `pty.node`/winpty/PDBs and redundant
+`third_party` build inputs. Package verification compares prepared JavaScript and
+selected native bytes against the exact packaged files. macOS instead records
+final native hashes after its required ad-hoc signing and verifies the complete
+seal. `.scratch/node-pty-package.json` records selected native/runtime hashes;
+inspection-only runtime evidence also carries this provenance. These records
+must accompany the source/lock, target and compiler/SDK evidence; Unix compiler
+outputs are not claimed bit-for-bit reproducible across toolchains. Prepared
+JavaScript identities are listed in the [Restty guide](restty-development.md#pinned-inputs-and-wasm-core-rebuild).
+
+Supervised PTY registration completes **process acquisition**, not native-resource
+quiescence or fixture settlement. Ordinary readiness requires a verified positive
+child identity; ordinary early exit requires a positive PID and reinspection
+confirming its disappearance. The fixture PTY adapter alone knows beta.18's
+`ready_datapipe` ordering; it never waits for payload or a prompt. Production
+session/shutdown interfaces and their actual-exit barrier remain unchanged.
+
+Only the pinned prepared **Windows** `execFailed === true` agent-error event
+selects failed-start acquisition. Reviewed dependency ordering consumes the
+attempt's deferred-connect admission before that notification, so late worker
+readiness cannot initiate another connect. The synchronous observer must verify
+the exact retained live owner and a valid positive-identity descendant closure,
+then atomically publish that snapshot before forwarding lifecycle downstream.
+Include live children/helpers created before native connect threw, even when the
+public PID remains 0. An inspected owner-only snapshot is also allowed; neither
+PID 0, absence nor the marker proves that no child existed or that native handles
+or threads retired. This path does not invoke the successful-readiness callback;
+Unix's shared marker still follows the ordinary actual-child exit path.
+
+Readiness/exit/failed-start observation or publication failures retain the pending
+write-ahead record and retire temporary observers, without throwing through the
+dependency's synchronous listener queue and starving session lifecycle consumers.
+Safe diagnostics distinguish `ready-observation`, `exit-observation` and
+`failed-start-observation` (branch `failed-start`); publication failures retain
+their precise publication phase too. Later events cannot rescue failed
+observation. Synchronous registration failures still throw. The unchanged
+independent supervisor acquires retained ledger identities, rechecks exact birth
+identity before signaling, verifies disappearance and rejects pending/failed
+cleanup even after a fixture exit 0 or empty final inventory. Its join and the
+original native outcome/scenario assertions remain required; cleanup cannot turn
+a nonzero exit or timeout into success.
+
+This is a cooperative fixture protocol, not containment of arbitrary programs or
+unobserved orphan trees. A child that launches descendants and disappears before
+any accepted ancestry snapshot cannot be reconstructed from PID/name or empty
+inventories. The deferred-failure fixture therefore attempts valid PowerShell
+with literal no-profile, bounded, non-spawning arguments while preserving its
+real unavailable-cwd failure oracle. Unknown escaping ancestry is a blocker, not
+permission to invent identities or clear historical blocked receipts.
+Headless composition and receipt coverage:
+`npm test -- test/unit/native-fixture-ownership.test.ts test/unit/native-fixture-registration.test.ts test/unit/native-fixture-registration-receipt.test.ts`.
+Passing those controlled cases does not qualify Windows native D9 or its baseline.
+
+Windows public kill/resize still
+defer until first output; controlled callback-order units are not native timing
+qualification or proof of containment of later native resize exceptions.
+
 ## Test discovery
 
 Vitest discovers `*.test.*` and `*.spec.*` files under `test/unit/` and `test/integration/`. Support code lives in `test/fixtures/`.
@@ -165,18 +255,31 @@ While iterating on a specific subsystem, you can run targeted test files before 
 | Unix native resize failure                     | `npx vitest run test/integration/terminal-resize-race.test.ts test/unit/terminal-resize-failure.test.ts`                                                                                      |
 | Linux foreground Busy decision                 | `npx vitest run test/unit/linux-foreground.test.ts test/unit/postinstall.test.ts test/integration/linux-foreground.test.ts`                                                                   |
 
-The `font-read-reload` suite holds an actual main-process `FileHandle.read` before
-its positional read, retaining native discovery, bounded bytes/face validation,
-production preload, host, Surface and supervised PTYs. It checks two pending A
-consumers and queued B, one cancelled sibling during reload, exact input/child
-acknowledgements, retained healthy session identity, handle cleanup and window
-disposal without late startup. Its `old-post-read` build control restores the
-original rejection and must fail the main accepted-A result oracle, not time out
-or pass through a runtime-init delay. Run it alone on an explicitly assigned idle
-desktop with `npm test -- test/integration/font-read-reload.test.ts`.
-Headless preparation/physical-read adapter checks:
-`npm test -- test/unit/font-read-reload-fixture.test.ts`.
-Successful bundle preparation is not native runtime acceptance.
+The `font-read-reload` suite holds one actual main-process `FileHandle.read`
+before its positional read, retaining native discovery, bounded bytes/face
+validation, production preload, host, Surface and supervised PTYs. One window
+retains default/A/A/B Surfaces: two A consumers share the started read while B
+queues. It requires exact request/load outcomes, creation-time families/line
+heights and lease names, four mounted live sessions with distinct actual start
+receipts, the original healthy session identity, closed font handles and actual
+native exits. Its `old-post-read` control qualifies only the fixed A-supersession
+outcome after the held-read/B-queued preconditions, with default and B fulfilled
+and exact counts; unrelated read errors, timeouts and cleanup failures do not
+qualify. A fixture-local 60-second total scenario deadline also bounds hung
+awaits inside the unchanged 90-second supervisor allowance; observed failed or
+cancelled mounts fail immediately. Native exits and independent supervision are
+still required, not replaced by a result marker or local timeout.
+
+This fixture no longer checks six-child post-reload input/acknowledgement,
+cancelled-sibling usability or a second disposed window. The existing real-read
+headless lifetime matrix retains cancellation/disposal, admission, serialization
+and genuine read-error policy coverage, not that full native usability
+cross-product. Reducing the scenario does not explain or qualify a historical
+native timeout. Run the native suite alone on an idle unlocked desktop with
+`npm test -- test/integration/font-read-reload.test.ts`.
+Headless fixture/oracle/deadline and real-read lifetime checks:
+`npm test -- test/unit/font-read-reload-fixture.test.ts test/unit/terminal-font-read-reload.test.ts`.
+Successful headless checks or bundle preparation are not native runtime acceptance.
 
 The `auxiliary-panel` suite uses the production window host, real Surfaces/PTYs,
 native menu callbacks and Chromium synthetic input through the main keybind
@@ -297,13 +400,36 @@ still required. Headless validator and caller controls:
 They do not replace native Windows execution.
 
 The Window Chrome `settings-only` case additionally runs the graphical editor's
-layout matrix: six categories at 320×200, 640×480, 800×600, 960×640, 1280×800
-and 1920×1080, en-US/pt-BR, representative dark/light palettes and actual panel
-breakpoint edges. It checks clicked/selected/hidden/rendered category agreement,
+layout matrix: six categories after a native-minimum request and at five exact
+renderer viewports (640×480, 800×600, 960×640, 1280×800 and 1920×1080), en-US/pt-BR,
+representative dark/light palettes and actual panel breakpoint edges. It checks
+clicked/selected/hidden/rendered category agreement,
 readable label width/line geometry, actual form and shortcut placement on both
 sides of their content breakpoints, horizontal containment and reachable focused
 controls. Retained editor identity, palette color-scheme and native minima are
-also checked. `OMXTERM_SETTINGS_EVIDENCE_DIR` optionally saves synthetic-only
+also checked. Immediately after the existing focus request, opening Settings
+must preserve native outer bounds and minimum, before any deliberate config save.
+
+The first matrix slot is explicitly `native-minimum-request`: one `setSize` of
+the unchanged runtime window minimum, followed by the existing two-frame wait.
+Four bounded language/palette records report requested minimum and actual
+outer/content/viewport sizes. Positive finite geometry, outer size at least the
+minimum, and an actual compact viewport (at most 639 px wide / 360 px high and
+smaller on both axes than the original desktop viewport) are required. An
+ignored resize fails. All six categories run at that stable observed viewport;
+this does not assert an exact 320×200 viewport or physically smallest OS rectangle.
+
+The five larger exact viewport targets retain the initial request plus at most
+two request-delta corrections on both axes, each followed by the same two-frame
+boundary. Deltas accumulate from the last request, not observed/native size.
+Breakpoint targeting uses the same bounded rule for panel width and exact
+640 px viewport height. Exact first observations stop immediately; unreachable
+exact targets fail without tolerance, minimum/zoom/scale changes or layout
+retries. All 144 matrix cases and four breakpoint targets remain required.
+The fixture finally requests the saved outer bounds once via `setBounds`, in the same domain
+as the entry `getBounds` snapshot. This restoration request is not independent
+proof of physical/native geometry restoration; a primary failure is preserved.
+`OMXTERM_SETTINGS_EVIDENCE_DIR` optionally saves synthetic-only
 PNGs. Before throwing, a failure captures bounded app-only geometry and a frame
 (up to 1920×1080 logical pixels and 32 MiB encoded), without refocusing or
 restoring the renderer first. The runner's per-invocation failure destination is
@@ -525,6 +651,84 @@ requires an executed command marker, not just a prompt or observed PTY write.
 Headless encoded-setup and readiness checks (not native console-mode evidence):
 `npm test -- test/unit/restty-host-sessions.test.ts test/unit/restty-host-paste.test.ts`.
 
+### Host output evidence
+
+The paced output fixture keeps all sixteen actual Select All/Copy checks over
+2 MiB of ordered records, with unchanged pacing, history/core limits and real
+pause/resume. Each source workload window is one literal BEGIN, 4096 exact
+32-byte records and its matching END (131,122 bytes). The reserved
+`__OMXTERM_BATCH_` namespace must occur once in configured order; malformed,
+duplicate, reordered or truncated framing fails without resynchronization.
+Bytes inside frames are never normalized, including controls and line endings.
+
+Outside those frames, arbitrary printable/control output is uninterpreted
+transport envelope, not an ANSI allowlist or a tolerated trailer length. It is
+forwarded unchanged and counted without retaining the whole envelope. Only a
+bounded possible-marker prefix is carried between callbacks. Original source
+bytes use each callback's UTF-8 byte length; finalized framed bytes plus envelope
+bytes must equal that total. This scoped workload oracle does not identify or
+validate the origin/semantics of arbitrary envelope text.
+
+After the actual producer exits, the fixture finalizes framing and takes a fresh
+session flow snapshot: every original source byte must be cumulatively ACKed and
+actual pending bytes must be zero. A pre-exit snapshot or advancement of the ACK
+wrapper's counter alone is insufficient.
+
+For a deliberately failed Copy, the callback retains the actual destination
+cause and copy diagnostic without sampling flow. The existing bounded copy-result
+wait requires exact cumulative ACK equality with **all currently observed original
+UTF-8 bytes** and actual session pending bytes zero, then captures/formats/throws
+the destination rejection in that same synchronous check, before failure cleanup.
+New chunks before settlement remain counted. A timeout or unavailable real flow
+metadata is an accounting failure retaining the destination cause, not a qualified
+destination-only negative. This snapshot is not the positive post-exit finalization.
+Headless parser/core and composed producer/session/harness controls:
+`npm test -- test/unit/restty-output-checkpoint.test.ts test/unit/restty-host-output-phases.test.ts`.
+They do not qualify native continuation or Windows transport.
+
+### Resize and continued-text coverage
+
+The existing appearance/resize fixture also checks one short primary-screen,
+wrap-enabled continuation on its retained host-resize Surface. It clears/homes
+its controlled output, writes exactly the current columns of ASCII, changes
+only the owned container width from 640 to 600 CSS px once, then crosses the
+existing frame boundary. Its initial 32 px height must yield one or two rows:
+Select All includes unused viewport rows, so this avoids blank-row suffixes
+without normalizing copy. The existing TUI checks subsequently grow that host.
+Current positive integer geometry must actually
+narrow, retain rows and move the old edge off the new edge. No calibration,
+replay, historical-match acceptance, tolerance or retry chooses the grid.
+The short continuation must copy as exactly prefix plus suffix, without trimming
+or normalization, with the same Surface/container/canvas, one Adapter start and
+no close. The integration consumer checks this evidence in its existing
+appearance runs. Run on an idle unlocked desktop, one graphical suite at a time:
+
+```sh
+npm test -- test/integration/restty-appearance-rendering.test.ts -t "renders theme colors and preserves configured geometry through live updates"
+```
+
+This real DOM/Restty/core/font check uses a controlled Adapter, not a native PTY,
+OS clipboard paste or native-window drag. Headless preparation is not its pass.
+The bundled-core reflow/CPR tests retain the history, hard-break, alternate-screen
+and pending-wrap matrix; the native paced-output case separately retains real
+transport/backpressure, sixteen exact copies, ACK/pending accounting and exit.
+
+The former oversized native controlled-prefix/refit/continuation case was
+retired as a coverage redesign, not made green. Its unexplained Windows progress
+timeouts remain a residual native pause/resize/continuation risk. Separate core,
+Surface and native-flow checks do not prove that exact combined ordering or
+qualify a dependency migration by themselves.
+
+The source-side reorder/omission controls retain only the longest suffix that
+could still begin their exact mutation needle. Unrelated protocol/prompt output
+is released immediately, with no timer or assumed later read. Raw source
+observation precedes the single targeted mutation. Reorder preserves byte length
+and must fail actual destination order at record 100; omission must first prove
+fresh raw execution (not command echo), then fail response presence in that same
+surviving core. Original-source ACK semantics and diagnostic deadlines are
+unchanged; omission never synthesizes ACKs for removed bytes. These fixture
+corrections do not establish the cause of historical native control timeouts.
+
 ### Host/oracle phase receipts
 
 The shared Restty host fixture emits `__OMXTERM_RESTTY_HOST_PHASE__` JSON lines
@@ -541,10 +745,20 @@ returned, even if false; only `dom-focus / complete` establishes its original
 focus predicate. No extra responsiveness probe or periodic watcher is added.
 An activation stall before that query says nothing about renderer responsiveness.
 Output receipts cover the real producer, high-water/resume, all sixteen source,
-original-ACK and copied-destination checkpoints, memory query and exit. Refit
-receipts cover calibration/restoration, baseline/prefix ACK, native grid and
-cleanup. Poll iterations never emit repeated receipts. A request return or focus
-event alone is not readiness or native input admission.
+original-ACK and copied-destination checkpoints, memory query and exit. The
+D3-only calibration/continuation/resize-return trace stream was removed with its
+retired scenario. No per-chunk logger, payload dump or new poller replaces it.
+A contained resize failure in the owned output session still vetoes successful
+settlement, including initial sizing and the later asynchronous memory/exit
+boundaries. It does not replace an earlier primary source/copy/write failure or
+synthesize native exit. Production fixed-category resize diagnostics and native
+lifetime/cleanup ownership remain unchanged. Requested grids are not native
+resize success or child consumption.
+
+Focused output waits retain their **10-second** predicate deadline, composed
+with the session's 25 ms / 120-second wait. The wrapper checks its clock before
+entering the predicate. No wait or supervisor bound changed with retirement;
+missing receipts alone do not establish a native mechanism.
 
 The existing supervisor retains these lines even when its outer deadline wins
 before an inner wait can report an error. Inspect unmatched entered phases and
