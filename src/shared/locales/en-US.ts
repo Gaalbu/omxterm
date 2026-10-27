@@ -227,7 +227,7 @@ export const englishMessages = {
   "settings.saving": "Saving…",
   "settings.requestError": "Not saved: the request failed.",
   "settings.fileGuidance":
-    "{problem}. Graphical changes are checked against the whole file; fix it here or in the Config File page.",
+    "Graphical changes are checked against the whole file. Correct invalid values in Settings or edit Config File; if the file cannot be read, repair it externally and reload.",
   "settings.saved": "Saved.",
   "settings.notApplied":
     "Saved to config.json, but it could not be applied: {notice}",

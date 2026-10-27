@@ -1,3 +1,4 @@
+import { createPageButton } from "../application-page";
 import type { MessageKey } from "../../shared/i18n";
 import type { SettingsSnapshot } from "../../shared/settings";
 import type {
@@ -145,9 +146,11 @@ export function renderShortcuts(
     const state = document.createElement("span");
     state.className = "settings-shortcut-state";
     const button = (className: string, onClick: () => void) => {
-      const element = document.createElement("button");
-      element.type = "button";
-      element.className = className;
+      const element = createPageButton(
+        document,
+        className === "settings-shortcut-record" ? "quiet" : "text",
+      );
+      element.classList.add(className);
       element.addEventListener("click", onClick);
       return element;
     };
@@ -167,6 +170,7 @@ export function renderShortcuts(
     });
     rows.push((t) => {
       const keybind = context.snapshot()?.keybinds?.[action];
+      row.classList.toggle("is-recording", recording === action);
       const actionName = shortcutActionName(action, t);
       name.textContent = actionName;
       value.textContent =

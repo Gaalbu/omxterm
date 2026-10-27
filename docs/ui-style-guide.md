@@ -1,8 +1,30 @@
 # OMXTerm UI style guide
 
-Small conventions derived from the Settings application tab, not a component
-framework or a new theme schema. Other interfaces may reuse them where they fit;
-terminal canvas geometry and native OS dialogs remain separate.
+Internal DOM primitives in `src/renderer/application-page.ts` and
+`application-page.css`, used by the retained Settings application tab. These are
+not an extension runtime, public SDK or new theme schema. Terminal canvas
+geometry and native OS dialogs remain separate.
+
+## Reusing an application page
+
+`createApplicationPage(document, { title, actions, navigation, notice, content,
+status })` composes existing nodes into an in-flow header and bounded workspace.
+Only `title` and `content` are required. Navigation and content scroll
+independently; notices and status have bounded overflow. The content slot is the
+single size-query container. Callers own navigation semantics, lifecycle,
+localization, focus and actions; the shell never recreates supplied controls.
+Import `application-page.css` along with the shared UI tokens.
+
+Use `createPageButton(document, "primary" | "quiet" | "text")`, then attach the
+localized label and action. It always creates a non-submit button; primary
+styling is explicit, never dependent on sibling order. Apply `page-control` to
+native fields and keep their native labels, validation and keyboard behavior.
+Use `setPageNotice(element, { text, severity })` for retained feedback, with
+`info`, `success`, `warning` or `error`. The caller supplies `role="status"` for
+operation feedback or `role="alert"` for blocking file problems. Empty feedback
+is hidden; updates do not take focus. Errors/warnings combine an exclamation
+marker, bounded tinted container and semantic accent with actionable text;
+color alone does not convey the problem. Keep user data literal, not HTML.
 
 ## Palette and hierarchy
 
@@ -21,10 +43,10 @@ these conventions do not establish universal accessibility or compositor parity.
 
 ## Typography, spacing and controls
 
-- System UI, 14 px / 1.4 body; 12 px metadata; 20 px heading (18 px compact).
+- System UI, 14 px / 1.5 body; 12 px metadata; 22 px heading (18 px compact).
 - Monospace only for effective shortcut bindings and the 13 px JSON editor.
 - Spacing vocabulary: 4, 8, 12, 16, 24 and 32 px; 6 px control radius.
-- Ordinary controls have a 32 px minimum height. Checkboxes stay native.
+- Ordinary controls have a 36 px minimum height. Checkboxes stay native.
 - **Primary:** explicit JSON Save, foreground fill/background text.
 - **Quiet:** Record/Cancel, Close and ordinary actions, raised fill.
 - **Text:** Unbind/Default, always visible with hover and keyboard focus.
@@ -34,9 +56,10 @@ these conventions do not establish universal accessibility or compositor parity.
 ## Settings layout
 
 The full-area workspace caps at 1440 px. Sidebar width is 168 px below 900 px
-and 192 px above; outer padding grows from 16 to 24 to 32 px at 900/1200 px.
-These outer breakpoints use viewport media queries; `.settings-panels` is the
-only size-query container. The content edge stays consistent across categories.
+and 192 px above; outer padding is 24 px, growing to 32 px at 1200 px.
+The title and Close share a ruled in-flow header, within the same content cap.
+These outer breakpoints use viewport media queries; `.application-page-content`
+(the Settings panels slot) is the only size-query container. The content edge stays consistent across categories.
 Ordinary forms cap at 720 px; Shortcuts and Config File at 1120 px. Content and
 navigation scroll independently, with wrapped translated labels and diagnostics.
 
@@ -44,7 +67,16 @@ Container width, not viewport width, controls density: below 560 px labels sit
 above their fields; number inputs cap at 112 px and other fields at 384 px.
 Shortcut rows have action name, binding plus state, and visible actions; below
 760 px the actions wrap onto their own line. This changes layout without
-replacing controls or recording focus.
+replacing controls or recording focus. Rows have 16/20 px vertical padding,
+12 px internal row gaps and 8 px between actions; the recording button gains an
+explicit border while its binding displays the recording prompt. Ordinary form
+rows are separated by 24 px.
+
+File problems and operation results use the same notice presentation. Raw saves
+retain error severity for rejected writes and saved-but-not-applied outcomes;
+returned warnings and newer unsaved edits remain warnings. Symlink notices give
+only external-target editing/reload guidance; they never imply that Config File
+can write through the link. Main-process validation and write policy are unchanged.
 
 640×480 is the comfortable starting verification target, not a native minimum.
 Below 640 px, categories become a wrapping three-column navigation area; short

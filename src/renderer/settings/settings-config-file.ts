@@ -5,6 +5,11 @@ import type {
 } from "../../shared/settings";
 import type { MessageKey } from "../../shared/i18n";
 import type { RendererLanguage, Translate } from "../renderer-language";
+import {
+  createPageButton,
+  setPageNotice,
+  type NoticeSeverity,
+} from "../application-page";
 import { describeSettingsResult } from "./settings-results";
 
 // Raw JSON keeps explicit Save. Relabeling never touches draft bytes, revision,
@@ -27,15 +32,14 @@ export function renderConfigFile(
   const location = document.createElement("p");
   location.className = "settings-path";
   const editor = document.createElement("textarea");
+  editor.className = "page-control";
   editor.spellcheck = false;
   editor.setAttribute("aria-label", "config.json");
   editor.placeholder = '{\n  "version": 1\n}';
   const message = document.createElement("p");
   message.setAttribute("role", "status");
-  const save = document.createElement("button");
-  save.type = "button";
-  const revert = document.createElement("button");
-  revert.type = "button";
+  const save = createPageButton(document, "primary");
+  const revert = createPageButton(document);
   const actions = document.createElement("div");
   actions.className = "settings-actions";
   actions.append(save, revert);
@@ -44,22 +48,34 @@ export function renderConfigFile(
   let generation = 0;
   let pending = false;
   let status:
-    | { key: MessageKey }
+    | { key: MessageKey; severity: NoticeSeverity }
     | { result: SettingsResult; newer: boolean }
     | undefined;
   const paint = (t: Translate) => {
     save.textContent = t("settings.save");
     revert.textContent = t("settings.reload");
-    message.textContent = !status
-      ? ""
-      : "key" in status
-        ? t(status.key)
-        : describeSettingsResult(status.result, t).text +
-          (status.newer ? ` ${t("settings.newer")}` : "");
+    if (!status) {
+      setPageNotice(message, { text: "", severity: "info" });
+    } else if ("key" in status) {
+      setPageNotice(message, {
+        text: t(status.key),
+        severity: status.severity,
+      });
+    } else {
+      const result = describeSettingsResult(status.result, t);
+      setPageNotice(message, {
+        text: result.text + (status.newer ? ` ${t("settings.newer")}` : ""),
+        severity: result.error
+          ? "error"
+          : status.newer
+            ? "warning"
+            : result.severity,
+      });
+    }
   };
   labels.push(paint);
-  const report = (key?: MessageKey) => {
-    status = key ? { key } : undefined;
+  const report = (key?: MessageKey, severity: NoticeSeverity = "info") => {
+    status = key ? { key, severity } : undefined;
     paint(language.t);
   };
   const busy = (value: boolean) => {
@@ -71,7 +87,8 @@ export function renderConfigFile(
     if (!current) return;
     location.textContent = current.configurationPath;
     if (dirty) {
-      if (draftRevision !== current.revision) report("settings.stale");
+      if (draftRevision !== current.revision)
+        report("settings.stale", "warning");
       return;
     }
     editor.value = current.text ?? "";
@@ -98,7 +115,7 @@ export function renderConfigFile(
       () => {
         if (!live()) return;
         busy(false);
-        report("settings.reloadError");
+        report("settings.reloadError", "error");
       },
     );
   });
@@ -123,7 +140,7 @@ export function renderConfigFile(
       () => {
         if (!live()) return;
         busy(false);
-        report("settings.requestError");
+        report("settings.requestError", "error");
       },
     );
   });
