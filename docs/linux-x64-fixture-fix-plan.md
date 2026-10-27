@@ -18,3 +18,15 @@ Do not claim a clean portable gate or close #706 based on focused passes.
 
 Implementation and validation are in progress. This planning commit alone does
 not claim a fix or test pass.
+
+## Implemented slice
+
+Both integration suites now pair synthetic `uname` and `file` responses and run
+for aarch64 and x86_64. The real installer, real GIO, lifecycle child, timeouts,
+TERM assertions and cleanup checks are unchanged. No production code changed.
+
+On Linux x64, the original two suites failed all six cases before the correction.
+Afterward, their expanded matrix passed all 12 cases. Related installer and
+architecture unit suites passed 51 tests. Repository lint, typecheck, targeted
+Prettier and `git diff --check` passed. The complete portable gate has not been
+rerun for this slice; the separately recorded failures remain unresolved.
