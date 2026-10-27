@@ -16,8 +16,15 @@ import {
   type Value,
 } from "./protocol.js";
 
-// App-owned code only. No extension bytes are imported before both pin/admission.
-let channel: Electron.MessagePortMain | undefined;
+// App-owned Node-mode bootstrap only; never wait for Electron browser readiness.
+// Refuse missing Node mode/IPC before opening any installed package.
+if (
+  process.type ||
+  !process.versions.electron ||
+  process.env.ELECTRON_RUN_AS_NODE !== "1" ||
+  typeof process.send !== "function"
+)
+  process.exit(78);
 let epoch = "";
 let received = 0;
 let sequence = 0;
@@ -47,9 +54,18 @@ process.on("exit", () => {
 const startupTimer = setTimeout(() => {
   void stop();
 }, 10_000);
-function send(kind: string, fields: Record<string, unknown> = {}): void {
-  channel?.postMessage(
+function send(
+  kind: string,
+  fields: Record<string, unknown> = {},
+  complete?: () => void,
+): void {
+  if (!process.connected) throw new Error("channel-closed");
+  process.send!(
     encode({ epoch, sequence: ++sequence, kind, ...fields }),
+    (error: Error | null) => {
+      if (complete) complete();
+      else if (error) process.exit(1);
+    },
   );
 }
 function stop(): Promise<void> {
@@ -63,11 +79,14 @@ function stop(): Promise<void> {
       await activation;
       await Promise.allSettled([...calls.values()].map((call) => call.done));
       await backend?.deactivate?.(AbortSignal.timeout(2000));
-      send("deactivated");
+      if (process.connected) {
+        // Flush the cooperation receipt, but keep the pin until actual OS exit.
+        send("deactivated", {}, () => process.exit(0));
+        return;
+      }
     } catch {
-      /* No cooperation receipt when cleanup failed. */
+      process.exit(1);
     }
-    // The independent pin is released by actual process exit, never here.
     process.exit(0);
   })();
   return stopping;
@@ -76,7 +95,7 @@ async function activate(): Promise<void> {
   try {
     if (!version || owner.signal.aborted || !(await version.revalidate()))
       throw new Error("unavailable");
-    if (owner.signal.aborted) return;
+    if (owner.signal.aborted || !process.connected) return;
     const entry = version.manifest.backend;
     if (!entry.endsWith(".mjs")) throw new Error("esm-required");
     const file = path.resolve(version.directory, entry);
@@ -227,22 +246,11 @@ function activeMessage(message: Message): void {
   }
   throw new Error("protocol");
 }
-process.parentPort.once("message", (event) => {
-  if (
-    event.data !== "omxterm-extension-connect-v1" ||
-    event.ports.length !== 1
-  ) {
-    void stop();
-    return;
-  }
-  channel = event.ports[0]!;
-  channel.on("message", (event) => {
-    void message(event.data).catch(() => {
-      void stop();
-    });
-  });
-  channel.on("close", () => {
+process.on("message", (raw: unknown) => {
+  void message(raw).catch(() => {
     void stop();
   });
-  channel.start();
+});
+process.on("disconnect", () => {
+  void stop();
 });

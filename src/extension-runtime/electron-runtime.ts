@@ -1,4 +1,4 @@
-import { MessageChannelMain, utilityProcess } from "electron";
+import { fork } from "node:child_process";
 import path from "node:path";
 import {
   InstalledPackages,
@@ -26,40 +26,52 @@ function spawn(
   bootstrap: string,
   environment: Record<string, string>,
 ): BackendProcess {
-  const { port1, port2 } = new MessageChannelMain();
-  let process: Electron.UtilityProcess;
-  try {
-    process = utilityProcess.fork(bootstrap, [], {
-      env: environment,
-      execArgv: [],
-      stdio: "ignore",
-      serviceName: "OMXTerm extension backend",
-    });
-  } catch (error) {
-    port1.close();
-    port2.close();
-    throw error;
-  }
-  // Queue a single app-owned connection. No extension-selected channel target.
-  process.postMessage("omxterm-extension-connect-v1", [port2]);
-  port1.start();
+  const child = fork(bootstrap, [], {
+    execPath: process.execPath,
+    execArgv: [],
+    env: { ...environment, ELECTRON_RUN_AS_NODE: "1" },
+    // Retain no extension stdout/stderr at all. IPC has separate bounded admission.
+    stdio: ["ignore", "ignore", "ignore", "ipc"],
+    serialization: "json",
+  });
+  const failures = new Set<() => void>();
+  child.on("error", () => {
+    for (const listener of failures) listener();
+  });
   return {
-    send: (message) => port1.postMessage(message),
-    close: () => port1.close(),
-    kill: () => process.kill(),
+    send: (message) => {
+      if (!child.connected) throw new Error("channel-closed");
+      child.send(message, (error) => {
+        if (error) for (const listener of failures) listener();
+      });
+    },
+    disconnect: () => {
+      if (child.connected) child.disconnect();
+    },
+    // Sole runtime owner/reaper, no stored PID or alternate signal authority.
+    kill: () => child.kill("SIGKILL"),
     onMessage: (listener) => {
-      port1.on("message", (event) => listener(event.data));
+      child.on("message", listener);
+    },
+    onDisconnect: (listener) => {
+      child.once("disconnect", listener);
+    },
+    onSpawn: (listener) => {
+      child.once("spawn", listener);
+    },
+    onError: (listener) => {
+      failures.add(listener);
     },
     onClose: (listener) => {
-      port1.on("close", listener);
+      child.once("close", listener);
     },
     onExit: (listener) => {
-      process.once("exit", listener);
+      child.once("exit", listener);
     },
   };
 }
 /** Called by an explicit internal owner after Electron ready, not app startup. */
-export async function createUtilityExtensionRuntime(options: {
+export async function createExtensionRuntime(options: {
   root: string;
   runtime: PackageRuntime;
   addon: string;
@@ -67,6 +79,8 @@ export async function createUtilityExtensionRuntime(options: {
   environment: NodeJS.ProcessEnv;
   owner: AbortSignal;
 }): Promise<ExtensionRuntime> {
+  if (process.type !== "browser" || !process.versions.electron)
+    throw new Error("electron-main-required");
   if (!path.isAbsolute(options.bootstrap) || !path.isAbsolute(options.addon))
     throw new Error("invalid-runtime-artifact");
   const environment = backendEnvironment(options.environment);

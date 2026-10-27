@@ -15,26 +15,8 @@ import {
   type Message,
   type Value,
 } from "./protocol.js";
-
-export type Retirement = {
-  settled: boolean;
-  processStarted: boolean;
-  exitObserved: boolean;
-  exitCode: number | null;
-  killRequested: boolean;
-  killAccepted: boolean | null;
-  cooperative: boolean;
-  cleanupFailed: boolean;
-};
-/** The sole controlled-process seam; production is Electron utilityProcess. */
-export interface BackendProcess {
-  send(message: string): void;
-  close(): void;
-  kill(): boolean;
-  onMessage(listener: (message: unknown) => void): void;
-  onClose(listener: () => void): void;
-  onExit(listener: (code: number) => void): void;
-}
+import type { BackendProcess, Retirement } from "./backend-process.js";
+export type { BackendProcess, Retirement } from "./backend-process.js";
 export type RuntimeOptions = {
   packages: Pick<InstalledPackages, "openVersion">;
   bootstrap: Omit<Bootstrap, "selection">;
@@ -48,7 +30,7 @@ export type Backend = {
   retire(): Promise<Retirement>;
 };
 function deferred<T>() {
-  let resolve!: (value: T) => void;
+  let resolve!: (value: T | PromiseLike<T>) => void;
   let reject!: (reason: unknown) => void;
   const promise = new Promise<T>((yes, no) => {
     resolve = yes;
@@ -75,52 +57,52 @@ type Pending = {
   cleanup(): void;
   cancelled: boolean;
 };
-
 class Activation {
   readonly epoch = randomUUID();
   readonly ready = deferred<Backend>();
-  readonly ended = deferred<Retirement>();
+  private readonly ended = deferred<Retirement>();
+  private readonly exit = deferred<void>();
+  private readonly startSettled = deferred<void>();
   private phase:
     "starting" | "pinning" | "checking" | "importing" | "active" | "stopping" =
     "starting";
   private child?: BackendProcess;
   private guard?: OpenVersion;
   private guardRelease?: Promise<void>;
+  private selection?: VersionSelection;
   private sequence = 0;
   private received = 0;
   private request = 0;
   private pending = new Map<number, Pending>();
-  private admissions = new Set<Promise<unknown>>();
+  private admissions = new Map<Promise<void>, () => void>();
   private stopPromise?: Promise<Retirement>;
   private activationTimer: ReturnType<typeof setTimeout>;
-  private exitCode: number | null = null;
+  private startupFinished = false;
+  private guardSettled = false;
+  private spawned = false;
+  private spawnFailed = false;
   private exitObserved = false;
+  private streamsClosed = false;
+  private exitCode: number | null = null;
+  private exitSignal: string | null = null;
   private killRequested = false;
   private killAccepted: boolean | null = null;
   private deactivated = false;
   private cleanupFailed = false;
-  private selection?: VersionSelection;
-  private startSettled = deferred<void>();
-  private startupFinished = false;
-  private guardSettled = false;
-
   constructor(
     readonly id: string,
     private readonly options: RuntimeOptions,
     private readonly finished: () => void,
   ) {
-    // Observe rejection immediately even if the caller delays attaching a handler.
     void this.ready.promise.catch(() => {});
-    this.activationTimer = setTimeout(() => {
-      this.fail("activation-failed");
-    }, 10_000);
+    this.activationTimer = setTimeout(
+      () => this.fail("activation-failed"),
+      10_000,
+    );
     void this.start().finally(() => {
       this.startupFinished = true;
       this.startSettled.resolve();
-      if (!this.child) {
-        this.ended.resolve(this.result());
-        if (!this.cleanupFailed) this.finished();
-      }
+      this.maybeFinish();
     });
   }
   private async start(): Promise<void> {
@@ -136,11 +118,25 @@ class Activation {
         return;
       }
       this.child = this.options.spawn();
-      this.child.onExit((code) => {
-        void this.exited(code);
+      this.child.onSpawn(() => {
+        this.spawned = true;
+      });
+      this.child.onExit((code, signal) => {
+        void this.exited(code, signal);
+      });
+      this.child.onDisconnect(() => {
+        if (!this.exitObserved) this.fail("outcome-unknown");
+      });
+      this.child.onError(() => {
+        if (!this.spawned) this.spawnFailed = true;
+        this.fail("activation-failed");
       });
       this.child.onClose(() => {
-        if (!this.exitObserved) this.fail("outcome-unknown");
+        this.streamsClosed = true;
+        if (this.spawnFailed) {
+          this.exit.resolve(); // Settled non-spawn is distinct from observed exit.
+          void this.releaseGuard().then(() => this.maybeFinish());
+        } else this.maybeFinish();
       });
       this.child.onMessage((raw) => {
         void this.message(raw).catch(() => this.fail("protocol"));
@@ -187,19 +183,7 @@ class Activation {
       this.phase === "pinning" &&
       exact(message, [])
     ) {
-      this.phase = "checking";
-      const valid = await this.guard!.revalidate();
-      // This short store check linearizes admission. A later disable cannot undo
-      // already admitted trusted code; subsequent calls must revalidate again.
-      if (this.phase !== "checking" || this.options.owner.aborted || !valid) {
-        this.fail("unavailable");
-        await this.releaseGuard();
-        return;
-      }
-      this.phase = "importing";
-      this.send("admit");
-      await this.releaseGuard();
-      if (this.cleanupFailed) this.fail("outcome-unknown");
+      await this.admitImport();
       return;
     }
     if (
@@ -236,6 +220,21 @@ class Activation {
     }
     throw new RuntimeError("protocol");
   }
+  private async admitImport(): Promise<void> {
+    this.phase = "checking";
+    const valid = await this.guard!.revalidate();
+    // Admission linearizes at this short writer-protected read. A later disable
+    // cannot retroactively revoke already admitted ordinary trusted code.
+    if (this.phase !== "checking" || this.options.owner.aborted || !valid) {
+      this.fail("unavailable");
+      await this.releaseGuard();
+      return;
+    }
+    this.phase = "importing";
+    this.send("admit");
+    await this.releaseGuard();
+    if (this.cleanupFailed) this.fail("outcome-unknown");
+  }
   private response(message: Message): void {
     if (
       !Number.isSafeInteger(message.request) ||
@@ -252,36 +251,81 @@ class Activation {
       else pending.reject(new RuntimeError("outcome-unknown"));
     }
   }
+  reuse(): Promise<Backend> {
+    if (this.phase === "stopping")
+      return Promise.reject(new RuntimeError("unavailable"));
+    if (this.phase !== "active") return this.ready.promise;
+    return this.admit(() => this.ready.promise);
+  }
   private call(value: Value, signal?: AbortSignal): Promise<Value> {
     if (!boundedValue(value))
       return Promise.reject(new RuntimeError("protocol"));
+    // Capture before async admission: caller mutation cannot retarget an operation.
+    const captured = JSON.parse(JSON.stringify(value)) as Value;
+    return this.admit(() => this.dispatch(captured, signal), signal);
+  }
+  private admit<T>(
+    operation: () => T | Promise<T>,
+    signal?: AbortSignal,
+  ): Promise<T> {
     if (this.phase !== "active" || this.options.owner.aborted)
       return Promise.reject(new RuntimeError("unavailable"));
     if (signal?.aborted) return Promise.reject(new RuntimeError("cancelled"));
     if (this.pending.size + this.admissions.size >= PENDING_LIMIT)
       return Promise.reject(new RuntimeError("busy"));
-    const admission = (async () => {
+    const result = deferred<T>();
+    let cancelled = false;
+    const cancel = (code: "unavailable" | "cancelled") => {
+      cancelled = true;
+      result.reject(new RuntimeError(code));
+    };
+    const abort = () => cancel("cancelled");
+    signal?.addEventListener("abort", abort, { once: true });
+    const timer = setTimeout(() => this.fail("outcome-unknown"), 10_000);
+    const work = (async () => {
       const pin = await this.options.packages.openVersion(
         this.id,
         this.selection,
       );
-      await pin.release();
+      try {
+        await pin.release();
+      } catch {
+        this.cleanupFailed = true;
+        throw new RuntimeError("outcome-unknown");
+      }
     })();
-    this.admissions.add(admission);
-    return admission.then(
+    this.admissions.set(work, () => cancel("unavailable"));
+    const done = () => {
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", abort);
+      this.admissions.delete(work);
+      this.maybeFinish();
+    };
+    void work.then(
       () => {
-        this.admissions.delete(admission);
-        if (this.phase !== "active" || this.options.owner.aborted)
-          throw new RuntimeError("unavailable");
-        if (signal?.aborted) throw new RuntimeError("cancelled");
-        return this.dispatch(value, signal);
+        done();
+        if (cancelled) return;
+        if (this.phase !== "active" || this.options.owner.aborted) {
+          cancel("unavailable");
+          return;
+        }
+        try {
+          result.resolve(operation());
+        } catch {
+          result.reject(new RuntimeError("outcome-unknown"));
+        }
       },
       () => {
-        this.admissions.delete(admission);
-        this.fail("unavailable");
-        throw new RuntimeError("unavailable");
+        done();
+        this.fail(this.cleanupFailed ? "outcome-unknown" : "unavailable");
+        result.reject(
+          new RuntimeError(
+            this.cleanupFailed ? "outcome-unknown" : "unavailable",
+          ),
+        );
       },
     );
+    return result.promise;
   }
   private dispatch(value: Value, signal?: AbortSignal): Promise<Value> {
     const request = ++this.request;
@@ -321,83 +365,101 @@ class Activation {
     this.ready.reject(new RuntimeError(code));
     void this.stop();
   }
-  stop(): Promise<Retirement> {
-    if (this.stopPromise) return this.stopPromise;
+  private revoke(): void {
     this.phase = "stopping";
     clearTimeout(this.activationTimer);
-    this.ready.reject(new RuntimeError("unavailable"));
+    for (const cancel of this.admissions.values()) cancel();
     for (const pending of this.pending.values()) {
       pending.cleanup();
       pending.reject(new RuntimeError("outcome-unknown"));
     }
     this.pending.clear();
+  }
+  stop(): Promise<Retirement> {
+    if (this.stopPromise) return this.stopPromise;
+    this.revoke();
+    this.ready.reject(new RuntimeError("unavailable"));
     try {
-      if (this.child && !this.exitObserved) this.send("stop");
+      if (this.child && !this.exitObserved && !this.spawnFailed)
+        this.send("stop");
     } catch {
-      /* Joining actual exit is still required. */
+      /* Still join actual lifetime. */
     }
     this.stopPromise = this.retire();
     return this.stopPromise;
   }
   private async retire(): Promise<Retirement> {
     await within(this.startSettled.promise, 2000, () => undefined);
-    if (!this.child) {
-      // An unfinished store acquisition is not settled cancellation.
-      if (!this.guard) return this.result();
-      await this.releaseGuard();
-      this.finished();
-      return this.result();
-    }
-    const cooperative = await within(this.ended.promise, 2000, () => null);
-    if (cooperative) return cooperative;
-    if (!this.exitObserved) {
+    if (!this.child) return this.result(); // Pending acquisition remains unknown.
+    await within(this.exit.promise, 2000, () => undefined);
+    if (!this.exitObserved && !this.spawnFailed) {
       this.killRequested = true;
       try {
         this.killAccepted = this.child.kill();
       } catch {
         this.killAccepted = false;
       }
+      await within(this.exit.promise, 5000, () => undefined);
     }
-    const result = await within(this.ended.promise, 5000, () => this.result());
-    this.child.close();
+    const result = await within(this.ended.promise, 2000, () => this.result());
+    this.child.disconnect();
     return result;
   }
-  private async exited(code: number): Promise<void> {
+  private async exited(
+    code: number | null,
+    signal: string | null,
+  ): Promise<void> {
+    this.spawned = true;
     this.exitObserved = true;
     this.exitCode = code;
-    this.phase = "stopping";
-    clearTimeout(this.activationTimer);
+    this.exitSignal = signal;
+    this.exit.resolve(); // Cancels any pending grace/escalation wait immediately.
+    this.revoke();
     this.ready.reject(new RuntimeError("activation-failed"));
-    for (const pending of this.pending.values()) {
-      pending.cleanup();
-      pending.reject(new RuntimeError("outcome-unknown"));
-    }
-    this.pending.clear();
-    this.child?.close();
     await this.releaseGuard();
-    await Promise.allSettled(this.admissions);
+    this.maybeFinish();
+  }
+  private maybeFinish(): void {
+    const processSettled = !this.child
+      ? this.startupFinished
+      : (this.exitObserved || this.spawnFailed) && this.streamsClosed;
+    if (
+      !processSettled ||
+      (this.guard && !this.guardSettled) ||
+      this.admissions.size
+    )
+      return;
     this.ended.resolve(this.result());
     if (!this.cleanupFailed) this.finished();
   }
   private result(): Retirement {
+    const processSettled = !this.child
+      ? this.startupFinished
+      : (this.exitObserved || this.spawnFailed) && this.streamsClosed;
     return {
       settled:
-        (this.exitObserved || (this.startupFinished && !this.child)) &&
+        processSettled &&
         (this.guardSettled || !this.guard) &&
         this.admissions.size === 0 &&
         !this.cleanupFailed,
-      processStarted: !!this.child,
+      processStarted: this.spawned,
       exitObserved: this.exitObserved,
       exitCode: this.exitCode,
+      exitSignal: this.exitSignal,
+      streamsClosed: this.streamsClosed,
       killRequested: this.killRequested,
       killAccepted: this.killAccepted,
-      cooperative: this.exitObserved && this.deactivated && !this.killRequested,
+      cooperative:
+        this.exitObserved &&
+        this.exitCode === 0 &&
+        this.exitSignal === null &&
+        this.deactivated &&
+        !this.killRequested,
       cleanupFailed: this.cleanupFailed,
     };
   }
 }
-
-/** Application-owned authority. Construction never launches a backend. */
+/** One application-owned authority. Construction never launches a backend. */
 export class ExtensionRuntime {
   private readonly activations = new Map<string, Activation>();
   private disposed = false;
@@ -412,7 +474,7 @@ export class ExtensionRuntime {
     if (this.disposed || this.options.owner.aborted)
       return Promise.reject(new RuntimeError("unavailable"));
     const existing = this.activations.get(id);
-    if (existing) return existing.ready.promise;
+    if (existing) return existing.reuse();
     if (this.activations.size >= 32)
       return Promise.reject(new RuntimeError("busy"));
     const activation = new Activation(id, this.options, () => {

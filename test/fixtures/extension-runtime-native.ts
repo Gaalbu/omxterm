@@ -22,7 +22,7 @@ void app
     app.exit(1);
   });
 async function run(): Promise<void> {
-  const { createUtilityExtensionRuntime } = (await import(
+  const { createExtensionRuntime } = (await import(
     pathToFileURL(path.join(build, "index.mjs")).href
   )) as typeof RuntimeModule;
   const { InstalledPackages, createNativeLeaseAdapter } = (await import(
@@ -67,7 +67,7 @@ export function activate({signal}) {
         return 'armed';
       }
       appendFileSync(${JSON.stringify(operations)}, 'once\\n');
-      return {value, debug:process.execArgv.filter(x=>x.startsWith('--inspect')), internal:Object.keys(process.env).filter(k=>/^(OMXTERM_|NODE_OPTIONS|ELECTRON_RUN_AS_NODE)/i.test(k)), aborted:signal.aborted};
+      return {value, debug:process.execArgv, nodeMode:process.env.ELECTRON_RUN_AS_NODE, internal:Object.keys(process.env).filter(k=>/^(OMXTERM_|NODE_OPTIONS)/i.test(k)), aborted:signal.aborted};
     },
     deactivate() {}
   };
@@ -81,7 +81,7 @@ export function activate({signal}) {
     enabled: true,
   });
   const owner = new AbortController();
-  const host = await createUtilityExtensionRuntime({
+  const host = await createExtensionRuntime({
     root: storeRoot,
     runtime,
     addon,
@@ -102,6 +102,7 @@ export function activate({signal}) {
     assert.deepEqual(await backend.call({ operation: "once" }), {
       value: { operation: "once" },
       debug: [],
+      nodeMode: "1",
       internal: [],
       aborted: false,
     });
