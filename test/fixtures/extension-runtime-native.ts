@@ -4,11 +4,12 @@ import { writeFile, readFile, access } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
+import { runtimeCases } from "./extension-runtime-cases.js";
 import { packageArchive } from "./extension-package-archive.js";
 import type * as RuntimeModule from "../../src/extension-runtime/electron-runtime.js";
 import type * as StoreModule from "../../src/installed-packages/installed-packages.js";
 
-const [build, root] = process.argv.slice(2) as [string, string];
+const [build, root] = process.argv.slice(-2) as [string, string];
 if (process.platform === "linux") app.commandLine.appendSwitch("no-sandbox");
 app.setPath("userData", path.join(root, "profile"));
 app.setPath("sessionData", path.join(root, "session"));
@@ -17,8 +18,8 @@ app.setPath("sessionData", path.join(root, "session"));
 void app
   .whenReady()
   .then(run)
-  .catch(() => {
-    console.error("fixture-setup-failed");
+  .catch((error: unknown) => {
+    console.error("fixture-setup-failed", error);
     app.exit(1);
   });
 async function run(): Promise<void> {
@@ -93,6 +94,10 @@ export function activate({signal}) {
     },
     owner: owner.signal,
   });
+  const abortOwner = () => owner.abort();
+  process.on("message", abortOwner);
+  process.on("disconnect", abortOwner);
+  const deadline = setTimeout(abortOwner, 45_000);
   let code = 0;
   let ticker: ReturnType<typeof setInterval> | undefined;
   try {
@@ -108,6 +113,8 @@ export function activate({signal}) {
     });
     assert.equal(await readFile(operations, "utf8"), "once\n");
     const cooperative = await backend.retire();
+    assert.equal(cooperative.settled, true);
+    assert.equal(cooperative.streamsClosed, true);
     assert.equal(cooperative.exitObserved, true);
     assert.equal(cooperative.cooperative, true);
     assert.equal(cooperative.killRequested, false);
@@ -153,6 +160,9 @@ export function activate({signal}) {
         collectedAfterExit: collected.removed.includes(installation.digest!),
       }),
     );
+    assert.ok(elapsed >= 2000, "two-second grace was shortened");
+    assert.equal(retirement.settled, true);
+    assert.equal(retirement.streamsClosed, true);
     assert.equal(retirement.exitObserved, true);
     assert.equal(retirement.killRequested, true);
     assert.equal(retirement.cooperative, false);
@@ -160,6 +170,27 @@ export function activate({signal}) {
     assert.ok(
       maximumGap < 250,
       "main responsiveness exceeded 250ms during builtin retirement",
+    );
+    await runtimeCases(host, store, root);
+    const finalBackend = await host.activate("test.runtime").catch(() => null);
+    assert.equal(
+      finalBackend,
+      null,
+      "uninstalled backend must not be admitted",
+    );
+    const owned = await host.activate("test.cancel");
+    assert.equal(await owned.call("before-owner-abort"), "before-owner-abort");
+    owner.abort();
+    await assert.rejects(host.activate("test.cancel"), { code: "unavailable" });
+    const ownedRetirement = await owned.retire();
+    assert.equal(ownedRetirement.settled, true);
+    assert.equal(ownedRetirement.cooperative, true);
+    assert.equal(ownedRetirement.streamsClosed, true);
+    console.log(
+      JSON.stringify({
+        case: "owner-abort-active-backend",
+        retirement: ownedRetirement,
+      }),
     );
   } catch (error) {
     code = 1;
@@ -174,6 +205,19 @@ export function activate({signal}) {
     console.log(
       JSON.stringify({ case: "fixture-owner-settlement", settlement }),
     );
-    app.exit(code);
+    clearTimeout(deadline);
+    process.removeListener("message", abortOwner);
+    process.removeListener("disconnect", abortOwner);
+    if (settlement.every((result) => result.settled)) {
+      await writeFile(
+        path.join(root, "settled.json"),
+        JSON.stringify(settlement),
+      );
+      app.exit(code);
+    } else {
+      console.error("fixture-unsettled-retained");
+      // Do not exit the owner and orphan an unobserved backend.
+      process.exitCode = 1;
+    }
   }
 }
