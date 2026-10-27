@@ -101,7 +101,8 @@ succeeds ([ADR 0025](adr/0025-use-restty-as-the-terminal-surface.md)).
 - Settings is one lazy graphical Application Tab per native window, appended
   on first open and reused without reread, reorder or state reset. It has no
   Terminal Pane, Surface, Adapter, shell or PTY. One ordered collection owns
-  both kinds' selection, reordering and literal/next/previous navigation. The
+  all kinds' selection, reordering and literal/next/previous navigation, including
+  internal hosted content without enabling user-accessible activation. The
   existing strip flag and two-tab threshold include Settings; opening it never
   reveals a disabled strip. Switching preserves its DOM, category, drafts,
   revisions, scroll and pending save results; it cancels shortcut recording and

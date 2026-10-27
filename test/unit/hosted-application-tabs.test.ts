@@ -20,6 +20,7 @@ afterEach(() => {
 function harness() {
   let open!: (descriptor: HostedContentDescriptor) => void;
   let retire!: (id: string) => void;
+  let fail!: () => void;
   const bridge: HostedContentBridge = {
     onOpen: (listener) => {
       open = listener;
@@ -27,6 +28,10 @@ function harness() {
     },
     onRetired: (listener) => {
       retire = listener;
+      return vi.fn();
+    },
+    onFailure: (listener) => {
+      fail = listener;
       return vi.fn();
     },
     present: vi.fn(async () => true),
@@ -54,6 +59,7 @@ function harness() {
     bridge,
     open: (id = "view-a") => open({ id, title: id }),
     retire,
+    fail: () => fail(),
   };
 }
 const settle = async () => {
@@ -88,6 +94,51 @@ it("opens only on main descriptors in the ordered list, with no PTY or clipboard
   await settle();
   expect(h.bridge.close).toHaveBeenCalledWith("view-a");
   expect(h.adapters[0]!.close).not.toHaveBeenCalled();
+});
+
+it("retains a Close Enter gesture across the terminal focus handoff", async () => {
+  const h = harness();
+  await h.tabs.ready;
+  h.open();
+  await settle();
+  const close = document.querySelector<HTMLButtonElement>(
+    ".hosted-content-tab button",
+  )!;
+  close.focus();
+  const key = (type: string, repeat = false) =>
+    new KeyboardEvent(type, {
+      key: "Enter",
+      code: "Enter",
+      repeat,
+      bubbles: true,
+      cancelable: true,
+    });
+  close.dispatchEvent(key("keydown"));
+  close.click();
+  await settle();
+  expect(h.tabs.isTerminalSelected()).toBe(true);
+  const repeat = key("keydown", true);
+  document.body.dispatchEvent(repeat);
+  expect(repeat.defaultPrevented).toBe(true);
+  const release = key("keyup");
+  document.body.dispatchEvent(release);
+  expect(release.defaultPrevented).toBe(true);
+  const fresh = key("keydown");
+  document.body.dispatchEvent(fresh);
+  expect(fresh.defaultPrevented).toBe(false);
+});
+
+it("retains failed epoch ownership with an actionable core notice", async () => {
+  const h = harness();
+  await h.tabs.ready;
+  h.open();
+  await settle();
+  h.fail();
+  expect(document.querySelector('[role="status"]')?.textContent).toContain(
+    "Close the window",
+  );
+  expect(document.querySelectorAll(".hosted-content-tab")).toHaveLength(1);
+  expect(h.notifyEmpty).not.toHaveBeenCalled();
 });
 
 it("awaits hide before DOM focus and ignores a stale selection continuation", async () => {

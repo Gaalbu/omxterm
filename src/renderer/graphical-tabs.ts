@@ -49,6 +49,7 @@ export function createGraphicalTabs(
       },
       close: owner.close,
     },
+    keyboard,
     language,
   );
   const settingsActions: Pick<

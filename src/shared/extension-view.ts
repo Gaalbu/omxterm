@@ -14,6 +14,7 @@ export interface HostedContentPresentation {
 export interface HostedContentBridge {
   onOpen(listener: (descriptor: HostedContentDescriptor) => void): () => void;
   onRetired(listener: (id: string) => void): () => void;
+  onFailure(listener: () => void): () => void;
   present(presentation: HostedContentPresentation): Promise<boolean>;
   close(id: string): Promise<void>;
 }
@@ -22,6 +23,7 @@ export const extensionViewIpc = {
   open: "extension-view:open",
   retired: "extension-view:retired",
   present: "extension-view:present",
+  failure: "extension-view:failure",
   close: "extension-view:close",
   visibility: "extension-view:visibility",
 } as const;

@@ -80,6 +80,8 @@ describe("hosted application-tab contract", () => {
     const retired = vi.fn();
     const offOpen = bridge.onOpen(opened);
     const offRetired = bridge.onRetired(retired);
+    const failed = vi.fn();
+    const offFailure = bridge.onFailure(failed);
     const event = {} as Electron.IpcRendererEvent;
     handlers.get(extensionViewIpc.open)!(event, {
       id: "a",
@@ -89,6 +91,11 @@ describe("hosted application-tab contract", () => {
     handlers.get(extensionViewIpc.retired)!(event, "../x");
     expect(opened).not.toHaveBeenCalled();
     expect(retired).not.toHaveBeenCalled();
+    handlers.get(extensionViewIpc.failure)!(event, { path: "/private" });
+    handlers.get(extensionViewIpc.failure)!(event, false);
+    expect(failed).not.toHaveBeenCalled();
+    handlers.get(extensionViewIpc.failure)!(event, true);
+    expect(failed).toHaveBeenCalledOnce();
     handlers.get(extensionViewIpc.open)!(event, { id: "a", title: "A" });
     handlers.get(extensionViewIpc.retired)!(event, "a");
     expect(opened).toHaveBeenCalledWith({ id: "a", title: "A" });
@@ -108,6 +115,7 @@ describe("hosted application-tab contract", () => {
     await bridge.close("a");
     offOpen();
     offRetired();
+    offFailure();
     expect(handlers.size).toBe(0);
   });
 

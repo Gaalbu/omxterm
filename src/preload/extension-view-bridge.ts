@@ -34,6 +34,15 @@ export function createHostedContentBridge(ipc: Transport): HostedContentBridge {
         ipc.removeListener(extensionViewIpc.retired, handler);
       };
     },
+    onFailure(listener) {
+      const handler: Listener = (_event, value) => {
+        if (value === true) listener();
+      };
+      ipc.on(extensionViewIpc.failure, handler);
+      return () => {
+        ipc.removeListener(extensionViewIpc.failure, handler);
+      };
+    },
     async present(value) {
       if (!isHostedContentPresentation(value))
         throw new TypeError("Invalid hosted presentation");

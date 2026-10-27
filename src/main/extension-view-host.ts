@@ -76,6 +76,7 @@ type Entry = {
   contents: WebContents;
   destroyed: Promise<void>;
   closing: boolean;
+  notified: boolean;
   visible: boolean;
   pid: number;
   entryUrl: string;
@@ -192,6 +193,10 @@ class NativeExtensionViewHost {
     } catch {
       this.#cleanupFailed = true;
     }
+  }
+  #notifyRetired(entry: Entry) {
+    if (entry.notified) return;
+    entry.notified = true;
     notify(() => this.options.onRetired?.(entry.descriptor.id));
   }
   #ownerLost = () => {
@@ -236,8 +241,11 @@ class NativeExtensionViewHost {
     } catch {
       failures.push("release");
     }
+    const failed = this.#cleanupFailed || failures.length > 0;
+    if (!failed)
+      for (const entry of this.#views.values()) this.#notifyRetired(entry);
     this.#views.clear();
-    return this.#cleanupFailed || failures.length
+    return failed
       ? { status: "failed", reason: "cleanup" }
       : { status: "settled" };
   }
@@ -387,6 +395,7 @@ class NativeExtensionViewHost {
           destroyed = resolve;
         }),
         closing: false,
+        notified: false,
         visible: false,
         pid: 0,
         entryUrl: `${this.#origin}/${input.entryResource}`,
@@ -486,11 +495,13 @@ class NativeExtensionViewHost {
       await this.retire();
       throw new Error("Hosted content close failed");
     }
-    this.#views.delete(id);
-    if (!this.#views.size) {
+    if (!this.#live() || this.#views.size === 1) {
       const outcome = await this.retire();
       if (outcome.status !== "settled")
         throw new Error("Hosted content retirement failed");
+    } else {
+      this.#views.delete(id);
+      this.#notifyRetired(entry);
     }
   }
   clipboard = (action: "copy" | "paste" | "selectAll"): boolean => {

@@ -1,5 +1,6 @@
 import { englishLanguage, type RendererLanguage } from "./renderer-language";
 import { createPageButton, setPageNotice } from "./application-page";
+import type { retainDismissalGesture } from "./about/about-dialog";
 import type {
   HostedContentBridge,
   HostedContentDescriptor,
@@ -24,6 +25,7 @@ export function createHostedContentTabs(
     retired(id: string): void;
     close(tab: HostedTab): void;
   },
+  keyboard: ReturnType<typeof retainDismissalGesture>,
   language: RendererLanguage = englishLanguage,
 ) {
   const page = parent.ownerDocument.defaultView!;
@@ -129,6 +131,9 @@ export function createHostedContentTabs(
       slot,
       removed: false,
     };
+    close.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") keyboard.track(event, close);
+    });
     close.addEventListener("click", () => callbacks.close(tab));
     container.append(close, slot);
     parent.append(container);
@@ -136,6 +141,7 @@ export function createHostedContentTabs(
     callbacks.open(tab);
   });
   const removeRetired = bridge?.onRetired(callbacks.retired);
+  const removeFailure = bridge?.onFailure(fail);
   return {
     select(
       tab: HostedTab | undefined,
@@ -204,6 +210,7 @@ export function createHostedContentTabs(
       generation += 1;
       removeOpen?.();
       removeRetired?.();
+      removeFailure?.();
       observer?.disconnect();
       page.removeEventListener("resize", layout);
       notice.remove();

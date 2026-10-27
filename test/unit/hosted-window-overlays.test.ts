@@ -65,6 +65,7 @@ it.each(["about", "palette", "image"] as const)(
             return () => {};
           },
           onRetired: () => () => {},
+          onFailure: () => () => {},
           present,
           close: async () => {},
         },

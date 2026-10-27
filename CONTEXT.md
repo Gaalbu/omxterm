@@ -31,9 +31,9 @@ See [window and session behavior](docs/spec.md#window-and-session-behavior).
 **Terminal Window** — An independent native window containing one or more
 Application Tabs, with exactly one selected. It starts with a Terminal Tab.
 
-**Application Tab** — A terminal or graphical Settings entry in one window's
+**Application Tab** — A terminal, graphical Settings or internal hosted-content entry in one window's
 single ordered tab collection. Reordering and literal/next/previous navigation
-include both kinds. Removing the last Application Tab follows the window-close
+include all kinds; hosted activation is not user-accessible. Removing the last Application Tab follows the window-close
 lifecycle, including pending failure acknowledgement.
 
 **Terminal Tab** — An Application Tab owning one or more Terminal Panes,

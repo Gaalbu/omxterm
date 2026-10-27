@@ -64,8 +64,8 @@ export function createExtensionResources(
   return {
     async respond(request: Request): Promise<Response> {
       const path = extensionResourceFromUrl(request.url, origin);
-      const mime =
-        path === null ? undefined : types[path.split(".").at(-1) ?? ""];
+      const suffix = path?.split(".").at(-1) ?? "";
+      const mime = Object.hasOwn(types, suffix) ? types[suffix] : undefined;
       if (
         revoked ||
         request.signal.aborted ||

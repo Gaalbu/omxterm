@@ -26,7 +26,9 @@ closure can restore only the same still-current content owner. Failed hides
 suppress presentation rather than showing a DOM modal behind live native pixels.
 Field input stays in the child; core commands use the existing matcher with the
 owning window. Native clipboard operations target selected hosted contents,
-never a former terminal field. Closing a hosted tab does not close a PTY.
+never a former terminal field. Host Close retains its Enter gesture through
+repeats/release using the same window dismissal owner as Settings. Closing a
+hosted tab does not close a PTY.
 
 The resource consumer retains the whole captured `openVersion()` pin privately.
 Fresh admission is revalidated before epoch creation; existing reads never follow
@@ -48,7 +50,12 @@ settles actual resource reads, closes connections and clears session data. It
 releases the pin only after views and reads drain. Native close, storage or pin
 release failure is not successful retirement. A bounded timeout leaves the
 original cleanup running and reports failure; it neither releases early nor
-silently retries. No session-destroy API or arbitrary-descendant containment is
+silently retries. Tab retirement is published only after native destruction and,
+for the final epoch view, successful read/session/pin settlement. Failed epochs
+keep their core-owned tab and recovery notice; they do not publish an empty
+window. The owner-bound IPC route continues acknowledging safe null presentations
+after settled retirement, but never admits old view identities. No session-destroy
+API or arbitrary-descendant containment is
 invented. Renderer loss conservatively retires all views in that epoch; actual
 renderer IDs are observed, and sharing the core renderer refuses continued use.
 There is no per-view process-isolation promise.

@@ -126,6 +126,8 @@ export function startExtensionViewHost(
       if (route?.host === host) {
         if (state === "retiring") route.retiring = true;
         if (state === "settled") route.host = undefined;
+        if (state === "failed" && !contents.isDestroyed())
+          contents.send(extensionViewIpc.failure, true);
       }
       options.onState?.(state, outcome);
     },

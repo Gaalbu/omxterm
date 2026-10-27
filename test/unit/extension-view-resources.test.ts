@@ -40,6 +40,28 @@ it("rejects raw traversal, encoded separators, queries and origin lookalikes bef
   ).toBe("ui/app.js");
 });
 
+it("refuses prototype-name MIME suffixes and unsupported paths without I/O", async () => {
+  const read = vi.fn(async () => new Uint8Array());
+  const resources = createExtensionResources(
+    { read, release: async () => {} },
+    "omx-extension://epoch",
+  );
+  for (const path of [
+    "asset.constructor",
+    "asset.__proto__",
+    "asset.toString",
+    "asset.hasOwnProperty",
+    "constructor",
+    "asset",
+    "asset.txt",
+  ])
+    expect(
+      (await resources.respond(new Request(`omx-extension://epoch/${path}`)))
+        .status,
+    ).toBe(403);
+  expect(read).not.toHaveBeenCalled();
+});
+
 it("refuses invalid adapter payloads and oversized backing buffers, never forwarding handles", async () => {
   const read = vi.fn(
     async () => new Uint8Array(extensionResourceLimits.bytes + 1),
