@@ -51,6 +51,7 @@ interface InputOptions {
     | "buttons"
     | "target"
     | "not-dragging";
+  moveAfterRelease?: boolean;
   registerAfterDelivery?: boolean;
   deliveryDelayMs?: number;
   consumptionDelayMs?: number;
@@ -187,6 +188,8 @@ async function exercise(withholdPoll: boolean, options: InputOptions = {}) {
           released = true;
           releasedAt = Date.now() - startedAt;
           renderer.deliver("pointerup", event.x, event.y, 0);
+          if (options.moveAfterRelease)
+            renderer.deliver("pointermove", event.x + 100, event.y + 100, 0);
         }
       },
     },
@@ -409,4 +412,24 @@ it("releases the held button when the renderer evaluation is cancelled", async (
   expect(result.viewportReads).toEqual([]);
   expect(result.pendingEvaluations).toBe(0);
   expect(result.observed.up).toMatchObject({ buttons: 0, dragging: false });
+});
+
+it("retains acknowledged drag evidence when a later unpressed move precedes the release snapshot", async () => {
+  const result = await exercise(false, { moveAfterRelease: true });
+  expect(result.error).toBeNull();
+  expect(result.observed.move).toMatchObject({ buttons: 0, x: 180, y: 100 });
+  expect(result.value?.nativeDrag.move).toMatchObject({
+    trusted: true,
+    canvas: true,
+    buttons: 1,
+    x: 80,
+    y: 0,
+    dragging: true,
+  });
+  expect(result.value?.nativeDrag.up).toMatchObject({
+    buttons: 0,
+    x: 80,
+    y: 0,
+  });
+  expect(result.releasedAt).toBe(505);
 });

@@ -30,3 +30,18 @@ Afterward, their expanded matrix passed all 12 cases. Related installer and
 architecture unit suites passed 51 tests. Repository lint, typecheck, targeted
 Prettier and `git diff --check` passed. The complete portable gate has not been
 rerun for this slice; the separately recorded failures remain unresolved.
+
+## Retained native drag receipt
+
+A second independent fixture correction preserves the exact acknowledged
+pointer-down/move receipt through later release observation. Previously an
+unrelated unpressed pointer move could replace the final `move`, even though the
+matching trusted drag had already been acknowledged. Release validation and
+native autoscroll assertions remain unchanged.
+
+A new emitted-caller regression failed before the fix and passed afterward.
+The focused run passed 20 acknowledgement cases, two native scrollback cases and
+nine host-readiness cases (31 total). Lint, typecheck and targeted formatting
+passed. The isolated host-readiness pass does not explain or clear the earlier
+esbuild Go-runtime crash. Appearance, display-size and native-input prerequisites
+remain under investigation.
