@@ -236,6 +236,14 @@ Do not infer full-suite execution coverage from aggregate counters or empty pass
 
 ### Focused checks
 
+The [internal extension backend runtime](extension-backend-runtime.md) has an
+explicit `npm run build:extension-runtime` artifact and actual native process/store
+tests. Its default integration wrapper launches real Electron/Node children even
+without opening windows; use an assigned native environment. No application
+startup activation, package/fuse/signing qualification or public SDK follows from
+building that artifact. Controlled lifecycle tests under `test/unit/extension-runtime-*`
+remain headless and do not execute the native addon.
+
 While iterating on a specific subsystem, you can run targeted test files before running the full suite:
 
 | Subsystem                                      | Command                                                                                                                                                                                       |

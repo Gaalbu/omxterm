@@ -252,6 +252,12 @@ generations and deferred cleanup. It is an implementation foundation, not the
 planned user-facing extension manager or execution host. See the
 [foundation contract](docs/extension-installation-foundation.md).
 
+**Backend Runtime** — An internal app-owned authority that lazily activates an
+installed prebuilt backend in a directly owned bundled-Node child, binds requests
+to a captured version/epoch and distinguishes actual process exit from channel
+or stream settlement. It is not a public SDK or a descendant sandbox. See the
+[runtime contract](docs/extension-backend-runtime.md).
+
 **Version Use Lease** — An independently held native shared lease retaining one
 immutable installed version while its owner may read package files. It does not
 prove code stopped, serialize external side effects or contain descendants.

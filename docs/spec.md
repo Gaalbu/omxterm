@@ -1616,8 +1616,32 @@ startup caller, graphical installation, catalog/network operation, public SDK or
 extension execution. This checkpoint does not deliver Files or change the current
 application network/terminal ownership contracts. Its implemented interface and
 limits are governed by the [foundation contract](extension-installation-foundation.md)
-and [ADR 0038](adr/0038-pin-immutable-installed-packages.md); future runtime/UI
-consumers require their own integration and qualification.
+and [ADR 0038](adr/0038-pin-immutable-installed-packages.md).
+
+### Internal extension backend runtime
+
+A separately and explicitly built backend runtime consumes Installed Packages
+through an app-owned bootstrap. Explicit internal activation lazily forks one
+standard Node ChildProcess per active extension/application runtime using bundled
+Electron Run-as-Node and Node IPC. Independent captured-version pins, fresh
+parent/child admission checks and bounded epoch authority precede ESM import.
+No store writer spans spawn, import or retirement. Cancellation revokes owned
+infrastructure, not already admitted trusted Node effects.
+
+Retirement allows two seconds of cooperation, then at most one owned forced kill;
+actual exit and stream closure remain distinct from logical disposal or kill
+acceptance. Unknown outcomes are not automatically retried. No custom supervisor,
+PID reaper, sandbox or descendant-containment promise is introduced. This replaces
+the proposed utility backend after observed macOS main-thread blocking, without
+changing the separately owned web-content host.
+
+The [runtime contract](extension-backend-runtime.md) and
+[ADR 0040](adr/0040-run-backends-in-owned-node-children.md) govern its internal
+interfaces, limits and qualification boundary. Application startup still has no
+activation caller; no installer/catalog network route, public SDK, Files, action
+or tab capability is added. Core network and terminal ownership remain unchanged;
+trusted children retain ordinary Node capabilities. Packaging, user activation,
+web-content composition and application-quit integration remain later consumers.
 
 ## Release contract
 

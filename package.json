@@ -18,6 +18,7 @@
     "test:integration": "vitest run test/integration/local-shell.test.ts",
     "build": "node build.mjs",
     "build:installed-packages": "node scripts/build-installed-packages.mjs",
+    "build:extension-runtime": "node scripts/build-extension-runtime.mjs",
     "check:portable": "npm run format:check && npm run lint && npm run typecheck && npm test && npm run build",
     "package:mac": "npm run build && npm run package-built:mac",
     "package:linux": "npm run build && npm run package-built:linux",
