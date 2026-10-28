@@ -78,6 +78,7 @@ type Entry = {
   contents: WebContents;
   destroyed: Promise<void>;
   closing: boolean;
+  rendererGone: boolean;
   notified: boolean;
   visible: boolean;
   pid: number;
@@ -155,7 +156,9 @@ class NativeExtensionViewHost {
   #visibility(entry: Entry, visible: boolean) {
     entry.visible = visible;
     entry.view.setVisible(visible);
-    if (!entry.contents.isDestroyed())
+    // WebContents can outlive its disposed frame after renderer loss. Native
+    // hiding still applies, but no presentation IPC belongs to a lost/closing view.
+    if (!entry.rendererGone && !entry.closing && !entry.contents.isDestroyed())
       entry.contents.send(extensionViewIpc.visibility, visible);
   }
   #hideAll = (keep?: Entry) => {
@@ -376,7 +379,10 @@ class NativeExtensionViewHost {
     contents.on("will-frame-navigate", prevent);
     contents.on("will-redirect", prevent);
     contents.on("will-attach-webview", prevent);
-    contents.on("render-process-gone", this.#ownerLost);
+    contents.on("render-process-gone", () => {
+      entry.rendererGone = true;
+      this.#ownerLost();
+    });
     contents.on("dom-ready", () => this.#trackProcess(entry));
     contents.on("did-finish-load", () => {
       this.#trackProcess(entry);
@@ -432,6 +438,7 @@ class NativeExtensionViewHost {
           destroyed = resolve;
         }),
         closing: false,
+        rendererGone: false,
         notified: false,
         visible: false,
         pid: 0,

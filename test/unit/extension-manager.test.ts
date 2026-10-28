@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -138,6 +138,62 @@ it("disable revokes calls and independently retires all local views and the back
     otherInstances: "unknown",
   });
 });
+it("replaces captured packages and re-enables dormantly without reviving old view authority", async () => {
+  const { manager, runtime, views, call } = await setup();
+  const target = {
+    owner: {},
+    signal: new AbortController().signal,
+    terminalDirectory: root,
+  };
+  await manager.open(manifest.id, target);
+  const old = views[0]!;
+  const archive = path.join(root, "replacement.omxext");
+  await writeFile(
+    archive,
+    packageArchive([
+      {
+        name: "extension.json",
+        data: JSON.stringify({ ...manifest, version: "1.1.0" }),
+      },
+      { name: "backend.mjs", data: "// replacement" },
+      { name: "index.html", data: "<h1>replacement</h1>" },
+    ]),
+  );
+  const approval = await manager.prepare(target.owner, archive);
+  await manager.approve(target.owner, approval.token);
+  expect(runtime.retire).toHaveBeenCalledWith(manifest.id);
+  expect(runtime.activate).toHaveBeenCalledTimes(1);
+  await expect(old.call(null, new AbortController().signal)).rejects.toThrow(
+    "unavailable",
+  );
+  expect(call).not.toHaveBeenCalled();
+  await manager.setEnabled(manifest.id, 2, false);
+  await manager.setEnabled(manifest.id, 3, true);
+  expect((await manager.snapshot())[0]).toMatchObject({
+    generation: 4,
+    enabled: true,
+    local: "dormant",
+  });
+  expect(runtime.activate).toHaveBeenCalledTimes(1);
+  const backend = await runtime.activate.mock.results[0]!.value;
+  const current = (await packages.snapshot())[0]!;
+  runtime.activate.mockResolvedValue({
+    ...backend,
+    selection: {
+      id: current.id,
+      generation: current.generation,
+      digest: current.digest!,
+    },
+  });
+  await manager.open(manifest.id, target);
+  expect(views[1]!.pin.generation).toBe(4);
+  expect(views[1]!.pin.digest).not.toBe(old.pin.digest);
+  await expect(old.call(null, new AbortController().signal)).rejects.toThrow(
+    "unavailable",
+  );
+  expect(await manager.dispose()).toBe(true);
+});
+
 it("a management change during held activation cannot create a late orphan view", async () => {
   const { manager, runtime, createViews } = await setup();
   const backend = await runtime.activate(manifest.id);

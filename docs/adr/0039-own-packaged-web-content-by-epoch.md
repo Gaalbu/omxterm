@@ -62,7 +62,9 @@ keep their core-owned tab and recovery notice; they do not publish an empty
 window. The owner-bound IPC route continues acknowledging safe null presentations
 after settled retirement, but never admits old view identities. No session-destroy
 API or arbitrary-descendant containment is
-invented. Renderer loss conservatively retires all views in that epoch; actual
+invented. Renderer loss conservatively retires all views in that epoch. Native hiding still
+runs, but visibility IPC is not sent to a lost renderer or a closing view: its
+WebContents may remain alive after its frame is disposed. Actual
 renderer IDs are observed, and sharing the core renderer refuses continued use.
 There is no per-view process-isolation promise.
 

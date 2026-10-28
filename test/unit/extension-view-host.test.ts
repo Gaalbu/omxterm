@@ -468,13 +468,16 @@ describe("epoch lifetime and failure settlement", () => {
     const f = await fixture();
     await f.host.open(opening);
     await f.host.open(opening);
-    f.views[0]!.webContents.emit(
-      "render-process-gone",
-      {},
-      { reason: "crashed" },
-    );
+    const crashed = f.views[0]!.webContents;
+    crashed.send.mockClear();
+    crashed.send.mockImplementation(() => {
+      throw new Error("Render frame disposed while WebContents remains alive");
+    });
+    crashed.emit("render-process-gone", {}, { reason: "crashed" });
     expect(await f.host.retire()).toEqual({ status: "settled" });
     expect(f.views.every((view) => view.webContents.dead)).toBe(true);
+    expect(crashed.send).not.toHaveBeenCalled();
+    expect(f.views[0]!.setVisible).toHaveBeenCalledWith(false);
     expect(f.retired).toHaveBeenCalledTimes(2);
     expect(f.owner.webContents.dead).toBe(false);
     expect(f.resourceOwner.release).toHaveBeenCalledTimes(1);
