@@ -196,7 +196,11 @@ ordinary CommonJS loaded via Node `createRequire`: inspector evaluation does not
 supply a dynamic-import callback. For attachment diagnosis only, set
 `OMXTERM_FILES_PACKAGED_ATTACH_ONLY=1`; that checks module loading and actual
 packaged identity, then quits without running Files. Its separately labeled
-attachment-only outcome is never a Files lifecycle pass. Product entry,
+attachment-only outcome is never a Files lifecycle pass. Alternatively,
+`OMXTERM_FILES_PACKAGED_TERMINAL_ONLY=1` checks the single-terminal renderer entry:
+it captures the original missing-tab-button error, verifies corrected same-shell
+input, and quits before Files. Select only one diagnostic stopping point; neither
+qualifies the Files lifecycle. Product entry,
 preload, runtime, resources and Files code remain the packaged bytes. It exercises
 local captured-digest trust, dormant installation, real Files creation and
 no-clobber conflict/move, reinstall retirement, fresh activation, disable/uninstall,

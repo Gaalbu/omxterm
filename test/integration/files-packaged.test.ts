@@ -21,6 +21,16 @@ const execute = promisify(execFile);
 const appImage = process.env.OMXTERM_FILES_PACKAGED_APPIMAGE;
 const archive = process.env.OMXTERM_FILES_PACKAGED_ARCHIVE;
 const attachOnly = process.env.OMXTERM_FILES_PACKAGED_ATTACH_ONLY === "1";
+const terminalOnly = process.env.OMXTERM_FILES_PACKAGED_TERMINAL_ONLY === "1";
+const scope = attachOnly
+  ? "observer-attachment-only"
+  : terminalOnly
+    ? "terminal-entry-only"
+    : "Files-lifecycle";
+assert.ok(
+  !(attachOnly && terminalOnly),
+  "Choose only one diagnostic stopping point",
+);
 const digest = (bytes: Buffer) =>
   createHash("sha256").update(bytes).digest("hex");
 const delay = () => new Promise((resolve) => setTimeout(resolve, 25));
@@ -123,6 +133,56 @@ async function inspector(url: string) {
   };
 }
 
+async function observeScenario(
+  client: Awaited<ReturnType<typeof inspector>>,
+  observer: string,
+  options: Record<string, unknown>,
+  evidence: string,
+) {
+  const attached = await client.evaluate(
+    `${observer}.inspect(${JSON.stringify(options)})`,
+    5000,
+  );
+  expect(attached).toEqual({
+    packaged: true,
+    version: options.version,
+    appPath: options.asar,
+    executable: options.executable,
+    observer: "CommonJS",
+    runType: "function",
+  });
+  await writeFile(
+    path.join(evidence, "attachment.json"),
+    JSON.stringify(attached, null, 2),
+  );
+  if (attachOnly) return;
+  const result = await client.evaluate(
+    `${observer}.run(${JSON.stringify(options)})`,
+  );
+  await writeFile(
+    path.join(evidence, terminalOnly ? "terminal-entry.json" : "scenario.json"),
+    JSON.stringify(result, null, 2),
+  );
+  if (terminalOnly)
+    expect(result).toMatchObject({
+      check: "terminal-entry-only",
+      correctedSameShell: true,
+      approvals: 0,
+      children: 0,
+    });
+  else
+    expect(result).toMatchObject({
+      approvals: 2,
+      checks: [
+        "exact-archive-trust-dormant-install",
+        "packaged-backend-create-move-conflict",
+        "explicit-reinstall-actual-retirement-dormant",
+        "fresh-activation-disable-uninstall",
+        "same-PTY-and-Surface",
+      ],
+    });
+}
+
 // The exact AppImage is extracted, not rebuilt or patched. No default_app.asar,
 // development Electron or replacement application entry is used. The main
 // inspector is loopback-only, controlled by this disposable fixture, and closed.
@@ -134,7 +194,9 @@ it.skipIf(
 )(
   attachOnly
     ? "loads the observer in the exact packaged application without running Files"
-    : "uses separate Files through the exact packaged application and joins normal Quit",
+    : terminalOnly
+      ? "discriminates single-terminal renderer entry without running Files"
+      : "uses separate Files through the exact packaged application and joins normal Quit",
   { timeout: 240000 },
   async () => {
     const root = await mkdtemp(
@@ -309,46 +371,13 @@ it.skipIf(
         ).version,
         files: path.join(root, "owned-files"),
         readiness,
+        terminalOnly,
       };
       const observer = `process.getBuiltinModule('module').createRequire(${JSON.stringify(path.join(asar, "package.json"))})(${JSON.stringify(path.join(root, "observer.cjs"))})`;
-      const attached = await client.evaluate(
-        `${observer}.inspect(${JSON.stringify(options)})`,
-        5000,
-      );
-      expect(attached).toEqual({
-        packaged: true,
-        version: options.version,
-        appPath: asar,
-        executable,
-        observer: "CommonJS",
-        runType: "function",
-      });
-      await writeFile(
-        path.join(evidence, "attachment.json"),
-        JSON.stringify(attached, null, 2),
-      );
-      if (!attachOnly) {
-        const result = await client.evaluate(
-          `${observer}.run(${JSON.stringify(options)})`,
-        );
-        await writeFile(
-          path.join(evidence, "scenario.json"),
-          JSON.stringify(result, null, 2),
-        );
-        expect(result).toMatchObject({
-          approvals: 2,
-          checks: [
-            "exact-archive-trust-dormant-install",
-            "packaged-backend-create-move-conflict",
-            "explicit-reinstall-actual-retirement-dormant",
-            "fresh-activation-disable-uninstall",
-            "same-PTY-and-Surface",
-          ],
-        });
-      }
+      await observeScenario(client, observer, options, evidence);
       await owner.verifyMain();
       await client.evaluate(`${observer}.quit(); true`, 5000);
-      if (!attachOnly)
+      if (!attachOnly && !terminalOnly)
         await until(
           async () =>
             (
@@ -414,7 +443,7 @@ it.skipIf(
                 : cleanupFailure,
             root,
             mode: "exact AppImage extraction; no FUSE/helper installation",
-            scope: attachOnly ? "observer-attachment-only" : "Files-lifecycle",
+            scope,
             sourceFallback:
               "no developer entry/import; packaged appPath/bootstrap; no build tools on PATH",
           },

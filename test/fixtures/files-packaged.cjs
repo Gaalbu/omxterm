@@ -29,7 +29,13 @@ async function run(options) {
   const window = BrowserWindow.getAllWindows()[0];
   assert.ok(window);
   const core = window.webContents;
-  const js = (code) => core.executeJavaScript(code);
+  const js = async (code) => {
+    try {
+      return await core.executeJavaScript(code);
+    } catch (cause) {
+      throw new Error(`Core renderer expression failed: ${code}`, { cause });
+    }
+  };
   const checks = [];
   const children = [];
   const childProcess = require("node:child_process");
@@ -125,7 +131,8 @@ async function run(options) {
   assert.ok(identity);
   const quote = (text) => "'" + text.replaceAll("'", "'\\''") + "'";
   async function terminal(marker) {
-    await js("document.querySelector('#tab-strip [role=tab]').click()");
+    // A single terminal deliberately has no tab-strip button.
+    await js("document.querySelector('#tab-strip [role=tab]')?.click()");
     await until(
       () => js("!!document.activeElement?.closest('.terminal-surface')"),
       "terminal focus",
@@ -201,7 +208,38 @@ async function run(options) {
     () => js("!!document.querySelector('.terminal-surface canvas')"),
     "Surface",
   );
+  let terminalEntry;
+  if (options.terminalOnly) {
+    terminalEntry = await js(`(() => {
+      const strip = document.querySelector('#tab-strip');
+      const snapshot = { hidden: strip.hidden, tabs: strip.querySelectorAll('[role=tab]').length };
+      try {
+        document.querySelector('#tab-strip [role=tab]').click();
+        return { ...snapshot, originalRejected: false };
+      } catch (error) {
+        return { ...snapshot, originalRejected: true, name: error.name, message: error.message };
+      }
+    })()`);
+    globalThis.__omxtermPackagedState.terminalEntry = terminalEntry;
+    // Discriminate the original null dereference, not just any renderer error.
+    assert.equal(terminalEntry.hidden, true);
+    assert.equal(terminalEntry.tabs, 0);
+    assert.equal(terminalEntry.originalRejected, true);
+    assert.equal(terminalEntry.name, "TypeError");
+    assert.match(terminalEntry.message, /null.*click/);
+  }
   await terminal("before");
+  if (options.terminalOnly) {
+    return {
+      check: "terminal-entry-only",
+      original: terminalEntry,
+      correctedSameShell: true,
+      shellPid: shell.probePid,
+      shellStart: identity.start,
+      approvals,
+      children: children.length,
+    };
+  }
   await js(
     "window.__packagedCanvas = document.querySelector('.terminal-surface canvas')",
   );
