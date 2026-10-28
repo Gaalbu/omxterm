@@ -184,23 +184,20 @@ function request(
   return adapters.handlers.get(extensionsIpc)!(event, value);
 }
 beforeEach(async () => {
+  vi.resetAllMocks();
   adapters.root = await mkdtemp(path.join(os.tmpdir(), "omxterm-service-"));
   language = "en-US";
-  adapters.sendOpen
-    .mockReset()
-    .mockImplementation((_sender, _channel, command) => {
-      if (!isTerminalTabCommand(command) || command.action !== "open-extension")
-        throw new Error("Expected extension admission command");
-      void request({ operation: "open", token: command.token, accepted: true });
-    });
+  adapters.sendOpen.mockImplementation((_sender, _channel, command) => {
+    if (!isTerminalTabCommand(command) || command.action !== "open-extension")
+      throw new Error("Expected extension admission command");
+    void request({ operation: "open", token: command.token, accepted: true });
+  });
   adapters.hosts.length = 0;
   adapters.handlers.clear();
   adapters.windows.clear();
-  adapters.download.mockReset().mockResolvedValue(bytes());
-  adapters.activate.mockReset();
-  adapters.retire.mockReset().mockResolvedValue(null);
-  adapters.picker.mockReset();
-  adapters.consent.mockReset().mockResolvedValue({ response: 1 });
+  adapters.download.mockResolvedValue(bytes());
+  adapters.retire.mockResolvedValue(null);
+  adapters.consent.mockResolvedValue({ response: 1 });
   const contents = Object.assign(new EventEmitter(), {
     mainFrame: {},
     send: vi.fn(),
@@ -232,16 +229,16 @@ beforeEach(async () => {
   // Model preview admission/catalog targeting, not the host filesystem. Startup
   // captures both synchronously before its first await; Windows store operations
   // must retain their native directory-sync policy after that boundary.
-  Object.defineProperty(process, "platform", {
-    value: "linux",
-    configurable: true,
-  });
-  Object.defineProperty(process, "arch", {
-    value: "arm64",
-    configurable: true,
-  });
   let starting: ReturnType<typeof startApplicationExtensions>;
   try {
+    Object.defineProperty(process, "platform", {
+      value: "linux",
+      configurable: true,
+    });
+    Object.defineProperty(process, "arch", {
+      value: "arm64",
+      configurable: true,
+    });
     starting = startApplicationExtensions({
       applicationRoot: adapters.root,
       translator: () => translatorFor(language),
@@ -263,8 +260,6 @@ beforeEach(async () => {
 });
 afterEach(async () => {
   await service?.dispose();
-  Object.defineProperty(process, "platform", originalPlatform);
-  Object.defineProperty(process, "arch", originalArch);
   await rm(adapters.root, { recursive: true, force: true });
 });
 it("HTTPS installs exact captured bytes with the same consent, replacement generation and dormant runtime", async () => {
