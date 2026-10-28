@@ -100,6 +100,26 @@ it("keeps local controls usable during cold offline loading and failure, with ow
   expect(button("Install from link").disabled).toBe(false);
   expect(button("Retry catalog").disabled).toBe(false);
 });
+it("adopts a fresh shared snapshot after another window recovers the catalog", async () => {
+  const request = vi
+    .fn<(request: ExtensionsRequest) => Promise<ExtensionsResult>>()
+    .mockResolvedValueOnce({ ok: true, entries: [], catalog })
+    .mockResolvedValueOnce({
+      ok: false,
+      error: "download-failed",
+      catalog: { ...catalog, stale: true },
+    })
+    .mockResolvedValueOnce({ ok: true, entries: [], catalog });
+  document.body.append(renderExtensions(document, { request }, () => true));
+  await vi.waitFor(() => expect(button("Refresh catalog")).toBeDefined());
+  button("Refresh catalog").click();
+  await vi.waitFor(() => expect(button("Retry catalog")).toBeDefined());
+  button("Refresh").click();
+  await vi.waitFor(() => expect(request).toHaveBeenCalledTimes(3));
+  await vi.waitFor(() => expect(button("Refresh catalog")).toBeDefined());
+  expect(document.body.textContent).not.toContain("last successful snapshot");
+  expect(request).toHaveBeenLastCalledWith({ operation: "snapshot" });
+});
 it("shows stale success rather than an empty catalog after a failed refresh", async () => {
   const request = vi
     .fn<(request: ExtensionsRequest) => Promise<ExtensionsResult>>()

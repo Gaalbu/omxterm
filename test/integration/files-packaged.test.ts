@@ -369,6 +369,7 @@ it.skipIf(
           "--no-sandbox",
           "--ozone-platform=x11",
           "--inspect=127.0.0.1:0",
+          "--trace-warnings",
           `--user-data-dir=${path.join(root, "profile")}`,
           "-e",
           "/bin/sh",

@@ -59,6 +59,40 @@ async function run(options) {
     }
   };
   const checks = [];
+  const renderedCatalog = [];
+  const destroyedListeners = [];
+  function listeners(phase) {
+    destroyedListeners.push({
+      phase,
+      listeners: core
+        .rawListeners("destroyed")
+        .map((listener) => (listener.listener ?? listener).name || "anonymous"),
+    });
+  }
+  listeners("initial");
+  async function captureCatalog(name, selector, text) {
+    const geometry = await js(`(async () => {
+      const element = [...document.querySelectorAll(${JSON.stringify(selector)})].find(item => item.textContent.includes(${JSON.stringify(text)}));
+      if (!element) throw Error('catalog capture target missing');
+      element.scrollIntoView({ block: 'center' });
+      element.querySelector('button')?.focus({ preventScroll: true });
+      await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      const rect = element.getBoundingClientRect();
+      return { text: element.textContent, top: rect.top, bottom: rect.bottom, left: rect.left, right: rect.right, height: innerHeight, width: innerWidth };
+    })()`);
+    assert.ok(
+      geometry.top >= 0 &&
+        geometry.bottom <= geometry.height &&
+        geometry.left >= 0 &&
+        geometry.right <= geometry.width,
+      "catalog target fully inside viewport",
+    );
+    renderedCatalog.push({ name, ...geometry });
+    await writeFile(
+      path.join(options.evidence, name),
+      (await core.capturePage()).toPNG(),
+    );
+  }
   const children = [];
   const childProcess = require("node:child_process");
   const originalFork = childProcess.fork;
@@ -293,12 +327,15 @@ async function run(options) {
       await state("do not match the selected catalog release");
       assert.equal(approvals, 0, "wrong bytes never reach consent");
       assert.equal(children.length, 0);
+      listeners("wrong-archive-rejected");
+      await captureCatalog(
+        "catalog-error.png",
+        '[role="status"]',
+        "do not match the selected catalog release",
+      );
       catalogTransport.validArchive(true);
     }
-    await writeFile(
-      path.join(options.evidence, "catalog.png"),
-      (await core.capturePage()).toPNG(),
-    );
+    await captureCatalog("catalog.png", ".extension-catalog-card", "Install");
     await click(core, "Install");
   } else await click(core, "Install local .omxext…");
   await state("generation 1");
@@ -306,7 +343,25 @@ async function run(options) {
   assert.equal(children.length, 0);
   assert.equal(hosted().length, 0);
   checks.push("exact-archive-trust-dormant-install");
+  listeners("installed-dormant");
+  if (catalogTransport) {
+    // Render an offered update without pretending these bytes implement it.
+    // Restore the actual release before any further installation.
+    catalogTransport.available(true);
+    catalogTransport.offeredVersion("0.2.0");
+    await click(core, "Retry catalog");
+    await state("Catalog loaded.");
+    await captureCatalog(
+      "catalog-update.png",
+      ".extension-catalog-card",
+      "Update",
+    );
+    catalogTransport.offeredVersion("0.1.0");
+    await click(core, "Refresh catalog");
+    await state("Reinstall");
+  }
   let view = await openFiles();
+  listeners("first-view-active");
   assert.equal(children.length, 1);
   await view.executeJavaScript(
     `document.querySelector('[aria-label=Directory]').value = ${JSON.stringify(options.files)}; document.querySelector('form.location').requestSubmit()`,
@@ -363,6 +418,12 @@ async function run(options) {
       requestsBeforeReopen,
       "reopening Settings must not fetch",
     );
+  if (options.catalogMode)
+    await captureCatalog(
+      "catalog-reinstall.png",
+      ".extension-catalog-card",
+      "Reinstall",
+    );
   await click(
     core,
     options.catalogMode ? "Reinstall" : "Install local .omxext…",
@@ -376,7 +437,9 @@ async function run(options) {
   assert.equal(children.length, 1, "replacement remains dormant");
   assert.equal(approvals, 2);
   checks.push("explicit-reinstall-actual-retirement-dormant");
+  listeners("reinstalled-dormant");
   view = await openFiles();
+  listeners("second-view-active");
   assert.equal(children.length, 2);
   assert.notEqual(children[0].pid, children[1].pid);
   await settings();
@@ -390,6 +453,7 @@ async function run(options) {
   await click(core, "Uninstall");
   await state("uninstalled");
   checks.push("fresh-activation-disable-uninstall");
+  listeners("uninstalled");
   await terminal("after");
   assert.equal(
     await js(
@@ -410,11 +474,15 @@ async function run(options) {
       "/catalog",
       "/archive",
       "/archive",
+      "/catalog",
+      "/catalog",
       "/archive",
     ]);
     await cleanup();
   }
   const result = {
+    renderedCatalog,
+    destroyedListeners,
     catalog: options.catalogMode
       ? {
           mode: options.catalogMode,

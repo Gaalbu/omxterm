@@ -245,7 +245,13 @@ loopback TLS server with a one-day certificate (`/usr/bin/openssl` required).
 Certificate verification stays enabled with an explicit fixture CA; production
 endpoint/configuration and package bytes are unchanged. The server, sockets and
 interceptor are retired before successful Quit. This is controlled transport
-composition, **not public GitHub TLS/availability qualification**.
+composition, **not public GitHub TLS/availability qualification**. Captures scroll
+and focus the actual card or error notice, asserting its viewport bounds. A
+controlled catalog-only `0.2.0` offer exercises rendered Update presentation;
+it is never installed and the original `0.1.0` offer is restored before Reinstall.
+This visual fixture does not qualify a real Files `0.2.0` artifact. Listener-count
+checkpoints and warning traces distinguish lifecycle fan-out from retention;
+the observer does not raise or suppress listener limits.
 
 After actual publication, `OMXTERM_FILES_PACKAGED_CATALOG=public` uses the fixed
 public endpoint and release URLs without interception, fixture CA or catalog file.

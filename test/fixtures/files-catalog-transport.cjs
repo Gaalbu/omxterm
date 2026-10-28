@@ -68,6 +68,9 @@ async function start(options) {
     validArchive(value) {
       archiveValid = value;
     },
+    offeredVersion(value) {
+      entry.version = value;
+    },
     async close() {
       if (closed) return;
       closed = true;

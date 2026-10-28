@@ -77,6 +77,7 @@ export function renderExtensionCatalog(
   }
   function update(next: CatalogSnapshot) {
     snapshot = next;
+    if (next.loaded && !next.stale) failed = false;
     bindings.length = 0;
     buttons.length = 0;
     list.replaceChildren();
