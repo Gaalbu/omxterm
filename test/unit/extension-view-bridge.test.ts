@@ -119,18 +119,20 @@ describe("hosted application-tab contract", () => {
     expect(handlers.size).toBe(0);
   });
 
-  it("executes the actual child preload with visibility-only bounded host transport", async () => {
+  it("executes the actual child preload with bounded own-view requests and visibility", async () => {
     const source = await readFile(
       new URL("../../src/preload/extension-view.cjs", import.meta.url),
       "utf8",
     );
-    const expose =
-      vi.fn<
-        (
-          _name: string,
-          bridge: { onVisibility(listener: unknown): () => void },
-        ) => void
-      >();
+    const expose = vi.fn<
+      (
+        _name: string,
+        bridge: {
+          onVisibility(listener: unknown): () => void;
+          request(value: unknown): Promise<unknown>;
+        },
+      ) => void
+    >();
     const on =
       vi.fn<
         (
@@ -138,6 +140,11 @@ describe("hosted application-tab contract", () => {
           handler: (event: object, value: unknown) => void,
         ) => void
       >();
+    let finish!: (value: unknown) => void;
+    const held = new Promise((resolve) => {
+      finish = resolve;
+    });
+    const invoke = vi.fn(() => held);
     const execute = (mainFrame: boolean) => {
       runInNewContext(source, {
         process: { isMainFrame: mainFrame },
@@ -145,7 +152,7 @@ describe("hosted application-tab contract", () => {
           expect(name).toBe("electron");
           return {
             contextBridge: { exposeInMainWorld: expose },
-            ipcRenderer: { on },
+            ipcRenderer: { on, invoke },
           };
         },
       });
@@ -156,7 +163,17 @@ describe("hosted application-tab contract", () => {
     expect(expose).toHaveBeenCalledTimes(1);
     const [name, bridge] = expose.mock.calls[0]!;
     expect(name).toBe("omxHostedContent");
-    expect(Object.keys(bridge)).toEqual(["onVisibility"]);
+    expect(Object.keys(bridge)).toEqual(["request", "onVisibility"]);
+    const calls = Array.from({ length: 32 }, () =>
+      bridge.request({ operation: "home" }),
+    );
+    await expect(bridge.request(null)).rejects.toThrow("capacity");
+    expect(invoke).toHaveBeenCalledTimes(32);
+    expect(invoke).toHaveBeenLastCalledWith("extension-view:request", {
+      operation: "home",
+    });
+    finish({ ok: true });
+    await expect(Promise.all(calls)).resolves.toHaveLength(32);
     const listener = vi.fn();
     const dispose = bridge.onVisibility(listener);
     expect(listener).toHaveBeenLastCalledWith(false);

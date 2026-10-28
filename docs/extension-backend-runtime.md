@@ -25,10 +25,12 @@ type ActivatedBackend = {
   invoke(value: JsonValue, signal: AbortSignal): JsonValue | Promise<JsonValue>;
   deactivate?(signal: AbortSignal): void | Promise<void>;
 };
-// Backend ESM exports activate({signal}), returning ActivatedBackend or a Promise.
+// Backend ESM exports activate({signal, files}), returning ActivatedBackend or a Promise.
+// files.moveNoReplace(source, destination): Promise<void> is the concrete
+// Linux ARM64 preview primitive; unsupported platforms refuse explicitly.
 ```
 
-`activate` receives the real epoch-lifetime cancellation signal; individual invocations receive their own real signal. Deactivation is best effort and receives a grace-bounded signal. There are no dummy action/tab/Files/terminal methods, automatic registrations, or stable discovery promises. The module owns its channels, timers and pending calls; future capability registrations need their own concrete consumer and retirement contract.
+`activate` receives the real epoch-lifetime cancellation signal; individual invocations receive their own real signal. Deactivation is best effort and receives a grace-bounded signal. The concrete Files no-replace operation runs in the backend's worker-pool addon, with no overwrite fallback. There are no dummy action/tab/terminal methods, automatic registrations, or stable discovery promises. The module owns its channels, timers and pending calls; future capability registrations need their own concrete consumer and retirement contract.
 
 ## Bootstrap and immutable-version handoff
 
@@ -74,7 +76,7 @@ npm test -- test/integration/extension-runtime.test.ts
 npm test -- test/integration/extension-runtime-parent-death.test.ts
 ```
 
-The explicit artifact includes `index.mjs`, app-owned `bootstrap.mjs`, `packages.mjs` and the existing native lease addon under `dist/extension-runtime`. Native prerequisites are those of the foundation; `yauzl`/`semver` remain direct external dependencies. Normal app build/startup is unchanged. No Files, palette/action contribution or web-view placement is installed by this build.
+The explicit artifact includes `index.mjs`, app-owned `bootstrap.mjs`, `packages.mjs` and the existing native lease addon under `dist/extension-runtime`. Native prerequisites are those of the foundation; `yauzl`/`semver` remain direct external dependencies. Normal Linux ARM64 app builds now include these assets and `files-move.node`; startup activation remains unconnected. A separate `scripts/build-files-extension.mjs` creates the Files archive, not a built-in browser. See [Files development preview](files-development-preview.md) for implemented modules and outstanding production/qualification work.
 
 Controlled tests cover admission races, cancellation, bounded pending calls, replay rejection and separate exit/close facts. Native tests use the actual runtime/store/ESM/bootstrap interface and real direct children, not a copied prototype. They require an assigned disposable native environment; never run them on an owner's working desktop merely because the outer Vitest wrapper is headless. Test artifacts remain when settlement is unknown. Actual parent-process death is a separate native gate from channel loss; do not substitute one for the other. The Linux-only parent-death test uses a read-only Python pidfd observer, opened while the backend still belongs to its live main. It neither signals nor reaps the backend; the parent is terminated through its retained ChildProcess handle. Missing Python/pidfd support fails before deliberate parent death. This test-only observer is not an app dependency or a cross-platform exit-code claim; non-Linux explicitly skips that case. Its source/build/profile receipts are retained for the outer qualification owner to export and remove only after verified settlement.
 

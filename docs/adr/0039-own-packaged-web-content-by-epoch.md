@@ -13,11 +13,15 @@ from browser lifetime ([ADR 0038](0038-pin-immutable-installed-packages.md)).
 
 A lazy `Extension View Host` owns one nonpersistent session/origin and at most
 eight `WebContentsView` instances for one epoch/window. It uses Node-off,
-context-isolated content and an app-owned visibility-only preload. This is an
+context-isolated content and an app-owned visibility/own-backend-request preload. This is an
 internal adapter, not an extension SDK, security sandbox or user activation path.
 Core tab ordering includes hosted slots alongside terminal and retained Settings
 content. Main issues view identities; only the owning terminal main frame can
-present/close them. Monotonic layout revisions, owner lifetime and main-approved
+present/close them. The window router maps each issued identity to its epoch and
+acknowledges hiding every other epoch before presenting a new selection. Child
+requests authenticate the actual child main frame and live view; bounded JSON
+routes only to its captured backend callback, with cancellation on destruction.
+Neither caller-provided IDs nor terminal renderer requests can select a backend. Monotonic layout revisions, owner lifetime and main-approved
 content bounds prevent stale presentation and keep host chrome outside the view.
 CSS geometry is converted using actual page zoom, not terminal font zoom.
 
