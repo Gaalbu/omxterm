@@ -24,6 +24,8 @@ CSS geometry is converted using actual page zoom, not terminal font zoom.
 DOM selection and overlay opening await an acknowledged native hide. Overlay
 closure can restore only the same still-current content owner. Failed hides
 suppress presentation rather than showing a DOM modal behind live native pixels.
+Pending or failed terminal handoffs also refuse terminal injection, Find,
+clipboard and Snippets targeting; refused actions are not buffered or replayed.
 Field input stays in the child; core commands use the existing matcher with the
 owning window. Native clipboard operations target selected hosted contents,
 never a former terminal field. Host Close retains its Enter gesture through

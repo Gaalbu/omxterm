@@ -152,7 +152,8 @@ export function createTerminalTabs(
 
   const selectedApplicationTab = () => tabs[selectedIndex];
   const selectedTab = () => terminalTab(selectedApplicationTab());
-  const focusedPane = () => selectedTab()?.focused;
+  const focusedPane = () => (disposed ? undefined : selectedTab()?.focused);
+  const interactivePane = () => (contentReady ? focusedPane() : undefined);
   const contextMenu = createPaneContextMenu({
     focusedPane,
     disposed: () => disposed,
@@ -331,9 +332,8 @@ export function createTerminalTabs(
   return {
     ready: createTab(),
     ...settingsActions,
-    isTerminalSelected: () => selectedApplicationTab()?.kind === "terminal",
+    isTerminalSelected: () => !!interactivePane(),
     openOverlay: hosted.openOverlay,
-
     setSessionTitle(sessionId, title) {
       if (disposed) return;
       const pane = findPaneBySession(terminalTabs(), sessionId);
@@ -349,15 +349,15 @@ export function createTerminalTabs(
       if (!disposed && selectedTab()) configuration.zoom(command);
     },
     clipboardAction(action, target) {
-      if (!selectedTab() || !contentReady) return;
+      if (!interactivePane()) return;
       applyClipboardAction(
         target ? contextMenu.take(target) : focusedPane(),
         action,
       );
     },
-    find: () => focusedPane()?.surface?.find(),
-    injectText: (text) => void focusedPane()?.surface?.inject(text),
-    captureSnippetTarget: () => snippetTarget(focusedPane()),
+    find: () => interactivePane()?.surface?.find(),
+    injectText: (text) => void interactivePane()?.surface?.inject(text),
+    captureSnippetTarget: () => snippetTarget(interactivePane()),
     captureActionTarget: () =>
       captureActionTarget(
         selectedApplicationTab,

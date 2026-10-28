@@ -48,19 +48,24 @@ const owners: { dispose(): void }[] = [];
 afterEach(() => {
   owners.splice(0).forEach((owner) => owner.dispose());
   vi.restoreAllMocks();
+  vi.useRealTimers();
   document.body.replaceChildren();
 });
 const settle = async () => {
   for (let i = 0; i < 40; ++i) await Promise.resolve();
 };
 
-it.each(
-  [false, true].flatMap((reject) =>
-    [false, true].map((crash) => ({ reject, crash })),
+it.each([
+  ...[false, true].flatMap((reject) =>
+    [false, true].map((crash) => ({ reject, crash, timeout: "none" })),
   ),
-)(
-  "keeps final ownership through held destruction and pin release (reject=$reject, crash=$crash)",
-  async ({ reject, crash }) => {
+  ...["destruction", "release"].flatMap((timeout) =>
+    [false, true].map((crash) => ({ reject: false, crash, timeout })),
+  ),
+])(
+  "keeps final ownership through destruction and release (reject=$reject, crash=$crash, timeout=$timeout)",
+  async ({ reject, crash, timeout }) => {
+    if (timeout !== "none") vi.useFakeTimers();
     vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({
       x: 0,
       y: 60,
@@ -155,16 +160,24 @@ it.each(
       expect(release).not.toHaveBeenCalled();
       expect(document.querySelectorAll(".hosted-content-tab")).toHaveLength(1);
       expect(notifyEmpty).not.toHaveBeenCalled();
+      if (timeout === "destruction")
+        // Requested close first bounds its own destruction join, then retires.
+        await vi.advanceTimersByTimeAsync(crash ? 5001 : 10001);
       child.destroy();
       await settle();
       expect(release).toHaveBeenCalledOnce();
+      if (timeout === "release") await vi.advanceTimersByTimeAsync(5001);
       expect(document.querySelectorAll(".hosted-content-tab")).toHaveLength(1);
       expect(notifyEmpty).not.toHaveBeenCalled();
       pin.resolve();
       const outcome = await host.retire();
       await settle();
-      expect(outcome.status).toBe(reject ? "failed" : "settled");
-      if (reject) {
+      expect(outcome.status).toBe(
+        reject || timeout !== "none" ? "failed" : "settled",
+      );
+      if (timeout !== "none")
+        expect(outcome).toEqual({ status: "failed", reason: "timeout" });
+      if (reject || timeout !== "none") {
         expect(document.querySelectorAll(".hosted-content-tab")).toHaveLength(
           1,
         );

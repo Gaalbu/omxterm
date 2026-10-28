@@ -168,6 +168,48 @@ it("awaits hide before DOM focus and ignores a stale selection continuation", as
   expect(vi.mocked(h.bridge.present).mock.lastCall?.[0].id).toBe("view-b");
 });
 
+it.each(["accept", "refuse", "reject"])(
+  "refuses hidden-terminal actions until hide commits (%s)",
+  async (outcome) => {
+    const h = harness();
+    await h.tabs.ready;
+    h.open();
+    await settle();
+    const hide = deferred<boolean>();
+    vi.mocked(h.bridge.present).mockImplementationOnce(() => hide.promise);
+    h.tabs.handleCommand({ action: "previous" });
+    const attempt = () => {
+      h.tabs.injectText("synthetic dropped-path");
+      h.tabs.find();
+      h.tabs.clipboardAction("paste");
+      expect(h.tabs.captureSnippetTarget()).toBeUndefined();
+      expect(h.tabs.isTerminalSelected()).toBe(false);
+      expect(h.surfaces[0]!.inject).not.toHaveBeenCalled();
+      expect(h.surfaces[0]!.find).not.toHaveBeenCalled();
+      expect(h.surfaces[0]!.paste).not.toHaveBeenCalled();
+    };
+    attempt();
+    if (outcome === "reject") hide.reject(new Error("synthetic hide"));
+    else hide.resolve(outcome === "accept");
+    await settle();
+    if (outcome !== "accept") {
+      attempt();
+      // Explicit successful selection may recover; refused input is never replayed.
+      h.tabs.handleCommand({ action: "select", position: 1 });
+      await settle();
+    }
+    expect(h.tabs.isTerminalSelected()).toBe(true);
+    expect(h.tabs.captureSnippetTarget()).toBeDefined();
+    expect(h.surfaces[0]!.inject).not.toHaveBeenCalled();
+    h.tabs.injectText("fresh input");
+    h.tabs.find();
+    h.tabs.clipboardAction("paste");
+    expect(h.surfaces[0]!.inject).toHaveBeenCalledWith("fresh input");
+    expect(h.surfaces[0]!.find).toHaveBeenCalledOnce();
+    expect(h.surfaces[0]!.paste).toHaveBeenCalledOnce();
+  },
+);
+
 it("holds overlays until hide acknowledgment and restores only the still-current owner", async () => {
   const h = harness();
   await h.tabs.ready;

@@ -242,7 +242,9 @@ class NativeExtensionViewHost {
       failures.push("release");
     }
     const failed = this.#cleanupFailed || failures.length > 0;
-    if (!failed)
+    // A timeout permanently published failure; late drain is not permission
+    // to remove its retained core tab or bypass failure acknowledgement.
+    if (!failed && this.#state !== "failed")
       for (const entry of this.#views.values()) this.#notifyRetired(entry);
     this.#views.clear();
     return failed
