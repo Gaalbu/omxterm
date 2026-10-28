@@ -71,7 +71,7 @@ The **Config File** page shows `config.json` with an explicit **Save**, using th
 
 The **Shortcuts** page lists every remappable action with the shortcut it uses now and how it is set:
 
-- **Default:** follows OMXTerm's built-in shortcut (no entry in `config.json`). **Default** removes your entry again. Command Palette has no built-in shortcut on any platform.
+- **Default:** follows OMXTerm's built-in shortcut (no entry in `config.json`). **Default** removes your entry again. Command Palette defaults to `Cmd+Shift+P` on macOS and `Ctrl+Shift+P` on Linux and Windows.
 - **Custom:** **Record**, then press the new combination; it is saved as that action's `keybinds` entry. Plain Escape cancels; modified Escape can be recorded. An unsupported combination (including a letter without Ctrl, Alt, Cmd or AltGr, or a layout identity the accelerator cannot represent) asks you to try again; F1–F24 can stand alone. While recording, the keys you press, their held repeats and releases don't run their actions or reach the terminal.
 - **Unbound:** **Unbind** saves `null`, so the action stays in the menu without a key.
 
