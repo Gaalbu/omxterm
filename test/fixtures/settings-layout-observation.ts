@@ -103,7 +103,7 @@ export function observeSettingsLayout(
   const measure = document.createElement("canvas").getContext("2d")!;
   return {
     panels: [...root.querySelectorAll<HTMLElement>(".settings-panel")]
-      .slice(0, 7)
+      .slice(0, 8) // Retain one overflow entry beyond the seven expected panels.
       .map((p) => ({
         id: p.id,
         hidden: p.hasAttribute("hidden"),
@@ -113,7 +113,7 @@ export function observeSettingsLayout(
     categories: [
       ...root.querySelectorAll<HTMLElement>(".settings-tabs [role=tab]"),
     ]
-      .slice(0, 7)
+      .slice(0, 8) // Extra categories must remain visible to the inventory oracle.
       .map((tab) => ({
         panel: tab.getAttribute("aria-controls"),
         selected: tab.getAttribute("aria-selected") === "true",
