@@ -194,6 +194,10 @@ export function renderExtensions(
   }
   async function run(request: ExtensionsRequest) {
     if (busy || !live()) return;
+    if (request.operation === "install-link" && !request.url) {
+      render({ ok: false, error: "invalid-url" });
+      return;
+    }
     busy = true;
     token = request.operation === "install-link" ? request.token : undefined;
     cancel.hidden = !token;

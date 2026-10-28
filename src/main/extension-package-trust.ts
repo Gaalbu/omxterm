@@ -11,6 +11,13 @@ import {
 } from "../installed-packages/archive.js";
 import type { InstalledPackages } from "../installed-packages/installed-packages.js";
 
+// Distinguish known preapproval revocation from validation/cleanup failure.
+export class PackageTrustRevokedError extends PackageError {
+  constructor() {
+    super("unavailable");
+  }
+}
+
 export type PackageTrustPreview = {
   token: string;
   digest: string;
@@ -74,7 +81,7 @@ export function createExtensionPackageTrust(options: {
         const installed = (await options.packages.snapshot()).find(
           (entry) => entry.id === validated.manifest.id,
         );
-        if (!current(owner, candidate)) throw new PackageError("unavailable");
+        if (!current(owner, candidate)) throw new PackageTrustRevokedError();
         candidate.bytes = bytes;
         candidate.preview = {
           token: candidate.token,

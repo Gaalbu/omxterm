@@ -8,6 +8,7 @@ import {
   ExtensionDownloadError,
 } from "./extension-download";
 import { installExtensionFromDialog } from "./extension-install-dialog";
+import { PackageTrustRevokedError } from "./extension-package-trust";
 
 /** Owns request-scoped network/consent lifetimes independently of the renderer. */
 export function createExtensionLinkInstaller(
@@ -50,6 +51,10 @@ export function createExtensionLinkInstaller(
           bytes,
         );
         if (!installed) throw new ExtensionDownloadError("cancelled");
+      } catch (error) {
+        if (abort.signal.aborted && error instanceof PackageTrustRevokedError)
+          throw new ExtensionDownloadError("cancelled");
+        throw error;
       } finally {
         pending.delete(window);
         owner.removeListener("destroyed", cancel);

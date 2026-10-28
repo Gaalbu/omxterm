@@ -10,7 +10,10 @@ import type {
   OpenDialogReturnValue,
 } from "electron";
 import { isTerminalTabCommand } from "../../src/shared/terminal-contract";
-import { InstalledPackages } from "../../src/installed-packages/installed-packages";
+import {
+  InstalledPackages,
+  PackageError,
+} from "../../src/installed-packages/installed-packages";
 import { packageArchive } from "../fixtures/extension-package-archive";
 import {
   extensionsIpc,
@@ -256,6 +259,61 @@ it("cancellation is owner/request bound and late acquisition cannot open consent
   expect(await request({ operation: "snapshot" })).toMatchObject({
     entries: [],
   });
+});
+it("never relabels postapproval publication uncertainty as cancellation", async () => {
+  const token = "11111111-1111-1111-1111-111111111111";
+  const install = vi
+    .spyOn(InstalledPackages.prototype, "install")
+    .mockImplementationOnce(async () => {
+      await request({ operation: "cancel-install", token });
+      throw new PackageError("outcome-unknown");
+    });
+  try {
+    expect(
+      await request({
+        operation: "install-link",
+        url: "https://example.org/a",
+        token,
+      }),
+    ).toEqual({ ok: false, error: "outcome-unknown" });
+    expect(adapters.consent).toHaveBeenCalledTimes(1);
+    expect(install).toHaveBeenCalledTimes(1);
+  } finally {
+    install.mockRestore();
+  }
+});
+it("reports cancellation during captured-byte validation without consent or publication", async () => {
+  let release!: () => void;
+  let validating = false;
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const snapshot = vi
+    .spyOn(InstalledPackages.prototype, "snapshot")
+    .mockImplementationOnce(async () => {
+      validating = true;
+      await held;
+      return [];
+    });
+  try {
+    const token = "11111111-1111-1111-1111-111111111111";
+    const pending = request({
+      operation: "install-link",
+      url: "https://example.org/a",
+      token,
+    });
+    await vi.waitFor(() => expect(validating).toBe(true));
+    await request({ operation: "cancel-install", token });
+    release();
+    expect(await pending).toEqual({ ok: false, error: "cancelled" });
+    expect(adapters.consent).not.toHaveBeenCalled();
+    expect(await request({ operation: "snapshot" })).toMatchObject({
+      entries: [],
+    });
+  } finally {
+    release();
+    snapshot.mockRestore();
+  }
 });
 it("renderer loss revokes a pending HTTPS consent and malformed bytes preserve the old installation", async () => {
   await request({ operation: "install" });

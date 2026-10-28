@@ -13,7 +13,7 @@ async function sourceFiles(directory: string): Promise<string[]> {
 }
 
 describe("Application Network Boundary", () => {
-  it("contains no application-owned network, telemetry, crash, update, or remote-log capability", async () => {
+  it("allows only the explicit main-owned HTTPS installer and packaged view origin, not general application networking", async () => {
     const root = path.resolve(import.meta.dirname, "../../src");
     const sources = await sourceFiles(root);
     const forbidden = [
@@ -32,6 +32,20 @@ describe("Application Network Boundary", () => {
 
     for (const file of sources) {
       let source = await readFile(file, "utf8");
+      if (
+        path.relative(root, file).split(path.sep).join("/") ===
+        "main/extension-download.ts"
+      ) {
+        // Exact transport/type imports only; behavioral tests cover bounded TLS,
+        // redirects, response bytes and cancellation. Other capabilities stay forbidden.
+        for (const allowed of [
+          'import { request } from "node:https";',
+          'import type { IncomingMessage } from "node:http";',
+        ]) {
+          expect(source.split(allowed)).toHaveLength(2);
+          source = source.replace(allowed, "");
+        }
+      }
       if (
         path.relative(root, file).split(path.sep).join("/") ===
         "main/extension-view-host.ts"

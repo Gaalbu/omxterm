@@ -3,6 +3,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { translatorFor } from "../../src/shared/i18n";
 import type { Translate } from "../../src/renderer/renderer-language";
 import { renderExtensions } from "../../src/renderer/settings/settings-extensions";
+import { isExtensionsRequest } from "../../src/shared/extensions";
 import type {
   ExtensionsRequest,
   ExtensionsResult,
@@ -28,6 +29,29 @@ function click(text: string) {
     .find((button) => button.textContent === text)!
     .click();
 }
+it("explains empty and whitespace-only URLs before preload without claiming an unknown mutation", async () => {
+  const invoked = vi.fn().mockResolvedValue(snapshot);
+  const request = async (
+    value: ExtensionsRequest,
+  ): Promise<ExtensionsResult> => {
+    if (!isExtensionsRequest(value))
+      throw new TypeError("Invalid extension request");
+    return invoked(value) as Promise<ExtensionsResult>;
+  };
+  document.body.append(renderExtensions(document, { request }, () => true));
+  await vi.waitFor(() =>
+    expect(document.body.textContent).toContain("generation 4"),
+  );
+  for (const value of ["", "   "]) {
+    document.querySelector("input")!.value = value;
+    click("Install from link");
+    expect(document.body.textContent).toContain("Use an HTTPS link");
+    expect(document.body.textContent).not.toContain(
+      "Operation outcome unknown",
+    );
+  }
+  expect(invoked).toHaveBeenCalledTimes(1);
+});
 it("retains a pending HTTPS request across language changes and cancels its exact identity on dismissal", async () => {
   let finish!: (result: ExtensionsResult) => void;
   const request = vi
