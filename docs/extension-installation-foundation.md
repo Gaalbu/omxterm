@@ -8,7 +8,7 @@ Status: internal development checkpoint for [#715](https://github.com/luizomf/om
 
 - `InstalledPackages.open({root, runtime, leases})` opens a dedicated absolute, user-owned local store. `runtime` supplies valid application/API semver versions. `createNativeLeaseAdapter(absoluteAddonPath)` is the real adapter; a controlled adapter can hold acquisition/release boundaries in tests while retaining real kernel locks.
 - `snapshot()` returns installation metadata, including disabled entries and tombstones. It does not observe global process/runtime state.
-- `install(localArchive, {expectedGeneration, enabled})` validates and stages a complete local package before the bounded writer transaction. Generation `0` means never installed; updates and reinstalls must name the observed generation, including tombstones. The explicit `enabled` choice is metadata only, never code execution or a substitute for the future trust UI. The resulting entry includes its digest and new generation.
+- `install(localArchive, {expectedGeneration, enabled})` validates and stages a complete local package before the bounded writer transaction. The internal caller may supply a bounded Buffer instead of a filename; bytes and options are copied synchronously before asynchronous admission so a consent service can install exactly its captured archive rather than reopen a mutable source. Generation `0` means never installed; updates and reinstalls must name the observed generation, including tombstones. The explicit `enabled` choice is metadata only, never code execution or a substitute for the future trust UI. The resulting entry includes its digest and new generation.
 - `setEnabled(id, expectedGeneration, enabled)` and `uninstall(id, expectedGeneration)` publish a new generation. Uninstall publishes a tombstone, not a claim all processes stopped or bytes disappeared. Disable retains its installed version as referenced. A tombstone retains generation indefinitely to prevent identical-byte reinstall from reviving stale permits.
 - `openVersion(id, expectedSelection?)` returns a separately acquired shared pin, captured generation/digest, immutable directory, manifest, `revalidate()` and idempotent async `release()`. A second process can use the captured selection to acquire its **own** pin. Hold each pin until its actual file-reading lifetime ends; never pass a borrowed descriptor as an independent pin. `revalidate()` returns false after release, disable, update or tombstone/reinstall. It is a point-in-time admission check, not a revocable lock on future side effects.
 - `collect()` performs bounded eligible detachment/deletion and returns `removed` and `pending` identities. No collection timer/daemon is installed. Future management/startup/runtime consumers call it at their owned lifecycle points. Pending cleanup is not whole-root failure. Collection inventories at most 10,000 namespace entries outside writer exclusion and examines at most 32 candidates per writer transaction, including pinned/referenced candidates and registry temporary files. `more` indicates an unexamined remainder of that snapshot; the same instance advances its cursor on the next deliberate call. Concurrent mutations can change that snapshot, so this is not global cleanup completion. Sidecar files remain permanent, including garbage/staging sidecars.
@@ -37,6 +37,14 @@ The first internal manifest is strict and deliberately small:
   "backend": "backend/index.mjs"
 }
 ```
+
+The main-owned `createExtensionPackageTrust` service validates captured chooser
+bytes by extracting without importing, returns identity/digest and the observed
+installation generation, and retains one one-shot approval per infrastructure
+owner. Cancellation, owner disposal and replacement revoke that consent. Approval
+installs the retained bytes with the observed generation; conflicts or unknown
+publication consume the approval and never authorize an automatic retry. This
+service alone is not a production Settings route or runtime activation.
 
 Unknown fields are rejected. ID is bounded lowercase ASCII namespace/name; version is semver; application and API ranges must parse and match the explicitly supplied runtime. Normal semver prerelease rules apply: a development application requires a range admitting that prerelease tuple. Backend must name an exact regular archive entry. It is validated but never imported. View/action/platform contribution schema and publisher/source trust metadata belong to later consumers, not permissive placeholders in this format. This internal schema is not a stable extension author API or an assignment of an application release number.
 

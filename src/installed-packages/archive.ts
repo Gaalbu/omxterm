@@ -246,15 +246,22 @@ export async function syncDirectory(directory: string): Promise<void> {
 }
 
 export async function extractPackage(
-  archive: string,
+  archive: string | Buffer,
   destination: string,
   runtime: PackageRuntime,
 ): Promise<{ digest: string; manifest: PackageManifest }> {
-  if (path.extname(archive).toLowerCase() !== ".omxext")
+  if (
+    typeof archive === "string" &&
+    path.extname(archive).toLowerCase() !== ".omxext"
+  )
     throw new PackageError("invalid-package");
-  // One bounded immutable snapshot supplies both digest and extraction. A caller
-  // changing the source after selection cannot publish bytes under the wrong hash.
-  const bytes = await readBoundedFile(archive, PACKAGE_LIMITS.archiveBytes);
+  if (Buffer.isBuffer(archive) && archive.length > PACKAGE_LIMITS.archiveBytes)
+    throw new PackageError("invalid-package");
+  // Capture before the first await. The management service can retain approved
+  // bytes rather than reopen a mutable chooser path after the trust dialog.
+  const bytes = Buffer.isBuffer(archive)
+    ? Buffer.from(archive)
+    : await readBoundedFile(archive, PACKAGE_LIMITS.archiveBytes);
   const digest = createHash("sha256").update(bytes).digest("hex");
   const zip = await fromBufferPromise(bytes, { strictFileNames: true }).catch(
     () => {

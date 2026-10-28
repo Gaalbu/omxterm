@@ -16,6 +16,7 @@ import {
   isRecord,
   PackageError,
   readBoundedFile,
+  PACKAGE_LIMITS,
   syncDirectory,
   validId,
   type PackageManifest,
@@ -248,11 +249,19 @@ export class InstalledPackages {
     );
   }
   install(
-    archive: string,
+    archive: string | Buffer,
     options: { expectedGeneration: number; enabled: boolean },
   ): Promise<Installation> {
+    if (
+      Buffer.isBuffer(archive) &&
+      archive.length > PACKAGE_LIMITS.archiveBytes
+    )
+      return Promise.reject(new PackageError("invalid-package"));
+    const captured = Buffer.isBuffer(archive) ? Buffer.from(archive) : archive;
+    const expectedGeneration = options.expectedGeneration;
+    const enabled = options.enabled;
     return this.bounded(async () => {
-      if (typeof options.enabled !== "boolean")
+      if (typeof enabled !== "boolean")
         throw new PackageError("invalid-package");
       await this.checkRoot();
       const stageId = randomUUID();
@@ -266,7 +275,7 @@ export class InstalledPackages {
           await mkdir(stage, { mode: 0o700 });
           created = true;
           const { manifest, digest } = await extractPackage(
-            archive,
+            captured,
             stage,
             this.runtime,
           );
@@ -283,11 +292,7 @@ export class InstalledPackages {
           await syncDirectory(stage);
           return this.writer(async () => {
             const registry = await this.readRegistry();
-            const old = this.entry(
-              registry,
-              manifest.id,
-              options.expectedGeneration,
-            );
+            const old = this.entry(registry, manifest.id, expectedGeneration);
             const version = path.join(this.root, "versions", digest);
             if (await exists(version)) {
               await directory(version);
@@ -308,7 +313,7 @@ export class InstalledPackages {
               id: manifest.id,
               generation: nextGeneration(old),
               digest,
-              enabled: options.enabled,
+              enabled,
               manifest,
             };
             registry.installations = registry.installations.filter(
