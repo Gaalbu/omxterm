@@ -292,7 +292,7 @@ it("retains the actual failed pair outside the removed profile, without recaptur
     for (const file of ["main.cjs", "preload.cjs", "renderer/index.js"])
       await writeFile(path.join(profile, file), "synthetic bundle");
     const destination = {
-      directory: path.join(root, "failure"),
+      directory: path.join(root, "fresh", "native-fixtures", "failure"),
       sourceDirectory: profile,
       sourceCommit: "a".repeat(40),
     };

@@ -43,6 +43,7 @@ export async function retainHoverFailure(
     }
     // A unique runner-owned sibling of the supervisor receipt, not its profile.
     // Refuse reuse; a partially written directory remains available to its owner.
+    await mkdir(path.dirname(destination.directory), { recursive: true });
     await mkdir(destination.directory, { mode: 0o700 });
     const source: Record<string, string> = {};
     for (const file of ["main.cjs", "preload.cjs", "renderer/index.js"]) {
