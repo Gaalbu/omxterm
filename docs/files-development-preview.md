@@ -144,8 +144,33 @@ one-shot request identity and actual sender; closing Settings cancels its pendin
 link operation, while renderer loss/navigation, window closure and application
 retirement revoke its authority. Switching tabs retains the pending operation.
 Network errors expose fixed localized categories, never native error text, URL,
-query or archive content in logs. No download history, catalog, background updater,
-remote extension views or stable distribution/SDK is added.
+query or archive content in logs. No download history, background updater,
+remote extension views or stable SDK is added.
+
+## Official catalog
+
+Settings → Extensions offers **Browse official extensions** and explicit Refresh.
+No request is made on startup or reopening Settings. Failed refresh retains the
+last successful in-memory snapshot with a stale warning; cold offline failure is
+unavailable, not an empty catalog. Local-file installation and installed management
+remain usable. en-US/pt-BR controls relabel without repeating requests.
+
+Main owns the fixed project HTTPS endpoint and captured release selections. Before
+trust, downloaded length/SHA-256 and manifest ID/version/engine strings must match
+exactly; there is no fallback to unchecked link installation. The same native
+trusted-code warning applies. Official means project-maintained, not harmless,
+sandboxed or independently signed. Update offers a newer compatible release;
+Reinstall requires identical installed bytes. Downgrades or same-version different
+bytes carry explicit replacement warnings, including in the native consent dialog.
+Installation/replacement remains dormant. Cancel or owner loss before approval
+revokes consent; publication already dispatched cannot be recalled or retried
+implicitly. Refresh cannot retarget a captured installation.
+
+Files0.1.0 still supports local/link installation on dev.8; catalog-capable host
+source starts at dev.9. Declared compatibility is not qualification of every version.
+See [distribution](extension-distribution.md) and the
+[publication procedure](release.md#files-catalog-publication). An empty source
+catalog does not mean a usable public preview has shipped.
 
 ## Build and evidence boundary
 

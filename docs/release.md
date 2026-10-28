@@ -238,6 +238,43 @@ add it. Public readback/checksums and a compatible public host are needed before
 claiming distribution; neither a branch, local artifact nor CI upload is shipment.
 The normal stable-release procedure and its complete asset set remain unchanged.
 
+## Files catalog publication
+
+This partial preview is separate from the complete stable release below. The
+integration maintainer owns publication after full candidate review/corrections and
+exact packaged qualification. Keep source review SHA, final SHA, host package and
+Files archive identities distinct; a reused archive retains its original source
+receipt. Files0.1.0 minimum dev.8 remains valid for local/link installation; dev.9
+adds catalog browsing. Do not rebuild or replace published same-version bytes.
+
+1. Qualify the final Linux ARM64 host AppImage with the separate Files archive:
+   catalog → exact-byte trust → dormant install → Files operation/conflict →
+   replacement/management → same live PTY → joined Quit. Record whether transport
+   is controlled or actual public HTTPS, plus synthetic-input/dialog limitations.
+2. Create separate draft prereleases at exact source commits: host
+   `v0.23.0-dev.9` and Files `ext-files-v0.1.0`. Use `--prerelease --latest=false`
+   with `gh release create`; neither becomes Latest. Host gets the qualified
+   AppImage/checksum (and helper/checksum if included, with helper qualification
+   limitations). Files gets its `.omxext`, `.omxext.sha256`, `.omxext.json`.
+   Preserve MIT/provenance and explicitly state Linux ARM64 preview/SDK limits.
+3. Download draft assets and compare exact sizes/SHA-256 against retained receipts;
+   then publish/seal each release. Download public URLs again and verify the same
+   bytes, including archive checksum and receipt. Never clobber an existing release.
+4. Generate the candidate from those verified archive/receipt/checksum files:
+   `node scripts/create-files-catalog.mjs PATH/files-0.1.0.omxext CANDIDATE.json`.
+   Inspect its original source commit, immutable release URLs, target, engine range,
+   byte count and digest. Promote this reviewed JSON to
+   `distribution/official-extensions-v1.json` only after public availability.
+5. Read back the exact fixed raw catalog endpoint; run one bounded actual packaged
+   public-endpoint installation and retained-terminal/management/Quit smoke. Verify
+   downloaded bytes against the published release receipt. A localhost transport
+   fixture or successful upload does not qualify this boundary.
+
+Record publication URLs, exact readback hashes and actual outcomes. Until both a
+compatible public host and public Files consumption succeed, #728 remains open;
+source integration or a valid empty catalog is not product distribution. No signing
+infrastructure, stable SDK or broader platform campaign is implied.
+
 ## Publication
 
 Create tag `vX.Y.Z` and a draft GitHub Release in `luizomf/omxterm`. Upload every applicable file (twelve with both x64 platforms), download and verify the complete set against local byte counts and SHA-256 records, then publish to seal the immutable release:

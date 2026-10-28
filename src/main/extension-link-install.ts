@@ -1,4 +1,5 @@
 import type { BrowserWindow } from "electron";
+import type { CatalogRelease } from "./extension-catalog";
 import type { Translator } from "../shared/i18n";
 import type { ExtensionsRequest } from "../shared/extensions";
 import type { createExtensionManager } from "./extension-manager";
@@ -28,6 +29,7 @@ export function createExtensionLinkInstaller(
       window: BrowserWindow,
       manager: ReturnType<typeof createExtensionManager>,
       request: Extract<ExtensionsRequest, { operation: "install-link" }>,
+      expected?: CatalogRelease,
     ) {
       if (pending.size >= 4 || pending.has(window))
         throw new PackageError("busy");
@@ -49,6 +51,7 @@ export function createExtensionLinkInstaller(
           () => stopping() || abort.signal.aborted,
           translator,
           bytes,
+          expected,
         );
         if (!installed) throw new ExtensionDownloadError("cancelled");
       } catch (error) {

@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+import type { CatalogRelease } from "../../src/main/extension-catalog";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -51,6 +53,58 @@ function service() {
 }
 
 describe("captured package consent", () => {
+  function release(bytes: Buffer): CatalogRelease {
+    return {
+      id: manifest.id,
+      name: manifest.name,
+      description: "Files",
+      version: manifest.version,
+      engines: { ...manifest.engines },
+      targets: ["linux-arm64"],
+      archive: {
+        url: "https://github.com/luizomf/omxterm/releases/download/ext-files-v1.0.0/files.omxext",
+        sha256: createHash("sha256").update(bytes).digest("hex"),
+        bytes: bytes.length,
+      },
+      sourceCommit: "a".repeat(40),
+      releaseUrl:
+        "https://github.com/luizomf/omxterm/releases/tag/ext-files-v1.0.0",
+    };
+  }
+  it("binds catalog size/hash and exact manifest fields before issuing consent", async () => {
+    const trust = service();
+    const bytes = archive();
+    const expected = release(bytes);
+    const mismatches = [
+      {
+        ...expected,
+        archive: { ...expected.archive, bytes: bytes.length + 1 },
+      },
+      { ...expected, archive: { ...expected.archive, sha256: "b".repeat(64) } },
+      { ...expected, id: "other.files" },
+      { ...expected, version: "2.0.0" },
+      { ...expected, engines: { ...expected.engines, api: ">=0.1.0 <0.2.0" } },
+      {
+        ...expected,
+        engines: { ...expected.engines, omxterm: ">=0.23.0-dev.5 <0.24.0" },
+      },
+    ];
+    for (const selected of mismatches)
+      await expect(trust.prepare({}, bytes, selected)).rejects.toThrow(
+        "catalog-mismatch",
+      );
+    expect(await packages.snapshot()).toEqual([]);
+    const owner = {};
+    const preparing = trust.prepare(owner, bytes, expected);
+    expected.id = "changed.identity";
+    const preview = await preparing;
+    expect(preview.catalogAction).toBe("install");
+    const installed = await trust.approve(owner, preview.token);
+    expect(installed.digest).toBe(release(bytes).archive.sha256);
+    const reinstall = await trust.prepare(owner, bytes, release(bytes));
+    expect(reinstall.catalogAction).toBe("reinstall");
+    trust.cancel(owner);
+  });
   it("installs approved A bytes after the chooser path becomes B; does not import", async () => {
     const trust = service();
     const owner = {};

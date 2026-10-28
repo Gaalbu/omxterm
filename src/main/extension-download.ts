@@ -72,6 +72,7 @@ function redirect(
 async function body(
   incoming: IncomingMessage,
   signal: AbortSignal,
+  maximum: number,
 ): Promise<Buffer> {
   if (
     incoming.statusCode !== 200 ||
@@ -82,7 +83,7 @@ async function body(
   const length = incoming.headers["content-length"];
   if (
     length !== undefined &&
-    (!/^\d+$/.test(length) || Number(length) > PACKAGE_LIMITS.archiveBytes)
+    (!/^\d+$/.test(length) || Number(length) > maximum)
   )
     throw new ExtensionDownloadError("download-limit");
   const chunks: Buffer[] = [];
@@ -91,8 +92,7 @@ async function body(
     signal.throwIfAborted();
     const bytes = Buffer.from(chunk as Uint8Array);
     size += bytes.length;
-    if (size > PACKAGE_LIMITS.archiveBytes)
-      throw new ExtensionDownloadError("download-limit");
+    if (size > maximum) throw new ExtensionDownloadError("download-limit");
     chunks.push(bytes);
   }
   signal.throwIfAborted();
@@ -106,6 +106,7 @@ async function body(
 export async function downloadExtension(
   value: string,
   owner: AbortSignal,
+  maximum: number = PACKAGE_LIMITS.archiveBytes,
 ): Promise<Buffer> {
   let url = extensionDownloadUrl(value);
   const timeout = AbortSignal.timeout(60_000);
@@ -116,7 +117,7 @@ export async function downloadExtension(
       const incoming = await response(url, signal);
       try {
         const next = redirect(incoming, url, redirects);
-        if (!next) return await body(incoming, signal);
+        if (!next) return await body(incoming, signal, maximum);
         url = next;
       } finally {
         incoming.destroy();

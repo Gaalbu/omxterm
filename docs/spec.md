@@ -1519,8 +1519,18 @@ IPC, PTY control, resize, duration, and failures; they must never contain PTY
 input/output, clipboard data, environment contents, configuration contents,
 executable names, command arguments, commands, titles, secrets, or transcripts.
 
-The application makes remote requests only for deliberate HTTPS extension archive
-installation in the Linux ARM64 development preview. Main bounds acquisition and
+The application makes remote requests only for deliberate official-catalog browsing
+and HTTPS extension archive installation in the Linux ARM64 development preview.
+The fixed project catalog is fetched only on Browse/Refresh, never startup or
+Settings reopen. Its bounded versioned JSON supplies plain-text release cards;
+main captures selections, checks supported target and host/API compatibility,
+and requires exact archive size/SHA-256 and manifest identity/version/engines
+before the existing one-shot trust flow. Failed refresh retains a visibly stale
+in-memory snapshot; cold failure is unavailable, not empty. Local/installed
+management remains usable offline. Explicit Update, exact-byte Reinstall and
+warned replacement/downgrade never activate code automatically. Official means
+project-maintained, not sandboxed, harmless or independently signed. See the
+[distribution decision](extension-distribution.md). Main bounds acquisition and
 passes captured bytes through existing archive validation and explicit trust;
 see the [transport policy](files-development-preview.md#https-archive-installation).
 There is no analytics, telemetry, crash reporting, update check or remote log
@@ -1667,8 +1677,10 @@ The [runtime contract](extension-backend-runtime.md) and
 interfaces, limits and qualification boundary. The [Files development preview](files-development-preview.md)
 connects Settings local/HTTPS archive installation, shared namespaced actions, independently
 pinned application views and bounded normal Quit retirement on Linux ARM64.
-Startup never activates installed code; explicit invocation does. There is no
-catalog, public SDK or extension shortcut configuration.
+Startup never activates installed code; explicit invocation does. The explicit
+official catalog reuses the same installation owner/store; there is no public
+SDK or extension shortcut configuration. An empty source catalog is valid but
+does not constitute public distribution.
 Files archive version/compatibility is maintained separately from the host;
 archives and build receipts are excluded from application packages. Build receipts
 bind final archive bytes to source/tool metadata without claiming qualification.

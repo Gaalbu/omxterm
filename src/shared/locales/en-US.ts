@@ -215,6 +215,35 @@ export const englishMessages = {
     "Download exceeds the 64 MiB archive or five-redirect limit",
   "extensions.download-timeout": "Download exceeded the 60-second limit",
   "extensions.cancelled": "Installation cancelled before approval",
+  "extensions.invalid-catalog": "The catalog is invalid or exceeds its limits",
+  "extensions.catalog-mismatch":
+    "Archive bytes or manifest do not match the selected catalog release",
+  "extensions.catalog-selection":
+    "The catalog selection expired; select the release again",
+  "extensions.catalogHeading": "Official extensions",
+  "extensions.catalogTrust":
+    "Official means project-maintained, not sandboxed or harmless. Extensions run trusted code with access to files, programs and networks. HTTPS and the catalog hash bind the selected bytes; they are not an independent publisher signature. Third-party authors remain responsible for their extensions.",
+  "extensions.catalogBrowse": "Browse official extensions",
+  "extensions.catalogRefresh": "Refresh catalog",
+  "extensions.catalogRetry": "Retry catalog",
+  "extensions.catalogLoading": "Loading the official catalog…",
+  "extensions.catalogStale":
+    "Catalog refresh unavailable. Showing the last successful snapshot; versions may be outdated.",
+  "extensions.catalogUnavailable":
+    "Catalog unavailable. Installed extensions and local-file installation still work offline.",
+  "extensions.catalogIdle":
+    "The catalog connects only when you choose Browse or Refresh. No automatic updates.",
+  "extensions.catalogLoaded":
+    "Catalog loaded. Choose a release to verify its bytes and review trust before installation.",
+  "extensions.catalogEmpty": "The catalog has no published extensions yet.",
+  "extensions.catalogInstalled": "Installed: {version}",
+  "extensions.catalogNotInstalled": "Not installed",
+  "extensions.catalogInstall": "Install",
+  "extensions.catalogUpdate": "Update",
+  "extensions.catalogReinstall": "Reinstall",
+  "extensions.catalogReplace": "Replace installed version",
+  "extensions.catalogReplaceWarning":
+    "This replaces the installed extension with an older version or different bytes of the same version. Review the selected version and digest before approving.",
   "extensions.refresh": "Refresh",
   "extensions.enable": "Enable",
   "extensions.disable": "Disable",

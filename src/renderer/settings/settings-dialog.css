@@ -56,6 +56,26 @@ body.tabs-visible .settings-tab {
   max-width: 720px;
   min-width: 0;
 }
+.extension-catalog,
+.extension-catalog-list,
+.extension-catalog-card {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.extension-catalog-card {
+  padding: 20px;
+  border-radius: var(--ui-radius);
+  background: var(--ui-raised);
+  align-items: flex-start;
+}
+.extension-catalog h3,
+.extension-catalog h4,
+.extension-catalog p {
+  margin: 0;
+}
 .settings-panel[hidden] {
   display: none;
 }

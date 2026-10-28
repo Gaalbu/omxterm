@@ -114,6 +114,35 @@ it("rejects HTTP errors, encoded, empty, truncated and oversized bodies", async 
     ).rejects.toThrow(error);
   }
 });
+it("enforces the smaller catalog budget on declared and actual streamed bytes", async () => {
+  const maximum = 256 * 1024;
+  reply(200, { "content-length": String(maximum + 1) }, []);
+  await expect(
+    downloadExtension(
+      "https://example.org/catalog",
+      new AbortController().signal,
+      maximum,
+    ),
+  ).rejects.toThrow("download-limit");
+  reply(200, {}, [Buffer.alloc(maximum), Buffer.from("x")]);
+  await expect(
+    downloadExtension(
+      "https://example.org/catalog",
+      new AbortController().signal,
+      maximum,
+    ),
+  ).rejects.toThrow("download-limit");
+  reply(200, {}, [Buffer.alloc(maximum)]);
+  expect(
+    (
+      await downloadExtension(
+        "https://example.org/catalog",
+        new AbortController().signal,
+        maximum,
+      )
+    ).length,
+  ).toBe(maximum);
+});
 it("enforces the one total deadline and returns only a safe timeout category", async () => {
   const deadline = new AbortController();
   const timeout = vi

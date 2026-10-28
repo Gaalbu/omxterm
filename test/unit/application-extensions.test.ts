@@ -1,4 +1,6 @@
 import { EventEmitter } from "node:events";
+import { catalogBytes as catalogFixture } from "../fixtures/extension-catalog";
+import { OFFICIAL_CATALOG_URL } from "../../src/main/extension-catalog";
 import { translatorFor, type SupportedLanguage } from "../../src/shared/i18n";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
@@ -131,6 +133,47 @@ function bytes(version = "1.0.0") {
     { name: "index.html", data: "<h1>Files</h1>" },
   ]);
 }
+const catalogBytes = () => catalogFixture(manifest, bytes());
+it("catalog selection composes exact-byte trust, remains captured over refresh and stays dormant", async () => {
+  const token = "a".repeat(36);
+  adapters.download.mockImplementation(async (url) =>
+    url === OFFICIAL_CATALOG_URL ? catalogBytes() : bytes(),
+  );
+  const loaded = await request({ operation: "catalog-refresh", token });
+  const selection = loaded.catalog!.entries[0]!.selection;
+  adapters.consent.mockImplementationOnce(async (_window, options) => {
+    expect(options.detail).toContain("not an independent publisher signature");
+    await request({ operation: "catalog-refresh", token });
+    return { response: 1 };
+  });
+  const installed = await request({
+    operation: "catalog-install",
+    selection,
+    token,
+  });
+  expect(installed.ok).toBe(true);
+  expect(installed.entries?.[0]?.local).toBe("dormant");
+  expect(adapters.activate).not.toHaveBeenCalled();
+  expect(
+    (await request({ operation: "catalog-install", selection, token })).error,
+  ).toBe("catalog-selection");
+});
+it("rejects substituted catalog bytes before consent without generic-link fallback", async () => {
+  const token = "a".repeat(36);
+  adapters.download
+    .mockResolvedValueOnce(catalogBytes())
+    .mockResolvedValueOnce(bytes("2.0.0"));
+  const loaded = await request({ operation: "catalog-refresh", token });
+  const result = await request({
+    operation: "catalog-install",
+    selection: loaded.catalog!.entries[0]!.selection,
+    token,
+  });
+  expect(result).toEqual({ ok: false, error: "catalog-mismatch" });
+  expect(adapters.consent).not.toHaveBeenCalled();
+  expect(adapters.download).toHaveBeenCalledTimes(2);
+  expect((await request({ operation: "snapshot" })).entries).toEqual([]);
+});
 function request(
   value: unknown,
   event: IpcEvent = {

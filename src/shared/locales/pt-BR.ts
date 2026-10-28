@@ -226,6 +226,35 @@ export const brazilianPortugueseMessages: Readonly<
     "O download excede o limite de 64 MiB ou cinco redirecionamentos",
   "extensions.download-timeout": "O download excedeu o limite de 60 segundos",
   "extensions.cancelled": "Instalação cancelada antes da aprovação",
+  "extensions.invalid-catalog": "O catálogo é inválido ou excede seus limites",
+  "extensions.catalog-mismatch":
+    "Os bytes ou o manifesto do arquivo não correspondem à versão selecionada no catálogo",
+  "extensions.catalog-selection":
+    "A seleção do catálogo expirou; selecione a versão novamente",
+  "extensions.catalogHeading": "Extensões oficiais",
+  "extensions.catalogTrust":
+    "Oficial significa mantida pelo projeto, não isolada ou inofensiva. Extensões executam código confiado com acesso a arquivos, programas e redes. HTTPS e o hash do catálogo vinculam os bytes selecionados; não são uma assinatura independente do autor. Autores terceiros continuam responsáveis por suas extensões.",
+  "extensions.catalogBrowse": "Explorar extensões oficiais",
+  "extensions.catalogRefresh": "Atualizar catálogo",
+  "extensions.catalogRetry": "Tentar catálogo novamente",
+  "extensions.catalogLoading": "Carregando o catálogo oficial…",
+  "extensions.catalogStale":
+    "Não foi possível atualizar o catálogo. Exibindo a última consulta bem-sucedida; as versões podem estar desatualizadas.",
+  "extensions.catalogUnavailable":
+    "Catálogo indisponível. Extensões instaladas e instalação de arquivo local continuam funcionando offline.",
+  "extensions.catalogIdle":
+    "O catálogo se conecta apenas ao escolher Explorar ou Atualizar. Sem atualizações automáticas.",
+  "extensions.catalogLoaded":
+    "Catálogo carregado. Escolha uma versão para verificar seus bytes e revisar a confiança antes de instalar.",
+  "extensions.catalogEmpty": "O catálogo ainda não tem extensões publicadas.",
+  "extensions.catalogInstalled": "Instalada: {version}",
+  "extensions.catalogNotInstalled": "Não instalada",
+  "extensions.catalogInstall": "Instalar",
+  "extensions.catalogUpdate": "Atualizar",
+  "extensions.catalogReinstall": "Reinstalar",
+  "extensions.catalogReplace": "Substituir versão instalada",
+  "extensions.catalogReplaceWarning":
+    "Isso substitui a extensão instalada por uma versão anterior ou por bytes diferentes da mesma versão. Revise a versão e o resumo antes de aprovar.",
   "extensions.refresh": "Atualizar",
   "extensions.enable": "Habilitar",
   "extensions.disable": "Desabilitar",

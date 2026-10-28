@@ -1,3 +1,4 @@
+import { renderExtensionCatalog } from "./settings-extension-catalog";
 import type {
   ExtensionsBridge,
   ExtensionsRequest,
@@ -6,6 +7,35 @@ import type {
 import type { MessageKey } from "../../shared/i18n";
 import { englishLanguage, type Translate } from "../renderer-language";
 import { createPageButton, setPageNotice } from "../application-page";
+
+const statusWords = [
+  "enabled",
+  "disabled",
+  "uninstalled",
+  "dormant",
+  "starting",
+  "active",
+  "stopping",
+  "failed",
+  "unknown",
+  "busy",
+  "invalid-package",
+  "incompatible",
+  "invalid-store",
+  "conflict",
+  "outcome-unknown",
+  "runtime-unavailable",
+  "unsupported",
+  "unavailable",
+  "invalid-url",
+  "download-failed",
+  "download-limit",
+  "download-timeout",
+  "cancelled",
+  "invalid-catalog",
+  "catalog-mismatch",
+  "catalog-selection",
+] as const;
 
 // Explicit snapshots, never polling. Relabel retained nodes without repeating a
 // request, losing a displayed generation or changing a pending operation.
@@ -26,32 +56,9 @@ export function renderExtensions(
     apply();
   }
   const term = (value: string) => {
-    const words = [
-      "enabled",
-      "disabled",
-      "uninstalled",
-      "dormant",
-      "starting",
-      "active",
-      "stopping",
-      "failed",
-      "unknown",
-      "busy",
-      "invalid-package",
-      "incompatible",
-      "invalid-store",
-      "conflict",
-      "outcome-unknown",
-      "runtime-unavailable",
-      "unsupported",
-      "unavailable",
-      "invalid-url",
-      "download-failed",
-      "download-limit",
-      "download-timeout",
-      "cancelled",
-    ] as const;
-    return t(`extensions.${words.find((word) => word === value) ?? "unknown"}`);
+    return t(
+      `extensions.${statusWords.find((word) => word === value) ?? "unknown"}`,
+    );
   };
   const panel = document.createElement("section");
   panel.className = "settings-panel extensions-panel";
@@ -142,6 +149,7 @@ export function renderExtensions(
   }
   function render(result: ExtensionsResult) {
     last = result;
+    if (result.catalog) catalog.update(result.catalog);
     renderNotice();
     if (!result.ok) return;
     for (const element of bindings.keys())
@@ -200,7 +208,12 @@ export function renderExtensions(
       return;
     }
     busy = true;
-    token = request.operation === "install-link" ? request.token : undefined;
+    token =
+      request.operation === "install-link" ||
+      request.operation === "catalog-install"
+        ? request.token
+        : undefined;
+    catalog.busy(true);
     cancel.hidden = !token;
     url.disabled = true;
     link.disabled = true;
@@ -215,6 +228,7 @@ export function renderExtensions(
       if (live()) render({ ok: false, error: "outcome-unknown" });
     } finally {
       busy = false;
+      catalog.busy(false);
       cancel.hidden = true;
       url.disabled = false;
       link.disabled = false;
@@ -226,10 +240,28 @@ export function renderExtensions(
     for (const apply of bindings.values()) apply();
     renderNotice();
   });
+  const catalog = renderExtensionCatalog(
+    document,
+    bridge,
+    live,
+    (request) => {
+      void run(request);
+    },
+    labels,
+    disposers,
+  );
   controls.append(link, cancel);
   button("extensions.install", { operation: "install" }, controls);
   button("extensions.refresh", { operation: "snapshot" }, controls);
-  panel.append(heading, explanation, urlLabel, controls, notice, list);
+  panel.append(
+    heading,
+    explanation,
+    catalog.element,
+    urlLabel,
+    controls,
+    notice,
+    list,
+  );
   void run({ operation: "snapshot" });
   return panel;
 }

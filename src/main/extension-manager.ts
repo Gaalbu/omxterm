@@ -249,9 +249,13 @@ export function createExtensionManager(options: Options) {
         otherInstances: "unknown" as const,
       }));
     },
-    async prepare(owner: object, filename: string | Buffer) {
+    async prepare(
+      owner: object,
+      filename: string | Buffer,
+      expected?: Parameters<Options["trust"]["prepare"]>[2],
+    ) {
       approvals.delete(owner);
-      const preview = await options.trust.prepare(owner, filename);
+      const preview = await options.trust.prepare(owner, filename, expected);
       approvals.set(owner, { token: preview.token, id: preview.manifest.id });
       return preview;
     },

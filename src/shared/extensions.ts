@@ -24,7 +24,23 @@ export type ExtensionEntry = {
   enabled: boolean;
   local: string;
 };
+export type CatalogCard = {
+  selection: string;
+  id: string;
+  name: string;
+  description: string;
+  version: string;
+  installedVersion: string | null;
+  compatible: boolean;
+  action: "install" | "update" | "reinstall" | "replace";
+};
+export type CatalogSnapshot = {
+  loaded: boolean;
+  stale: boolean;
+  entries: CatalogCard[];
+};
 export type ExtensionsResult = {
+  catalog?: CatalogSnapshot;
   ok: boolean;
   error?: string;
   entries?: ExtensionEntry[];
@@ -32,6 +48,8 @@ export type ExtensionsResult = {
 };
 export type ExtensionsRequest =
   | { operation: "snapshot" | "install" }
+  | { operation: "catalog-refresh"; token: string }
+  | { operation: "catalog-install"; selection: string; token: string }
   | { operation: "install-link"; url: string; token: string }
   | { operation: "cancel-install"; token: string }
   | { operation: "open"; token: string; accepted: boolean }
@@ -46,21 +64,36 @@ export type ExtensionsBridge = {
 function isToken(value: unknown): value is string {
   return typeof value === "string" && /^[0-9a-f-]{36}$/.test(value);
 }
+function isLinkRequest(item: Record<string, unknown>): boolean {
+  return (
+    Object.keys(item).length === (item.operation === "install-link" ? 3 : 2) &&
+    isToken(item.token) &&
+    (item.operation === "cancel-install" ||
+      (typeof item.url === "string" &&
+        item.url.length > 0 &&
+        item.url.length <= 8192))
+  );
+}
+function isCatalogRequest(item: Record<string, unknown>): boolean {
+  return (
+    Object.keys(item).length ===
+      (item.operation === "catalog-refresh" ? 2 : 3) &&
+    isToken(item.token) &&
+    (item.operation === "catalog-refresh" || isToken(item.selection))
+  );
+}
 export function isExtensionsRequest(
   value: unknown,
 ): value is ExtensionsRequest {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const item = value as Record<string, unknown>;
+  if (
+    item.operation === "catalog-refresh" ||
+    item.operation === "catalog-install"
+  )
+    return isCatalogRequest(item);
   if (item.operation === "install-link" || item.operation === "cancel-install")
-    return (
-      Object.keys(item).length ===
-        (item.operation === "install-link" ? 3 : 2) &&
-      isToken(item.token) &&
-      (item.operation === "cancel-install" ||
-        (typeof item.url === "string" &&
-          item.url.length > 0 &&
-          item.url.length <= 8192))
-    );
+    return isLinkRequest(item);
   if (item.operation === "open")
     return (
       Object.keys(item).length === 3 &&

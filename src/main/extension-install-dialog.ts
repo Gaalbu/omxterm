@@ -1,4 +1,5 @@
 import { dialog, type BrowserWindow } from "electron";
+import type { CatalogRelease } from "./extension-catalog";
 import type { createExtensionManager } from "./extension-manager";
 import { translatorFor, type Translator } from "../shared/i18n";
 
@@ -8,6 +9,7 @@ export async function installExtensionFromDialog(
   stopping: () => boolean,
   translator: () => Translator = () => translatorFor("en-US"),
   captured?: Buffer,
+  expected?: CatalogRelease,
 ) {
   const owner = window.webContents;
   const cancelled = () => manager.cancel(owner);
@@ -29,6 +31,7 @@ export async function installExtensionFromDialog(
     const preview = await manager.prepare(
       owner,
       captured ?? selected!.filePaths[0]!,
+      expected,
     );
     if (owner.isDestroyed() || stopping()) return false;
     const consent = await dialog.showMessageBox(window, {
@@ -38,11 +41,19 @@ export async function installExtensionFromDialog(
         name: preview.manifest.name,
         version: preview.manifest.version,
       }),
-      detail: translator().t("extensions.trustDetail", {
-        id: preview.manifest.id,
-        digest: preview.digest,
-        generation: preview.expectedGeneration,
-      }),
+      detail:
+        translator().t("extensions.trustDetail", {
+          id: preview.manifest.id,
+          digest: preview.digest,
+          generation: preview.expectedGeneration,
+        }) +
+        (expected
+          ? "\n\n" +
+            translator().t("extensions.catalogTrust") +
+            (preview.catalogAction === "replace"
+              ? "\n\n" + translator().t("extensions.catalogReplaceWarning")
+              : "")
+          : ""),
       buttons: [
         translator().t("common.cancel"),
         translator().t("extensions.trustInstall"),

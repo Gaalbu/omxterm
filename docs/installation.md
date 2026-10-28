@@ -4,6 +4,24 @@ OMXTerm ships packages for Apple Silicon Macs, Linux ARM64 or x64, and Windows 1
 
 **[macOS](#macos)** · **[Linux](#linux)** · **[Windows](#windows)** · **[Update or uninstall](#updating-or-uninstalling)**
 
+## Optional Files preview
+
+Files is separately installed, never bundled. It requires a compatible Linux ARM64
+preview host (local/link installation from `0.23.0-dev.8`; catalog browsing from
+`0.23.0-dev.9`), not the stable `v0.22.0` download. Source support does not mean
+preview artifacts have been published; use only explicitly published preview
+release assets and their checksums.
+
+In a catalog-capable preview, open Settings → Extensions → **Browse official
+extensions**. Choose Install/Update/Reinstall, then review the exact version/digest
+and trusted-code warning. Installation is dormant until you explicitly open Files
+from the palette or File menu. Official means project-maintained, not sandboxed.
+The catalog connects only on Browse/Refresh; installed management and local `.omxext`
+installation remain usable offline. A catalog error is not an empty list; failed
+refresh shows the last successful snapshot as stale. No npm/Python or source build
+is required for a published archive. See [Files](files-development-preview.md#official-catalog)
+for compatibility and evidence limits.
+
 ## macOS
 
 You need an Apple Silicon Mac (M1 or later) with macOS 12 Monterey or newer.

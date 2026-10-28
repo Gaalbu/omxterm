@@ -1,4 +1,9 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
+import {
+  CatalogError,
+  catalogAction,
+  type CatalogRelease,
+} from "./extension-catalog";
 import { mkdtemp, rm } from "node:fs/promises";
 import path from "node:path";
 import {
@@ -23,12 +28,39 @@ export type PackageTrustPreview = {
   digest: string;
   manifest: PackageManifest;
   expectedGeneration: number;
+  catalogAction?: "install" | "update" | "reinstall" | "replace";
 };
 type Candidate = {
   token: string;
   bytes?: Buffer;
   preview?: PackageTrustPreview;
 };
+
+function verifyCatalogBytes(
+  release: CatalogRelease | undefined,
+  bytes: Buffer,
+) {
+  if (
+    release &&
+    (bytes.length !== release.archive.bytes ||
+      createHash("sha256").update(bytes).digest("hex") !==
+        release.archive.sha256)
+  )
+    throw new CatalogError("catalog-mismatch");
+}
+function verifyCatalogManifest(
+  release: CatalogRelease | undefined,
+  manifest: PackageManifest,
+) {
+  if (
+    release &&
+    (manifest.id !== release.id ||
+      manifest.version !== release.version ||
+      manifest.engines.omxterm !== release.engines.omxterm ||
+      manifest.engines.api !== release.engines.api)
+  )
+    throw new CatalogError("catalog-mismatch");
+}
 
 /** Main-owned, one-shot consent. Owner identities are infrastructure objects,
  * never renderer-supplied window IDs. No module imports or runtime activation. */
@@ -46,7 +78,9 @@ export function createExtensionPackageTrust(options: {
     async prepare(
       owner: object,
       source: string | Buffer,
+      expected?: CatalogRelease,
     ): Promise<PackageTrustPreview> {
+      const release = expected ? structuredClone(expected) : undefined;
       if (disposed) throw new PackageError("unavailable");
       if (preparing >= 4 || (!candidates.has(owner) && candidates.size >= 4))
         throw new PackageError("busy");
@@ -70,6 +104,7 @@ export function createExtensionPackageTrust(options: {
           typeof source === "string"
             ? await readBoundedFile(source, PACKAGE_LIMITS.archiveBytes)
             : Buffer.from(source);
+        verifyCatalogBytes(release, bytes);
         temporary = await mkdtemp(
           path.join(options.temporaryDirectory, "omxterm-trust-"),
         );
@@ -78,6 +113,7 @@ export function createExtensionPackageTrust(options: {
           temporary,
           options.runtime,
         );
+        verifyCatalogManifest(release, validated.manifest);
         const installed = (await options.packages.snapshot()).find(
           (entry) => entry.id === validated.manifest.id,
         );
@@ -87,6 +123,19 @@ export function createExtensionPackageTrust(options: {
           token: candidate.token,
           ...validated,
           expectedGeneration: installed?.generation ?? 0,
+          ...(release
+            ? {
+                catalogAction: catalogAction(
+                  release,
+                  installed
+                    ? {
+                        version: installed.manifest?.version ?? null,
+                        digest: installed.digest,
+                      }
+                    : undefined,
+                ),
+              }
+            : {}),
         };
         // IPC/UI metadata cannot mutate the retained consent record.
         return structuredClone(candidate.preview);

@@ -242,7 +242,14 @@ from its effects.
 _Avoid_: Plugin (historical name).
 
 **Official Extension** — An Extension maintained by the OMXTerm project, which
-may also serve as a practical example for extension authors.
+may also serve as a practical example for extension authors. Catalog identity
+binds an exact release ID/version/digest, never a namespace or filename. It is
+not a sandbox or independently signed publisher assertion.
+
+**Official Catalog** — A bounded project-controlled HTTPS release index loaded
+only by explicit Browse/Refresh. Main retains immutable selections; exact bytes
+and manifest identity must match before ordinary one-shot trust. Its in-memory
+last-successful snapshot may be stale. It is not a marketplace or update daemon.
 
 **Third-party Extension** — An Extension maintained by its author rather than
 by the OMXTerm project. Compatibility with OMXTerm does not imply project
@@ -290,9 +297,10 @@ PTYs. The Application Tab adapter acknowledges native hiding before DOM overlays
 It is not a public SDK, activation UI or proof of main-death disk-read exclusion.
 
 **Application Network Boundary** — OMXTerm requests remote bytes only for explicit
-HTTPS extension archive installation in the Linux ARM64 development preview,
-through bounded main-owned acquisition and captured-byte trust. No telemetry,
-catalog or background update requests are made. Internal hosted content remains
+official-catalog browsing and HTTPS extension archive installation in the Linux
+ARM64 development preview, through bounded main-owned acquisition and
+captured-byte trust. No startup/reopen catalog, telemetry or background update
+requests are made. Internal hosted content remains
 restricted to its owned epoch-local packaged-resource protocol. Child processes
 retain normal network access; explicitly activated terminal web links open through the OS.
 
