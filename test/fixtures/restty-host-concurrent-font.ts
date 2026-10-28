@@ -55,6 +55,7 @@ export async function exerciseConcurrentResttyTabs(options: {
   };
   readonly sessionStarts: () => number;
   readonly ptyExits: () => number;
+  readonly sessionExited: (index: number) => boolean;
   readonly waitFor: (
     predicate: () => boolean | Promise<boolean>,
     label: string,
@@ -62,6 +63,10 @@ export async function exerciseConcurrentResttyTabs(options: {
 }) {
   const initialSessions = options.sessionStarts();
   const initialExits = options.ptyExits();
+  const livePriorSessionIndices = Array.from(
+    { length: initialSessions },
+    (_, index) => index,
+  ).filter((index) => !options.sessionExited(index));
   // The preceding backend-loss fixture already captured its genuine error.
   // Reset only this synthetic DOM surface so a new false font error is visible.
   await options.window.webContents.executeJavaScript(
@@ -114,10 +119,31 @@ export async function exerciseConcurrentResttyTabs(options: {
       "concurrent fixture tab cleanup",
     );
   }
-  await options.waitFor(
-    () => options.ptyExits() === initialExits + 4,
-    "concurrent fixture PTY cleanup",
-  );
+  try {
+    await options.waitFor(
+      () => options.ptyExits() === initialExits + 4,
+      "concurrent fixture PTY cleanup",
+    );
+  } catch (cause) {
+    // Capture callback state before fixture completion requests further closes.
+    // These synthetic indices are not OS-process liveness or cause evidence.
+    const snapshot = {
+      initialExits,
+      expectedExits: initialExits + 4,
+      actualExits: options.ptyExits(),
+      pendingSessionIndices: Array.from(
+        { length: 4 },
+        (_, index) => initialSessions + index,
+      ).filter((index) => !options.sessionExited(index)),
+      newlyExitedPriorSessionIndices: livePriorSessionIndices.filter((index) =>
+        options.sessionExited(index),
+      ),
+    };
+    throw new Error(
+      `${cause instanceof Error ? cause.message : "Concurrent fixture PTY cleanup failed"}; callback snapshot: ${JSON.stringify(snapshot)}`,
+      { cause },
+    );
+  }
 
   return {
     requestedTabs: 4,

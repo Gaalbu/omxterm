@@ -462,6 +462,7 @@ app
       beginFontLoad: fontLoads.begin,
       sessionStarts: () => sessionIndex,
       ptyExits: () => ptyExits,
+      sessionExited: (index) => exitedSessionIndices.has(index),
       waitFor,
     });
     const { fontMutation, beforeDestroy, renderedFontFamily } =
