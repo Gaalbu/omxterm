@@ -6,6 +6,10 @@ a leak detector, a release gate, or a claim about total application consumption.
 Run on an assigned disposable desktop, not inside the terminal being measured.
 Do not run other graphical tests, builds or workloads concurrently.
 
+The [initial Ubuntu calibration](performance-calibration.md) retains raw
+normal/normal/control results, demonstrates large-cost sensitivity, and explains
+why small separated ranges are not automatic regression verdicts.
+
 ## Small initial scope
 
 Reuse #317's `depthRenderingFixture`: production Terminal Tabs, Restty Surface,
