@@ -4,7 +4,12 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import type { BrowserWindow } from "electron";
+import type {
+  BrowserWindow,
+  OpenDialogOptions,
+  OpenDialogReturnValue,
+} from "electron";
+import { isTerminalTabCommand } from "../../src/shared/terminal-contract";
 import { InstalledPackages } from "../../src/installed-packages/installed-packages";
 import { packageArchive } from "../fixtures/extension-package-archive";
 import {
@@ -30,7 +35,13 @@ const adapters = vi.hoisted(() => ({
   selected: undefined as unknown,
   handlers: new Map<string, Handler>(),
   windows: new Map<unknown, unknown>(),
-  picker: vi.fn(),
+  picker:
+    vi.fn<
+      (
+        owner: unknown,
+        options: OpenDialogOptions,
+      ) => Promise<OpenDialogReturnValue>
+    >(),
   consent:
     vi.fn<
       (
@@ -39,7 +50,8 @@ const adapters = vi.hoisted(() => ({
       ) => Promise<{ response: number }>
     >(),
   activate: vi.fn(),
-  sendOpen: vi.fn(),
+  sendOpen:
+    vi.fn<Parameters<typeof startApplicationExtensions>[0]["sendAction"]>(),
   retire: vi.fn(),
   hosts: [] as Host[],
 }));
@@ -133,8 +145,10 @@ beforeEach(async () => {
   language = "en-US";
   adapters.sendOpen
     .mockReset()
-    .mockImplementation((_sender, _channel, { token }) => {
-      void request({ operation: "open", token, accepted: true });
+    .mockImplementation((_sender, _channel, command) => {
+      if (!isTerminalTabCommand(command) || command.action !== "open-extension")
+        throw new Error("Expected extension admission command");
+      void request({ operation: "open", token: command.token, accepted: true });
     });
   adapters.hosts.length = 0;
   adapters.handlers.clear();
@@ -289,7 +303,10 @@ it("denied modal admission consumes the token without starting installed code", 
   await request({ operation: "install" });
   adapters.sendOpen.mockImplementation(() => {});
   service.actions()[0]!.invoke();
-  const token = adapters.sendOpen.mock.calls[0]![2].token;
+  const command = adapters.sendOpen.mock.calls[0]![2];
+  if (!isTerminalTabCommand(command) || command.action !== "open-extension")
+    throw new Error("Expected extension admission command");
+  const token = command.token;
   expect(adapters.activate).not.toHaveBeenCalled();
   expect(
     await request({ operation: "open", token, accepted: false }),

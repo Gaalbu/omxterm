@@ -45,18 +45,19 @@ afterEach(async () => {
 async function setup() {
   const entry = (await packages.snapshot())[0]!;
   const call = vi.fn(async (value: Value) => value);
+  const backend: Backend = {
+    epoch: "backend-epoch",
+    state: () => "active",
+    selection: {
+      id: entry.id,
+      generation: entry.generation,
+      digest: entry.digest!,
+    },
+    call,
+    retire: vi.fn<Backend["retire"]>(),
+  };
   const runtime = {
-    activate: vi.fn(async (_id: string): Promise<Backend> => ({
-      epoch: "backend-epoch",
-      state: () => "active",
-      selection: {
-        id: entry.id,
-        generation: entry.generation,
-        digest: entry.digest!,
-      },
-      call,
-      retire: vi.fn(),
-    })),
+    activate: vi.fn(async (_id: string): Promise<Backend> => backend),
     retire: vi.fn(async () => null),
     dispose: vi.fn(async () => []),
   };
@@ -85,7 +86,7 @@ async function setup() {
       temporaryDirectory: root,
     }),
   });
-  return { manager, runtime, views, createViews, opens, call };
+  return { manager, runtime, views, createViews, opens, call, backend };
 }
 it("leaves installed-unused dormant and gives each invocation its own captured target and view pin", async () => {
   const setupResult = await setup();
@@ -140,7 +141,7 @@ it("disable revokes calls and independently retires all local views and the back
   });
 });
 it("replaces captured packages and re-enables dormantly without reviving old view authority", async () => {
-  const { manager, runtime, views, call } = await setup();
+  const { manager, runtime, views, call, backend } = await setup();
   const target = {
     owner: {},
     signal: new AbortController().signal,
@@ -182,7 +183,6 @@ it("replaces captured packages and re-enables dormantly without reviving old vie
     local: "dormant",
   });
   expect(runtime.activate).toHaveBeenCalledTimes(1);
-  const backend = await runtime.activate.mock.results[0]!.value;
   const current = (await packages.snapshot())[0]!;
   runtime.activate.mockResolvedValue({
     ...backend,
@@ -224,13 +224,12 @@ it("a management change during held activation cannot create a late orphan view"
   expect(createViews).not.toHaveBeenCalled();
 });
 it("reports actual backend lifecycle without poisoning it on request-local refusal", async () => {
-  const { manager, runtime, views, call } = await setup();
+  const { manager, views, call, backend } = await setup();
   await manager.open(manifest.id, {
     owner: {},
     signal: new AbortController().signal,
     terminalDirectory: null,
   });
-  const backend = await runtime.activate.mock.results[0]!.value;
   call.mockRejectedValueOnce(new Error("busy"));
   await expect(
     views[0]!.call(null, new AbortController().signal),
