@@ -1,5 +1,3 @@
-import { execFileSync } from "node:child_process";
-import { randomUUID } from "node:crypto";
 import { createRequire } from "node:module";
 import { mkdtemp, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -18,10 +16,11 @@ import {
   HOVER_FRAME_PREFIX,
   type HoverControl,
 } from "../fixtures/restty-hover-control";
-import type {
-  HoverDraw,
-  HoverGeometry,
-  HoverPixels,
+import {
+  requireEarlyHoverFailure,
+  type HoverDraw,
+  type HoverGeometry,
+  type HoverPixels,
 } from "../fixtures/restty-hover-evidence";
 
 interface Phase {
@@ -79,19 +78,6 @@ function expectHeldFrame(frames: readonly Frame[], phase: Phase): Frame {
   expect(held.drawCellRevision).toBeLessThan(phase.stimulus.cellRevision);
   return held;
 }
-function sourceCommit(): string {
-  try {
-    return execFileSync("git", ["rev-parse", "HEAD"], {
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "ignore"],
-    }).trim();
-  } catch {
-    // Qualification archives need not include Git; emitted bundle hashes remain
-    // the exact JavaScript identity instead of inventing a checkout commit.
-    return "unavailable";
-  }
-}
-
 async function runHover(
   dpr: number,
   control: HoverControl,
@@ -99,11 +85,6 @@ async function runHover(
 ) {
   testContext.signal.throwIfAborted();
   const root = await mkdtemp(path.join(tmpdir(), "omxterm-hover-"));
-  const evidencePath = path.resolve(
-    ".scratch/native-fixtures",
-    `${randomUUID()}.json`,
-  );
-  const failureDirectory = evidencePath.replace(/\.json$/u, "-hover-failure");
   let supervised = false;
   try {
     const executable = createRequire(import.meta.url)("electron") as string;
@@ -116,15 +97,8 @@ async function runHover(
         `--force-device-scale-factor=${dpr}`,
         root,
         `--hover-control=${control}`,
-        ...(control === "early-capture"
-          ? [
-              `--hover-failure-directory=${failureDirectory}`,
-              `--hover-source-commit=${sourceCommit()}`,
-            ]
-          : []),
       ],
       root,
-      evidencePath,
       timeout: 60_000,
       testContext,
       prepare: () => buildHostFixture(root, { focusedCancellation: true }),
@@ -272,10 +246,9 @@ it.for([
       phase: "modified",
       category:
         control === "early-capture" ? "cue-not-drawn" : "stimulus-invalidated",
-      pixels: { total: 0, complement: 0, unusedEdges: 0 },
     });
-    expect(failed.pixels!.missingCells).toBe(failed.pixels!.expectedCells);
     if (control === "early-capture") {
+      requireEarlyHoverFailure(failed);
       const held = expectHeldFrame(frames, failed);
       expect(frames.find((frame) => frame.stage === "captured")).toMatchObject({
         active: true,
@@ -294,6 +267,12 @@ it.for([
         failed.latest.draw.cellRevision,
       );
     } else {
+      expect(failed.pixels).toMatchObject({
+        total: 0,
+        complement: 0,
+        unusedEdges: 0,
+      });
+      expect(failed.pixels!.missingCells).toBe(failed.pixels!.expectedCells);
       expect(failed.latest.draw).toMatchObject({ cells: 0, drawCells: 0 });
       expect(failed.latest.draw.cellRevision).toBeGreaterThan(
         failed.stimulus.cellRevision,

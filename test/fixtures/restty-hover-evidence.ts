@@ -114,6 +114,33 @@ export function requireHoverDraw(
     throw new HoverEvidenceError("cue-not-drawn");
 }
 
+// The early control proves rejection of an undrawn generation, not stability
+// of every compositor pixel. Positive/release captures own the pixel oracle.
+export function requireEarlyHoverFailure(phase: {
+  readonly phase: string;
+  readonly category: string;
+  readonly stimulus: { readonly cellRevision: number; readonly cells: number };
+  readonly latest: { readonly draw: HoverDraw };
+}): void {
+  if (phase.phase !== "modified" || phase.category !== "cue-not-drawn")
+    throw new Error("Early hover control did not reject the modified draw");
+  try {
+    requireHoverDraw(
+      phase.latest.draw,
+      phase.stimulus.cellRevision,
+      phase.stimulus.cells,
+    );
+  } catch (error) {
+    if (
+      error instanceof HoverEvidenceError &&
+      error.category === "cue-not-drawn"
+    )
+      return;
+    throw error;
+  }
+  throw new Error("Early hover control accepted a current draw");
+}
+
 export function hoverCellPoint(
   geometry: HoverGeometry,
   row: number,

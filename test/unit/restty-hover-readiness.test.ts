@@ -1,16 +1,8 @@
-import { createHash } from "node:crypto";
 import type { BrowserWindow } from "electron";
 import {
-  mkdtemp,
-  mkdir,
-  readFile,
-  readdir,
-  rm,
-  writeFile,
-} from "node:fs/promises";
-import { tmpdir } from "node:os";
-import path from "node:path";
-import type { HoverFailureDestination } from "../fixtures/restty-hover-failure";
+  requireEarlyHoverFailure,
+  type HoverDraw,
+} from "../fixtures/restty-hover-evidence";
 import { runInNewContext } from "node:vm";
 import { afterEach, expect, it, vi } from "vitest";
 import { HOVER_FRAME_HOLD_SOURCE } from "../fixtures/restty-hover-control";
@@ -35,7 +27,7 @@ function fixture(
     captureChange?: "viewport" | "identity" | "clear";
     beforeNoopKeyup?: boolean;
     earlyCapture?: "changed" | "unchanged";
-    failureDestination?: HoverFailureDestination;
+    releaseBeforeCapture?: boolean;
   } = {},
 ) {
   let snapshot: HoverSnapshot = {
@@ -93,17 +85,25 @@ function fixture(
   }
   const dispatch = (event: Event) => {
     if (event.type === "keyup" && options.beforeNoopKeyup) return true;
+    const prior = snapshot.draw;
     replace(event.type === "keyup" ? 0 : Number(event.modified));
-    if (event.modified && options.earlyCapture)
+    if (event.modified && options.earlyCapture) {
+      const drawn = snapshot.draw;
       snapshot = {
         ...snapshot,
         draw: {
-          ...snapshot.draw,
-          drawRevision: 2,
-          drawCellRevision: 2,
-          drawCells: 0,
+          ...drawn,
+          drawRevision: prior.drawRevision,
+          drawCellRevision: prior.drawCellRevision,
+          drawCells: prior.drawCells,
         },
       };
+      // This callback really stays pending in the same hold used by the native
+      // control; a pixel buffer change does not execute it.
+      context.window.requestAnimationFrame(() => {
+        snapshot = { ...snapshot, draw: drawn };
+      });
+    }
     return true;
   };
   const canvas = {
@@ -112,16 +112,34 @@ function fixture(
     __localImageFixtureCoreCells: () => snapshot.core,
     dispatchEvent: dispatch,
   };
+  const nativeFrames: (() => void)[] = [];
+  let callbackId = 0;
   const context = {
+    __hoverFrame: undefined as unknown as {
+      arm: (canvasId: number) => void;
+      bind: (revision: number) => unknown;
+      state: () => {
+        active: boolean;
+        pending: number;
+        drawCellRevision: number;
+        cellRevision: number;
+      };
+      release: () => unknown;
+    },
     document: { querySelectorAll: () => [canvas] },
     PointerEvent: Event,
     KeyboardEvent: Event,
     requestAnimationFrame: (callback: () => void) => callback(),
     window: {
+      requestAnimationFrame: (callback: () => void) => {
+        nativeFrames.push(callback);
+        return ++callbackId;
+      },
       dispatchEvent: dispatch,
       omxterm: { terminal: { configuration: async () => {} } },
     },
   };
+  if (options.earlyCapture) runInNewContext(HOVER_FRAME_HOLD_SOURCE, context);
   let captures = 0,
     bitmapReads = 0;
   const records: string[] = [];
@@ -207,21 +225,38 @@ function fixture(
         prefixColumns: 1,
         destinationColumns: 1,
         ...(options.earlyCapture ? { control: "early-capture" as const } : {}),
-        ...(options.failureDestination
-          ? { failureDestination: options.failureDestination }
+        ...(options.earlyCapture
+          ? {
+              beforeStimulus: async () => {
+                context.__hoverFrame.arm(1);
+              },
+              afterStimulus: async (stimulus: HoverSnapshot) => {
+                for (const callback of nativeFrames.splice(0)) callback();
+                context.__hoverFrame.bind(stimulus.draw.revision);
+                if (options.releaseBeforeCapture)
+                  context.__hoverFrame.release();
+              },
+            }
           : {}),
       }),
     counts: () => ({ captures, bitmapReads }),
+    held: () => context.__hoverFrame.state(),
+    release: () => context.__hoverFrame.release(),
     records: () =>
       records
         .filter((s) => s.startsWith(HOVER_PHASE_PREFIX))
         .map(
           (s) =>
             JSON.parse(s.slice(HOVER_PHASE_PREFIX.length)) as {
+              phase: string;
               category: string;
               pixels?: { total: number; missingCells: number };
-              stimulus?: { revision: number };
-              latest: { draw: { revision: number } };
+              stimulus: {
+                revision: number;
+                cellRevision: number;
+                cells: number;
+              };
+              latest: { draw: HoverDraw };
             },
         ),
   };
@@ -284,95 +319,49 @@ it("retains missing-pixel evidence for geometry-stable capture invalidation", as
   expect(f.counts().captures).toBe(2);
 });
 
-it("retains the actual failed pair outside the removed profile, without recapture or replacing the draw failure", async () => {
-  const root = await mkdtemp(path.join(tmpdir(), "hover-retention-"));
-  try {
-    const profile = path.join(root, "profile");
-    await mkdir(path.join(profile, "renderer"), { recursive: true });
-    for (const file of ["main.cjs", "preload.cjs", "renderer/index.js"])
-      await writeFile(path.join(profile, file), "synthetic bundle");
-    const destination = {
-      directory: path.join(root, "fresh", "native-fixtures", "failure"),
-      sourceDirectory: profile,
-      sourceCommit: "a".repeat(40),
-    };
-    const f = fixture({
-      earlyCapture: "changed",
-      failureDestination: destination,
+it.each(["unchanged", "changed"] as const)(
+  "qualifies a truly held draw with %s compositor bytes",
+  async (earlyCapture) => {
+    const f = fixture({ earlyCapture });
+    try {
+      await expect(f.run()).rejects.toMatchObject({
+        category: "cue-not-drawn",
+      });
+      expect(f.held()).toMatchObject({
+        active: true,
+        pending: 1,
+        cellRevision: 3,
+        drawCellRevision: 2,
+      });
+      const failed = f.records().at(-1)!;
+      expect(failed.pixels?.total).toBe(earlyCapture === "changed" ? 1 : 0);
+      expect(() => requireEarlyHoverFailure(failed)).not.toThrow();
+      expect(f.counts()).toEqual({ captures: 2, bitmapReads: 2 });
+    } finally {
+      f.release();
+    }
+    expect(f.held()).toMatchObject({
+      active: false,
+      pending: 0,
+      drawCellRevision: 3,
     });
-    await expect(f.run()).rejects.toMatchObject({ category: "cue-not-drawn" });
-    expect(f.counts()).toEqual({ captures: 2, bitmapReads: 2 });
-    await rm(profile, { recursive: true });
-    const metadata = JSON.parse(
-      await readFile(path.join(destination.directory, "metadata.json"), "utf8"),
-    ) as { sourceBundleSha256: Record<string, string> };
-    expect(metadata).toMatchObject({
-      sourceCommit: "a".repeat(40),
-      control: "early-capture",
-      phase: "modified",
-      pixels: { total: 1 },
-      baseline: { width: 24, height: 24 },
-      snapshots: { after: { draw: { drawCellRevision: 2, cellRevision: 3 } } },
-    });
-    const bundleHash = createHash("sha256")
-      .update("synthetic bundle")
-      .digest("hex");
-    expect(metadata.sourceBundleSha256).toEqual({
-      "main.cjs": bundleHash,
-      "preload.cjs": bundleHash,
-      "renderer/index.js": bundleHash,
-    });
-    const baseline = await readFile(
-      path.join(destination.directory, "baseline.bgra"),
-    );
-    const modified = await readFile(
-      path.join(destination.directory, "modified.bgra"),
-    );
-    expect(baseline).toEqual(Buffer.alloc(24 * 24 * 4));
-    const expected = Buffer.from(baseline);
-    expected[(4 * 24 + 12) * 4] = 255;
-    expect(modified).toEqual(expected);
+  },
+);
 
-    // A real filesystem rejection, not a mocked writer or a path-only check.
-    const blocked = path.join(root, "blocked");
-    await writeFile(blocked, "not a directory");
-    const failedWrite = fixture({
-      earlyCapture: "changed",
-      failureDestination: {
-        ...destination,
-        directory: path.join(blocked, "failure"),
-      },
-    });
-    await expect(failedWrite.run()).rejects.toMatchObject({
-      category: "cue-not-drawn",
-    });
-    expect(failedWrite.counts()).toEqual({ captures: 2, bitmapReads: 2 });
-    expect(await readFile(blocked, "utf8")).toBe("not a directory");
-  } finally {
-    await rm(root, { recursive: true, force: true });
-  }
-});
-
-it("does not export a passing negative control or ordinary successful captures", async () => {
-  const root = await mkdtemp(path.join(tmpdir(), "hover-no-retention-"));
-  try {
-    const failureDestination = {
-      directory: path.join(root, "failure"),
-      sourceDirectory: root,
-      sourceCommit: "b".repeat(40),
-    };
-    const negative = fixture({ earlyCapture: "unchanged", failureDestination });
-    await expect(negative.run()).rejects.toMatchObject({
-      category: "cue-not-drawn",
-    });
-    expect(negative.records().at(-1)?.pixels?.total).toBe(0);
-    await expect(fixture({ failureDestination }).run()).resolves.toMatchObject({
-      modifiedHoverChangedPixels: 1,
-    });
-    expect(await readdir(root)).toEqual([]);
-  } finally {
-    await rm(root, { recursive: true, force: true });
-  }
+it("does not qualify a current draw as the early-capture negative control", async () => {
+  const f = fixture({ earlyCapture: "changed", releaseBeforeCapture: true });
+  await expect(f.run()).resolves.toEqual({
+    modifiedHoverChangedPixels: 1,
+    releasedHoverChangedPixels: 0,
+  });
+  const modified = f.records().find((phase) => phase.phase === "modified")!;
+  expect(() => requireEarlyHoverFailure(modified)).toThrow("did not reject");
+  // Even a false error category cannot substitute for stale draw provenance.
+  expect(() =>
+    requireEarlyHoverFailure({ ...modified, category: "cue-not-drawn" }),
+  ).toThrow("current draw");
+  expect(f.held()).toMatchObject({ active: false, pending: 0 });
+  expect(f.counts()).toEqual({ captures: 3, bitmapReads: 3 });
 });
 
 function frameFixture() {

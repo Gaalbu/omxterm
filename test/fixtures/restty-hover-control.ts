@@ -7,20 +7,7 @@ import {
   type HoverSnapshot,
 } from "./restty-hover";
 import { hoverCellPoint, HoverEvidenceError } from "./restty-hover-evidence";
-import type { HoverFailureDestination } from "./restty-hover-failure";
 import type { ResttyLinkGestureOptions } from "./restty-link-gestures";
-
-function hoverFailureDestination(): HoverFailureDestination | undefined {
-  const directory = process.argv
-    .find((arg) => arg.startsWith("--hover-failure-directory="))
-    ?.slice("--hover-failure-directory=".length);
-  const sourceCommit = process.argv
-    .find((arg) => arg.startsWith("--hover-source-commit="))
-    ?.slice("--hover-source-commit=".length);
-  return directory && sourceCommit
-    ? { directory, sourceDirectory: __dirname, sourceCommit }
-    : undefined;
-}
 
 export const HOVER_CONTROL_PREFIX = "__OMXTERM_HOVER_CONTROL__";
 export const HOVER_FRAME_PREFIX = "__OMXTERM_HOVER_FRAME__";
@@ -238,7 +225,6 @@ export async function completeHoverControl(
   );
   const size = options.resizes.at(-1)!;
   const frameControl = control === "late-frame" || control === "early-capture";
-  const failureDestination = hoverFailureDestination();
   let heldCallbackId: number | undefined;
   let failure: unknown;
   let evidence: Awaited<ReturnType<typeof captureModifiedHoverEvidence>>;
@@ -251,10 +237,7 @@ export async function completeHoverControl(
       text,
       destinationColumns: url.length + 1,
       ...(control === "early-capture"
-        ? {
-            control: "early-capture" as const,
-            ...(failureDestination ? { failureDestination } : {}),
-          }
+        ? { control: "early-capture" as const }
         : {}),
       beforeStimulus: async (prepared) => {
         if (frameControl)
