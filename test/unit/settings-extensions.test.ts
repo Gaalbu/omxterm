@@ -72,6 +72,8 @@ it("retains a pending HTTPS request across language changes and cancels its exac
     expect(document.body.textContent).toContain("generation 4"),
   );
   const input = document.querySelector("input")!;
+  expect(input.classList.contains("page-control")).toBe(true);
+  expect(input.closest("label")?.textContent).toContain("HTTPS archive link");
   input.value = "https://example.org/archive?signature=abc";
   click("Install from link");
   const submitted = request.mock.calls[1]![0];

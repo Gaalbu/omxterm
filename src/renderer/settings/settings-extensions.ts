@@ -72,6 +72,7 @@ export function renderExtensions(
   bind(urlText, () => t("extensions.url"));
   const url = document.createElement("input");
   url.type = "url";
+  url.className = "page-control";
   url.maxLength = 8192;
   url.placeholder = "https://…/extension.omxext";
   url.autocomplete = "off";
