@@ -77,6 +77,17 @@ const requiredEntries = [
   "/package.json",
 ];
 
+const extensionEntries = [
+  "/dist/preload/extension-view.cjs",
+  "/dist/extension-runtime/bootstrap.mjs",
+  "/dist/extension-runtime/index.mjs",
+  "/dist/extension-runtime/packages.mjs",
+  "/dist/extension-runtime/extension-leases.node",
+  "/dist/extension-runtime/files-move.node",
+  "/node_modules/semver/package.json",
+  "/node_modules/yauzl/package.json",
+];
+
 const windowsEntries = (arch: string) => [
   ...[
     "conpty.node",
@@ -315,7 +326,11 @@ describe("packaged application verifier", () => {
     ).toEqual({ missing: [], forbidden: [] });
     expect(
       inspectAsarEntries(
-        [...requiredEntries, "/node_modules/node-pty/build/Release/pty.node"],
+        [
+          ...requiredEntries,
+          ...extensionEntries,
+          "/node_modules/node-pty/build/Release/pty.node",
+        ],
         "linux",
       ),
     ).toEqual({ missing: [], forbidden: [] });
@@ -351,6 +366,9 @@ describe("packaged application verifier", () => {
 
   it.each([
     "/.env",
+    "/dist/extensions/files-0.1.0.omxext",
+    "/dist/elsewhere/files.omxext",
+    "/dist/extensions/files-0.1.0.omxext.json",
     "/.git/config",
     "/dist/main/index.js.map",
     "/node_modules/node-pty/src/index.ts",
@@ -438,7 +456,10 @@ describe("pinned PTY packaged inventory", () => {
 
   it("reports a missing runtime asset", () => {
     expect(
-      inspectAsarEntries(requiredEntries.slice(1), "linux").missing,
+      inspectAsarEntries(
+        [...requiredEntries.slice(1), ...extensionEntries],
+        "linux",
+      ).missing,
     ).toEqual(["/dist/main/index.js"]);
   });
 });
@@ -459,6 +480,33 @@ it("requires the blur addon only on macOS and rejects its build-only headers", (
       "darwin",
     ).forbidden,
   ).toEqual(["/node_modules/node-api-headers/include/node_api.h"]);
+});
+
+describe("separately installed Files package inventory", () => {
+  it("requires runtime, native adapters, preload and dependencies only on Linux ARM64", () => {
+    expect(
+      inspectAsarEntries(requiredEntries, "linux", "arm64").missing,
+    ).toEqual(extensionEntries);
+    expect(inspectAsarEntries(requiredEntries, "linux", "x64").missing).toEqual(
+      [],
+    );
+    expect(
+      inspectAsarEntries(
+        [...requiredEntries, ...extensionEntries],
+        "linux",
+        "arm64",
+      ).missing,
+    ).toEqual([]);
+  });
+  it("rejects separate archives and receipts both inside and outside ASAR", () => {
+    expect(
+      inspectForbiddenPackagedEntries([
+        "/resources/files.omxext",
+        "/resources/files.omxext.sha256",
+        "/resources/files.omxext.json",
+      ]),
+    ).toHaveLength(3);
+  });
 });
 
 describe("Restty-only packaged runtime", () => {

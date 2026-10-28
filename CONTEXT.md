@@ -278,6 +278,8 @@ clipboard, configuration and environment contents, commands and titles.
 extension consumed through Settings captured-byte trust and shared namespaced
 actions. Its application owner composes independent backend/view version pins,
 per-invocation terminal context, local management and bounded Quit retirement.
+Its separately built archive/checksum/receipt are not bundled into the host;
+a build receipt identifies bytes and inputs, not completed qualification or shipment.
 No startup code activation, default/configurable shortcut or stable SDK is implied;
 see [the preview contract](docs/files-development-preview.md) for qualification limits.
 

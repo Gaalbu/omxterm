@@ -1669,6 +1669,11 @@ connects Settings local/HTTPS archive installation, shared namespaced actions, i
 pinned application views and bounded normal Quit retirement on Linux ARM64.
 Startup never activates installed code; explicit invocation does. There is no
 catalog, public SDK or extension shortcut configuration.
+Files archive version/compatibility is maintained separately from the host;
+archives and build receipts are excluded from application packages. Build receipts
+bind final archive bytes to source/tool metadata without claiming qualification.
+Linux ARM64 package inspection exercises packaged runtime/native resolution, not
+the user-facing Files lifecycle; see [preview preparation](release.md#files-preview-preparation).
 Trusted children retain ordinary Node capabilities. Production/native/visual and
 main-death qualification remain explicit obligations, not consequences of wiring.
 

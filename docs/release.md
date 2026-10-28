@@ -198,6 +198,46 @@ $name = "OMXTerm-<version>-arm64.exe"   # or OMXTerm-<version>-x64.exe
 Get-Content "$name.sha256"
 ```
 
+## Files preview preparation
+
+A Linux ARM64 Files preview is a separate preparation lane, not the complete
+stable-release asset set below and not an announcement that a preview is published.
+Use an ordinary-user disposable Linux ARM64 guest and an exact committed source:
+
+```sh
+npm ci
+npm run build
+node scripts/build-files-extension.mjs
+npm run package-built:linux
+npm run package:verify -- --inspection-only
+OMXTERM_FILES_BUILD=1 npm test -- test/integration/files-extension-build.test.ts
+```
+
+Build Files **after** `npm run build` (which clears `dist`) and **before** packaging
+so exclusion is actually checked. The Files archive and its `.sha256`/`.json`
+sidecars live in `dist/extensions`, outside the host package. Its minimum host
+is `0.23.0-dev.8`; `v0.22.0` cannot consume it. When building an exported source
+archive, pass `OUTPUT.omxext FULL_SOURCE_COMMIT` to the Files builder and verify
+the export's source correspondence. The receipt distinguishes supplied source
+identity from a clean local Git HEAD.
+
+Inspection-only now includes packaged Linux ARM64 extension store/native loading
+and bootstrap module resolution. It is **not** Files activation, GUI or normal
+Quit qualification. Before publication, qualify the exact packaged host with the
+separate archive: captured-byte trust, dormant install, explicit Files activation,
+real filesystem mutation/conflict, deliberate replacement/management, the same
+live PTY and joined Quit. Preserve source/lock/tool/runtime identities, package
+and archive hashes, actual tested host/target, outcomes and limitations alongside
+the build receipt; never turn its `not-run` field into an inferred pass.
+
+Root/maintainers decide publication after review and qualification. If publishing
+a partial Linux ARM64 preview, label it explicitly as a prerelease and not Latest,
+keep Files as a separately downloadable versioned artifact, and disclose missing
+platform/SDK/catalog qualification. Do not mutate an already published release to
+add it. Public readback/checksums and a compatible public host are needed before
+claiming distribution; neither a branch, local artifact nor CI upload is shipment.
+The normal stable-release procedure and its complete asset set remain unchanged.
+
 ## Publication
 
 Create tag `vX.Y.Z` and a draft GitHub Release in `luizomf/omxterm`. Upload every applicable file (twelve with both x64 platforms), download and verify the complete set against local byte counts and SHA-256 records, then publish to seal the immutable release:

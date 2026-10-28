@@ -11,8 +11,29 @@ terminal renderer. Maintainers run `node scripts/build-files-extension.mjs` to
 produce `dist/extensions/files-0.1.0.omxext`. This build needs Python 3's ZIP
 writer and the locked esbuild tool; users receive the precompiled archive and do
 not run Python/npm or compilation to install it. An existing destination is not
-overwritten. The archive includes its MIT license. Existing #622 attribution and
-third-party notices elsewhere in the application remain unchanged.
+overwritten. The archive includes its MIT license. Version and compatibility come from
+`extensions/files/extension.json`; the minimum host is now `0.23.0-dev.8`.
+Existing #622 attribution and third-party notices elsewhere in the application
+remain unchanged.
+
+The builder also writes `<archive>.sha256` and `<archive>.json`, refusing to
+replace any of the three outputs. The JSON binds the final archive size/digest,
+manifest, source commit, lockfile digest and Node/esbuild/Python versions. From a
+Git checkout, commit changes first: the builder requires a clean source tree.
+For an exported source tree, supply the original full commit as the second
+argument after the output filename; the receipt labels it `supplied-commit`,
+not a locally verified Git identity. Maintainers must verify that transport
+against the commit. A build receipt records the intended host/target with
+`qualification.status: not-run`; it is not native or packaged qualification.
+Keep actual test evidence separately, bound to these exact artifact hashes.
+
+Application packaging excludes separate archives and their default output
+folder, including when Files was built before packaging. The packaged Linux
+ARM64 verifier checks required runtime/preload/dependency resources, compares
+built resource bytes and exercises actual packaged Node-mode store/lease/move
+loading plus bootstrap missing-IPC refusal. This headless check does not activate
+Files or establish its GUI/lifecycle behavior. See the
+[preview preparation procedure](release.md#files-preview-preparation).
 
 The backend lists directories using `opendir` and sequential `lstat`, with a
 5,000-entry visit limit and explicit truncation. Replies contain at most100 rows,
