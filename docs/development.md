@@ -34,6 +34,11 @@ sudo pacman -S --needed base-devel python patch binutils procps-ng fontconfig fi
 ARM64 and x64; use C++ build tools and `patch` on both architectures.
 Full Linux package startup verification also requires Python 3.9+ and Linux
 pidfd support (kernel 5.3+); identity-checked signaling fails closed without them.
+A positive PID can disappear between the kernel's lookup and pidfd preparation;
+older kernels can return `EINVAL` at that boundary. The helper accepts that
+acquisition result only when a subsequent `/proc/<pid>/stat` read proves the
+process disappeared. Existing/reused or unreadable identities, other errors,
+and `EINVAL` from signaling remain failures; no PID-only signal fallback is used.
 
 Verify that the fixture fonts are installed with `fc-list : family` (missing fixture fonts cause native font integration tests to fail with `Configured native fixture font is missing`).
 

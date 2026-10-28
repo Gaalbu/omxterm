@@ -1,4 +1,5 @@
 """Signal retained Linux launch identities, using pidfds against PID reuse."""
+import errno
 import hashlib
 import json
 import os
@@ -29,7 +30,16 @@ failures = []
 for target in request["targets"]:
     fd = None
     try:
-        fd = os.pidfd_open(target["pid"])
+        try:
+            fd = os.pidfd_open(target["pid"])
+        except OSError as cause:
+            # Older kernels can find a pid, then lose its TGID task before
+            # pidfd_prepare(), which reports EINVAL (Linux v6.8 fork.c).
+            # Only proven disappearance is harmless: an existing/reused PID,
+            # unreadable identity, invalid PID or other error still fails.
+            if cause.errno == errno.EINVAL and target["pid"] > 0:
+                identity(target["pid"])
+            raise
         poll = select.poll()
         poll.register(fd, select.POLLIN)
         if poll.poll(0):
