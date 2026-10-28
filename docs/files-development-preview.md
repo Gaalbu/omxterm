@@ -150,6 +150,10 @@ across windows, one management operation per window. Cancellation is bound to a
 one-shot request identity and actual sender; closing Settings cancels its pending
 link operation, while renderer loss/navigation, window closure and application
 retirement revoke its authority. Switching tabs retains the pending operation.
+The link installer owns one cancellation lifetime across acquisition and native
+consent; the shared dialog does not add a second destruction listener for those
+captured bytes. Standalone local-file selection retains its own destruction
+listener through chooser and consent. Both paths discard pending trust on exit.
 Network errors expose fixed localized categories, never native error text, URL,
 query or archive content in logs. No download history, background updater,
 remote extension views or stable SDK is added.

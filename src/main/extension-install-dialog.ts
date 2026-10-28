@@ -13,7 +13,10 @@ export async function installExtensionFromDialog(
 ) {
   const owner = window.webContents;
   const cancelled = () => manager.cancel(owner);
-  owner.once("destroyed", cancelled);
+  // Captured bytes come from the link installer, which owns cancellation
+  // through acquisition and consent. Only the standalone local chooser needs
+  // its own destruction listener; both paths still discard consent in finally.
+  if (!captured) owner.once("destroyed", cancelled);
   try {
     const selected = captured
       ? undefined
@@ -67,6 +70,6 @@ export async function installExtensionFromDialog(
     return true;
   } finally {
     cancelled();
-    owner.removeListener("destroyed", cancelled);
+    if (!captured) owner.removeListener("destroyed", cancelled);
   }
 }
