@@ -70,7 +70,7 @@ function spawn(
     },
   };
 }
-/** Called by an explicit internal owner after Electron ready, not app startup. */
+/** Constructed by an internal owner after Electron ready; does not activate code. */
 export async function createExtensionRuntime(options: {
   root: string;
   runtime: PackageRuntime;

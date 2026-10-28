@@ -74,7 +74,7 @@ The host module itself does not own installation, catalogs or backend activation
 The separately installed [Files development preview](../files-development-preview.md)
 composes production Settings, shared actions, backends and this host/reader/tab seam.
 Its phase-specific product evidence is separate from host-module qualification;
-there is no public SDK or catalog acquisition.
+this host module exposes no public SDK and performs no catalog acquisition.
 The installed-package adapter and ordinary browser retirement must be qualified
 separately. Main death may leave already delivered bytes in browser memory;
 materialized Responses alone do not prove that a surviving Chromium process has

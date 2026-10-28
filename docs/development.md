@@ -238,7 +238,11 @@ Do not infer full-suite execution coverage from aggregate counters or empty pass
 
 The [internal extension backend runtime](extension-backend-runtime.md) has an
 explicit `npm run build:extension-runtime` artifact and actual native process/store
-tests. Its default integration wrapper launches real Electron/Node children even
+tests. Normal Linux ARM64 `npm run build` also includes the runtime and native
+lease/Files move addons for the [Files preview](files-development-preview.md).
+Application startup constructs infrastructure without activating installed code;
+explicit shared actions activate it. Files remains a separately built archive.
+The runtime's default integration wrapper launches real Electron/Node children even
 without opening windows; use an assigned native environment. No application
 startup activation, package/fuse/signing qualification or public SDK follows from
 building that artifact. Controlled lifecycle tests under `test/unit/extension-runtime-*`

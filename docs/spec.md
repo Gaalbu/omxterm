@@ -1646,7 +1646,7 @@ in main.
 
 ### Internal installed-package foundation
 
-An internal, explicitly built Installed Packages module implements local archive
+The internal Installed Packages module implements local archive
 validation/installation, compatibility, immutable version pins, generation-based
 admission, disable/tombstones and deferred physical cleanup. The Linux ARM64
 Files preview consumes it through production Settings with captured-byte trust.
@@ -1657,8 +1657,10 @@ and [ADR 0038](adr/0038-pin-immutable-installed-packages.md).
 
 ### Internal extension backend runtime
 
-A separately and explicitly built backend runtime consumes Installed Packages
-through an app-owned bootstrap. Explicit internal activation lazily forks one
+A separately owned backend runtime consumes Installed Packages through an
+app-owned bootstrap. Normal Linux ARM64 builds include its artifacts and native
+lease/Files move addons; isolated foundation/runtime builds remain available.
+Explicit activation through the application manager lazily forks one
 standard Node ChildProcess per active extension/application runtime using bundled
 Electron Run-as-Node and Node IPC. Independent captured-version pins, fresh
 parent/child admission checks and bounded epoch authority precede ESM import.
@@ -1677,7 +1679,8 @@ The [runtime contract](extension-backend-runtime.md) and
 interfaces, limits and qualification boundary. The [Files development preview](files-development-preview.md)
 connects Settings local/HTTPS archive installation, shared namespaced actions, independently
 pinned application views and bounded normal Quit retirement on Linux ARM64.
-Startup never activates installed code; explicit invocation does. The explicit
+Startup constructs infrastructure but never activates installed code; explicit
+shared action invocation does. The explicit
 official catalog reuses the same installation owner/store; there is no public
 SDK or extension shortcut configuration. An empty source catalog is valid but
 does not constitute public distribution.

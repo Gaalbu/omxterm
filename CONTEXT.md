@@ -230,9 +230,10 @@ destinations are not used. Wide-wrap spacers contribute no text; only exact
 core-proven, fully visible soft wraps join a destination. Uncertain viewport
 continuations remain refused; see the [terminal contract](docs/spec.md#terminal-behavior).
 
-## Extensions (planned)
+## Extensions
 
-These terms describe product direction, not a shipped extension interface.
+These terms cover the internal modules, Linux ARM64 Files development preview
+and broader product direction; they do not define a stable extension SDK.
 
 **Extension** — An optional, separately installed and user-enabled addition that
 keeps nonessential features outside the mandatory terminal core, including
@@ -257,8 +258,8 @@ review, support or a safety guarantee.
 
 **Installed Packages** — The internal module that owns local archive validation,
 immutable installed versions, aggregate registry transactions, installation
-generations and deferred cleanup. It is an implementation foundation, not the
-planned user-facing extension manager or execution host. See the
+generations and deferred cleanup. It is consumed by the Linux ARM64 Files
+preview's application manager, but does not itself own management UI or execution. See the
 [foundation contract](docs/extension-installation-foundation.md).
 
 **Backend Runtime** — An internal app-owned authority that lazily activates an
