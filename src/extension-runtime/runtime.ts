@@ -1,7 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { PackageError } from "../installed-packages/archive.js";
 import type {
-  InstalledPackages,
   OpenVersion,
   VersionSelection,
 } from "../installed-packages/installed-packages.js";
@@ -13,24 +12,16 @@ import {
   exact,
   PENDING_LIMIT,
   RuntimeError,
-  type Bootstrap,
   type Message,
   type Value,
 } from "./protocol.js";
-import type { BackendProcess, Retirement } from "./backend-process.js";
-export type { BackendProcess, Retirement } from "./backend-process.js";
-export type RuntimeOptions = {
-  packages: Pick<InstalledPackages, "openVersion">;
-  bootstrap: Omit<Bootstrap, "selection">;
-  spawn(): BackendProcess;
-  owner: AbortSignal;
-};
-export type Backend = {
-  readonly epoch: string;
-  readonly selection: VersionSelection;
-  call(value: Value, signal?: AbortSignal): Promise<Value>;
-  retire(): Promise<Retirement>;
-};
+import type {
+  Backend,
+  BackendProcess,
+  Retirement,
+  RuntimeOptions,
+} from "./backend-process.js";
+export type * from "./backend-process.js";
 function deferred<T>() {
   let resolve!: (value: T | PromiseLike<T>) => void;
   let reject!: (reason: unknown) => void;
@@ -335,8 +326,17 @@ class Activation {
       },
       (error: unknown) => {
         this.recordCleanupFailure(error);
-        const code = this.cleanupFailed ? "outcome-unknown" : "unavailable";
         done();
+        // Contention refuses only this admission; it does not invalidate the epoch.
+        if (
+          !this.cleanupFailed &&
+          error instanceof PackageError &&
+          error.code === "busy"
+        ) {
+          result.reject(new RuntimeError("busy"));
+          return;
+        }
+        const code = this.cleanupFailed ? "outcome-unknown" : "unavailable";
         this.fail(code);
         result.reject(new RuntimeError(code));
       },

@@ -31,11 +31,52 @@ describe("extension runtime error and cancellation contracts", () => {
     vi.useRealTimers();
   });
 
-  it.each(["initial", "call", "revalidation"])(
+  it.each(["call", "reuse"])(
+    "refuses busy %s without retiring unrelated work or replaying admission",
+    async (boundary) => {
+      const f = await active();
+      const sibling = observe(f.backend.call("already admitted"));
+      await flush();
+      f.openVersion.mockRejectedValueOnce(new PackageError("busy"));
+      const refused =
+        boundary === "call"
+          ? f.backend.call("not admitted")
+          : f.runtime.activate(selection.id);
+      expect(await observe<unknown>(refused)).toMatchObject({ code: "busy" });
+      expect(f.child.kinds()).not.toContain("stop");
+      expect(
+        f.child.sent.filter((message) => message.kind === "call"),
+      ).toHaveLength(1);
+      f.child.reply("result", { request: 1, ok: true, value: "finished" });
+      expect(await sibling).toBe("finished");
+      const acquisitions = f.openVersion.mock.calls.length;
+      // A new explicit request rechecks authority; the refused request is not replayed.
+      const next = f.backend.call("new request");
+      await flush();
+      expect(f.openVersion).toHaveBeenCalledTimes(acquisitions + 1);
+      expect(f.openVersion).toHaveBeenLastCalledWith(selection.id, selection);
+      expect(
+        f.child.sent
+          .filter((message) => message.kind === "call")
+          .map((message) => message.value),
+      ).toEqual(["already admitted", "new request"]);
+      f.child.reply("result", { request: 2, ok: true, value: "new result" });
+      expect(await next).toBe("new result");
+      const retired = f.runtime.dispose();
+      f.child.exit(0, null);
+      f.child.close();
+      expect(await retired).toMatchObject([{ settled: true }]);
+    },
+  );
+
+  it.each(["initial", "call", "revalidation", "busy-call"])(
     "preserves primary plus cleanup failure from %s store operation",
     async (boundary) => {
+      const calling = boundary === "call" || boundary === "busy-call";
       const failure = await withCleanup(async () => {
-        throw new PackageError("invalid-store");
+        throw new PackageError(
+          boundary === "busy-call" ? "busy" : "invalid-store",
+        );
       }, [
         async () => {
           throw new Error("synthetic cleanup failure");
@@ -43,7 +84,7 @@ describe("extension runtime error and cancellation contracts", () => {
       ]).catch((error: unknown) => error);
       const f = fixture();
       let operation: Promise<unknown>;
-      if (boundary === "call") {
+      if (calling) {
         const a = await active(f);
         f.openVersion.mockRejectedValueOnce(failure);
         operation = observe(a.backend.call(null));
@@ -59,10 +100,14 @@ describe("extension runtime error and cancellation contracts", () => {
       const code =
         boundary === "initial"
           ? "activation-failed"
-          : boundary === "call"
+          : calling
             ? "outcome-unknown"
             : "protocol";
       expect(await operation).toMatchObject({ code, message: code });
+      if (calling) {
+        expect(f.children[0]!.kinds()).toContain("stop");
+        expect(f.children[0]!.kinds()).not.toContain("call");
+      }
       const retirement = f.runtime.retire(selection.id);
       if (f.children[0]) {
         f.children[0].exit(0, null);

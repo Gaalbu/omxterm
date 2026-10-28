@@ -1,3 +1,23 @@
+import type {
+  InstalledPackages,
+  VersionSelection,
+} from "../installed-packages/installed-packages.js";
+import type { Bootstrap, Value } from "./protocol.js";
+
+/** Host inputs and admitted backend handle share this process-ownership contract. */
+export type RuntimeOptions = {
+  packages: Pick<InstalledPackages, "openVersion">;
+  bootstrap: Omit<Bootstrap, "selection">;
+  spawn(): BackendProcess;
+  owner: AbortSignal;
+};
+export type Backend = {
+  readonly epoch: string;
+  readonly selection: VersionSelection;
+  call(value: Value, signal?: AbortSignal): Promise<Value>;
+  retire(): Promise<Retirement>;
+};
+
 /** Actual process exit and stream closure are separate retirement facts. */
 export type Retirement = {
   settled: boolean;
