@@ -184,14 +184,6 @@ function request(
   return adapters.handlers.get(extensionsIpc)!(event, value);
 }
 beforeEach(async () => {
-  Object.defineProperty(process, "platform", {
-    value: "linux",
-    configurable: true,
-  });
-  Object.defineProperty(process, "arch", {
-    value: "arm64",
-    configurable: true,
-  });
   adapters.root = await mkdtemp(path.join(os.tmpdir(), "omxterm-service-"));
   language = "en-US";
   adapters.sendOpen
@@ -237,14 +229,32 @@ beforeEach(async () => {
       call: vi.fn(async () => ({ ok: true })),
     };
   });
-  service = await startApplicationExtensions({
-    applicationRoot: adapters.root,
-    translator: () => translatorFor(language),
-    sendAction: adapters.sendOpen,
-    isTrustedSender: (event) => event.sender === contents,
-    changed() {},
-    keybind() {},
+  // Model preview admission/catalog targeting, not the host filesystem. Startup
+  // captures both synchronously before its first await; Windows store operations
+  // must retain their native directory-sync policy after that boundary.
+  Object.defineProperty(process, "platform", {
+    value: "linux",
+    configurable: true,
   });
+  Object.defineProperty(process, "arch", {
+    value: "arm64",
+    configurable: true,
+  });
+  let starting: ReturnType<typeof startApplicationExtensions>;
+  try {
+    starting = startApplicationExtensions({
+      applicationRoot: adapters.root,
+      translator: () => translatorFor(language),
+      sendAction: adapters.sendOpen,
+      isTrustedSender: (event) => event.sender === contents,
+      changed() {},
+      keybind() {},
+    });
+  } finally {
+    Object.defineProperty(process, "platform", originalPlatform);
+    Object.defineProperty(process, "arch", originalArch);
+  }
+  service = await starting;
   service.registerWindow(window, () => ({
     owner: window,
     signal: new AbortController().signal,
