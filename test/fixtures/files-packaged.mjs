@@ -164,9 +164,12 @@ export async function run(options) {
       async () =>
         hosted().length === 1 &&
         (await hosted()[0].executeJavaScript(
-          "!!document.querySelector('form.location')",
+          "!!document.querySelector('form.location') && document.querySelector('.summary').textContent.includes('entries')",
+        )) &&
+        (await js(
+          "!!document.querySelector('#tab-strip [role=tab][aria-selected=true]')?.textContent.includes('Files')",
         )),
-      "Files loaded",
+      "Files selected and initial listing complete",
     );
     return hosted()[0];
   }
@@ -278,7 +281,7 @@ export async function run(options) {
   assert.equal(shellStat()?.start, identity.start);
   checks.push("same-PTY-and-Surface");
   await writeFile(
-    path.join(options.evidence, "settings.png"),
+    path.join(options.evidence, "terminal-after.png"),
     (await core.capturePage()).toPNG(),
   );
   const result = {
