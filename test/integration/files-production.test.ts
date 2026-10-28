@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { expect, it } from "vitest";
 import { runNativeFixture } from "../fixtures/run-native-fixture";
+import { productionFixtureArguments } from "../fixtures/supported-fixture-chromium-arguments";
 
 // Explicit built-production lane, serialized on an assigned Linux ARM64 desktop.
 // Portable unit/native fixtures do not imply this opt-in production qualification.
@@ -18,7 +19,7 @@ it.skipIf(process.platform !== "linux" || process.arch !== "arm64" || !source)(
     const evidence = process.env.OMXTERM_FILES_PRODUCTION_EVIDENCE;
     const execution = await runNativeFixture({
       executable: createRequire(import.meta.url)("electron") as string,
-      args: [root],
+      args: productionFixtureArguments(root),
       root,
       timeout: 120_000,
       testContext,
