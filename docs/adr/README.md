@@ -47,6 +47,7 @@ source/test boundaries and known limitations.
 | 0036 | [Distribute build-only x64 CI artifacts](0036-distribute-build-only-x64-ci-artifacts.md)                                       |
 | 0037 | [Allow the Linux software WebGL fallback](0037-allow-the-linux-software-webgl-fallback.md)                                     |
 | 0038 | [Serialize installation transactions and pin immutable package versions](0038-pin-immutable-installed-packages.md)             |
+| 0039 | [Own packaged web content by activation epoch](0039-own-packaged-web-content-by-epoch.md)                                      |
 | 0040 | [Run extension backends in owned bundled-Node children](0040-run-backends-in-owned-node-children.md)                           |
 
 ## Related boundaries

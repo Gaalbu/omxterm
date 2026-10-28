@@ -39,6 +39,14 @@ await Promise.all([
     sourcemap: true,
   }),
   build({
+    entryPoints: ["src/preload/extension-view.cjs"],
+    bundle: true,
+    format: "cjs",
+    platform: "node",
+    external: ["electron"],
+    outfile: "dist/preload/extension-view.cjs",
+  }),
+  build({
     entryPoints: ["src/renderer/index.ts"],
     bundle: true,
     format: "iife",

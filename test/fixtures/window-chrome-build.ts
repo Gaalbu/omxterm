@@ -60,6 +60,12 @@ export async function buildFixture(
         ),
         start(() =>
           cp(
+            path.join(projectRoot, "src/preload/extension-view.cjs"),
+            path.join(root, "extension-view.cjs"),
+          ),
+        ),
+        start(() =>
+          cp(
             path.join(projectRoot, "assets/application-icon.png"),
             path.join(root, "renderer/application-icon.png"),
           ),

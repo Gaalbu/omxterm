@@ -161,6 +161,7 @@ function harness(
       },
     },
     "./window-chrome-feature-scenario": { createWindowChromeFeatureScenario },
+    "./extension-view-scenario": { extensionViewOnly: false },
     "./fixture-session-input": { createFixtureSessionInput },
     "./restty-host-platform": {
       explicitFixtureReadyMarker,

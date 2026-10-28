@@ -13,7 +13,8 @@ import { userInfo } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { terminalIpc } from "../shared/terminal-ipc";
-import type { TrustedWebContents } from "./terminal-ipc-types";
+import { registerExtensionViewScheme } from "./extension-view-host";
+import { sendExtensionAwareClipboard } from "./extension-view-ipc";
 import { coreActionMenuTemplate } from "./application-menu";
 import {
   createCoreActionCatalog,
@@ -23,7 +24,10 @@ import { startCommandPalette } from "./command-palette";
 import { terminalContextMenuTemplate } from "./terminal-context-menu";
 import * as applicationAbout from "./application-about";
 import { startApplicationSettings } from "./application-settings";
-import { registerWindowActionDelivery } from "./window-action-delivery";
+import {
+  registerWindowActionDelivery,
+  createWindowActionSender,
+} from "./window-action-delivery";
 import { createKeybindCapture } from "./keybind-capture";
 import { createDefaultShellResolver, defaultShellName } from "./default-shell";
 import {
@@ -109,19 +113,9 @@ const linuxWindowIconPath =
     : undefined;
 
 let palette: ReturnType<typeof startCommandPalette> | undefined;
-const sendAction = (
-  sender: TrustedWebContents,
-  channel: string,
-  payload?: unknown,
-) => {
-  if (palette) palette.send(sender, channel, payload);
-  else sender.send(channel, payload);
-};
-const notifyWindow = (channel: string) => (window: BrowserWindow) =>
-  sendAction(window.webContents, channel);
+const { sendAction, notifyWindow } = createWindowActionSender(() => palette);
 
 let terminalApplication: TerminalApplication<BrowserWindow> | undefined;
-// Settings shortcut recording owns a window's keyboard through key delivery.
 const keybindCapture = createKeybindCapture(process.platform);
 let operationalEvents: OperationalEventLog | undefined;
 let disposeTerminalSessions = () => {};
@@ -130,6 +124,7 @@ const shutdown = registerTerminalShutdown(app, {
   disposeSessions: () => disposeTerminalSessions(),
 });
 
+registerExtensionViewScheme();
 applyChromiumSandboxPolicy(app.commandLine);
 
 applyChromiumGpuPolicy(app.commandLine);
@@ -375,9 +370,11 @@ app
           sendFontZoom: (window, command) =>
             sendAction(window.webContents, terminalIpc.fontZoom, command),
           sendClipboardAction: (window, action, target) =>
-            window.webContents.send(
-              terminalIpc.clipboardAction,
-              target ? { action, target } : action,
+            sendExtensionAwareClipboard(
+              ipcMain,
+              window.webContents,
+              action,
+              target,
             ),
           sendFind: notifyWindow(terminalIpc.find),
           sendTitleBarToggle: notifyWindow(terminalIpc.titleBarToggle),

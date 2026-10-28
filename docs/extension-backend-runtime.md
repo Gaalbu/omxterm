@@ -2,6 +2,8 @@
 
 Internal checkpoint for [#719](https://github.com/luizomf/omxterm/issues/719), under [#712](https://github.com/luizomf/omxterm/issues/712). This is not an activation path in application startup, a public SDK, a catalog/installer UI, or completed extension support. Web-content hosting belongs to [#718](https://github.com/luizomf/omxterm/issues/718), not this module. See [ADR 0040](adr/0040-run-backends-in-owned-node-children.md) and the [Installed Packages contract](extension-installation-foundation.md).
 
+Both internal slices can coexist in one source/build candidate without sharing activation or retirement ownership. Their separate Installed Packages consumers and native fixtures do not establish a combined backend/view activation path, application Quit integration or surviving-browser file-read exclusion after main death. Those remain future consumer and qualification obligations, not implicit results of source integration.
+
 ## Caller and backend interfaces
 
 `src/extension-runtime/electron-runtime.ts` exports `createExtensionRuntime({root, runtime, addon, bootstrap, environment, owner})`. The caller is Electron main, after application readiness, with an explicit application-owned AbortSignal, absolute app-owned artifact paths, a dedicated installed-package root and application/API versions. Construction opens the store but launches no backend. It does not inspect user directories or execute any installed module.

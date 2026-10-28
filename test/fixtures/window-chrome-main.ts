@@ -53,6 +53,15 @@ import { exerciseCommandPalette } from "./command-palette-exercise";
 import type { startCommandPalette } from "../../src/main/command-palette";
 import type { TrustedWebContents } from "../../src/main/terminal-ipc-types";
 
+import {
+  extensionViewOnly,
+  extensionFixtureLaunchRequest,
+  observeExtensionFixtureOutput,
+  exerciseExtensionViews,
+} from "./extension-view-scenario";
+
+let extensionClipboard:
+  ((action: "copy" | "paste" | "selectAll") => boolean) | undefined;
 let palette: ReturnType<typeof startCommandPalette> | undefined;
 const paletteOnly = process.argv.includes("--fixture-palette-only");
 const sendAction = (
@@ -127,7 +136,9 @@ function createChromeSession(callbacks: SessionCallbacks) {
   try {
     terminal = createLocalTerminalSession(spawnFixturePty, {
       shell: nativeFixturePlatform.defaultShell,
-      launchRequest: featureSmoke.launchRequest(),
+      launchRequest: extensionViewOnly
+        ? extensionFixtureLaunchRequest()
+        : featureSmoke.launchRequest(),
       platform: process.platform,
       homeDirectory: root,
       environment: { ...process.env, HOME: root },
@@ -135,6 +146,7 @@ function createChromeSession(callbacks: SessionCallbacks) {
       ...callbacks,
       onOutput(data) {
         featureSmoke.observeOutput(index, data);
+        if (index === 0) observeExtensionFixtureOutput(data);
         input.observeOutput(data);
         callbacks.onOutput(data);
       },
@@ -189,6 +201,21 @@ async function exerciseScenario(
 ) {
   const apply = applyFixtureConfiguration(router);
   try {
+    if (extensionViewOnly)
+      return await exerciseExtensionViews({
+        window: windows[0]!,
+        application,
+        router,
+        root,
+        apply,
+        showAbout: about.show,
+        ownPalette: (manager) => {
+          palette = manager;
+        },
+        ownClipboard: (route) => {
+          extensionClipboard = route;
+        },
+      });
     if (paletteOnly)
       return await exerciseCommandPalette({
         window: windows[0]!,
@@ -317,7 +344,11 @@ app
       return;
     }
     const nativeExpectation =
-      auxiliaryOnly || featureSmoke.enabled || themeAppearance || paletteOnly
+      auxiliaryOnly ||
+      featureSmoke.enabled ||
+      themeAppearance ||
+      paletteOnly ||
+      extensionViewOnly
         ? undefined
         : chromeNativeExpectation(process.argv);
     if (nativeExpectation !== undefined)
@@ -458,6 +489,10 @@ app
       sendFontZoom: (window, command) =>
         window.webContents.send(terminalIpc.fontZoom, command),
       sendClipboardAction: (window, action) => {
+        if (
+          extensionClipboard?.(action === "select-all" ? "selectAll" : action)
+        )
+          return;
         window.webContents.send(terminalIpc.clipboardAction, action);
         noteAction(window, "clipboard");
       },

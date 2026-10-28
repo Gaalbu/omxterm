@@ -46,7 +46,7 @@ const recipes = [
   },
   {
     name: "chrome",
-    writers: 4,
+    writers: 5,
     prepare: (root: string) => chrome(root, "runner"),
   },
   {
@@ -121,7 +121,7 @@ it.each([
       if (finished === recipe.writers) complete();
       // Chrome has three other writers; the configured barrier must also wait
       // for the held icon. Resolve after complete() to observe its continuation.
-      if (holdIcon && finished === 3) otherWriters.release();
+      if (holdIcon && finished === recipe.writers - 1) otherWriters.release();
     };
     vi.mocked(filesystem.writeFile).mockImplementation((...args) =>
       track(actual.writeFile(...args)),
@@ -185,8 +185,8 @@ it.each([
     try {
       if (holdIcon) {
         await Promise.all([iconHeld.ready, otherWriters.ready]);
-        expect(invoked).toBe(4);
-        expect(finished).toBe(3);
+        expect(invoked).toBe(recipe.writers);
+        expect(finished).toBe(recipe.writers - 1);
         expect(failureInjectionStarted).toBe(false);
         expect(existsSync(original)).toBe(false);
         releaseIcon.release();
