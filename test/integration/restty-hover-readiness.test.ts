@@ -1,3 +1,5 @@
+import { execFileSync } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { createRequire } from "node:module";
 import { mkdtemp, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -77,6 +79,19 @@ function expectHeldFrame(frames: readonly Frame[], phase: Phase): Frame {
   expect(held.drawCellRevision).toBeLessThan(phase.stimulus.cellRevision);
   return held;
 }
+function sourceCommit(): string {
+  try {
+    return execFileSync("git", ["rev-parse", "HEAD"], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+  } catch {
+    // Qualification archives need not include Git; emitted bundle hashes remain
+    // the exact JavaScript identity instead of inventing a checkout commit.
+    return "unavailable";
+  }
+}
+
 async function runHover(
   dpr: number,
   control: HoverControl,
@@ -84,6 +99,11 @@ async function runHover(
 ) {
   testContext.signal.throwIfAborted();
   const root = await mkdtemp(path.join(tmpdir(), "omxterm-hover-"));
+  const evidencePath = path.resolve(
+    ".scratch/native-fixtures",
+    `${randomUUID()}.json`,
+  );
+  const failureDirectory = evidencePath.replace(/\.json$/u, "-hover-failure");
   let supervised = false;
   try {
     const executable = createRequire(import.meta.url)("electron") as string;
@@ -96,8 +116,15 @@ async function runHover(
         `--force-device-scale-factor=${dpr}`,
         root,
         `--hover-control=${control}`,
+        ...(control === "early-capture"
+          ? [
+              `--hover-failure-directory=${failureDirectory}`,
+              `--hover-source-commit=${sourceCommit()}`,
+            ]
+          : []),
       ],
       root,
+      evidencePath,
       timeout: 60_000,
       testContext,
       prepare: () => buildHostFixture(root, { focusedCancellation: true }),

@@ -12,6 +12,12 @@ import {
   type HoverPixels,
 } from "./restty-hover-evidence";
 
+import {
+  retainHoverFailure,
+  type HoverBitmap,
+  type HoverFailureDestination,
+} from "./restty-hover-failure";
+
 export const HOVER_PHASE_PREFIX = "__OMXTERM_HOVER_PHASE__";
 export const HOVER_STEP_TIMEOUT = 5000;
 export interface HoverSnapshot {
@@ -64,6 +70,7 @@ interface HoverOptions {
   readonly beforeCapture?: () => Promise<void>;
   readonly afterCapture?: (stimulus: HoverSnapshot) => Promise<void>;
   readonly control?: "early-capture";
+  readonly failureDestination?: HoverFailureDestination;
 }
 
 async function bounded<T>(
@@ -203,6 +210,9 @@ function recordHoverPhase(
   );
 }
 
+// Keep the existing capture/guard ordering together; failure-only retention must
+// not split the native observation sequence into a new orchestration abstraction.
+// oxlint-disable-next-line max-lines-per-function
 export async function captureModifiedHoverEvidence(
   options: HoverOptions,
 ): Promise<{
@@ -218,6 +228,7 @@ export async function captureModifiedHoverEvidence(
   let pixels: HoverPixels | undefined;
   let deviceCellSize: readonly [number, number] | undefined;
   let stimulus: HoverSnapshot | undefined;
+  let failedPair: { baseline: HoverBitmap; modified: HoverBitmap } | undefined;
   const record = (category: "none" | HoverEvidenceError["category"]) =>
     recordHoverPhase(window, {
       phase,
@@ -368,6 +379,8 @@ export async function captureModifiedHoverEvidence(
         prepared.geometry,
         { prefix: 0, destinations: 0 },
       );
+    if (phase === "modified" && options.control === "early-capture" && baseline)
+      failedPair = { baseline, modified: captured };
     if (phase === "modified" && options.afterCapture)
       await bounded(() => options.afterCapture!(stimulus), "cue-not-drawn");
     current(after);
@@ -454,6 +467,22 @@ export async function captureModifiedHoverEvidence(
         ? error
         : new HoverEvidenceError("preparation");
     record(failure.category);
+    if (
+      options.control === "early-capture" &&
+      options.failureDestination &&
+      phase === "modified" &&
+      failure.category === "cue-not-drawn" &&
+      pixels &&
+      pixels.total !== 0 &&
+      failedPair
+    )
+      await retainHoverFailure(
+        options.failureDestination,
+        failedPair.baseline,
+        failedPair.modified,
+        pixels,
+        { before, after, stimulus },
+      );
     throw failure;
   }
 }

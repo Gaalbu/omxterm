@@ -1,4 +1,16 @@
+import { createHash } from "node:crypto";
 import type { BrowserWindow } from "electron";
+import {
+  mkdtemp,
+  mkdir,
+  readFile,
+  readdir,
+  rm,
+  writeFile,
+} from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import type { HoverFailureDestination } from "../fixtures/restty-hover-failure";
 import { runInNewContext } from "node:vm";
 import { afterEach, expect, it, vi } from "vitest";
 import { HOVER_FRAME_HOLD_SOURCE } from "../fixtures/restty-hover-control";
@@ -22,6 +34,8 @@ function fixture(
       | "keyup-replaced-empty";
     captureChange?: "viewport" | "identity" | "clear";
     beforeNoopKeyup?: boolean;
+    earlyCapture?: "changed" | "unchanged";
+    failureDestination?: HoverFailureDestination;
   } = {},
 ) {
   let snapshot: HoverSnapshot = {
@@ -80,6 +94,16 @@ function fixture(
   const dispatch = (event: Event) => {
     if (event.type === "keyup" && options.beforeNoopKeyup) return true;
     replace(event.type === "keyup" ? 0 : Number(event.modified));
+    if (event.modified && options.earlyCapture)
+      snapshot = {
+        ...snapshot,
+        draw: {
+          ...snapshot.draw,
+          drawRevision: 2,
+          drawCellRevision: 2,
+          drawCells: 0,
+        },
+      };
     return true;
   };
   const canvas = {
@@ -159,7 +183,8 @@ function fixture(
         }
         const { width, height } = snapshot.geometry.viewport;
         const bytes = Buffer.alloc(width * height * 4);
-        if (snapshot.draw.cells) bytes[(4 * width + 12) * 4] = 255;
+        if (snapshot.draw.cells && options.earlyCapture !== "unchanged")
+          bytes[(4 * width + 12) * 4] = 255;
         return {
           getSize: () => ({ width, height }),
           toBitmap: () => {
@@ -181,6 +206,10 @@ function fixture(
         text: "fixture",
         prefixColumns: 1,
         destinationColumns: 1,
+        ...(options.earlyCapture ? { control: "early-capture" as const } : {}),
+        ...(options.failureDestination
+          ? { failureDestination: options.failureDestination }
+          : {}),
       }),
     counts: () => ({ captures, bitmapReads }),
     records: () =>
@@ -253,6 +282,97 @@ it("retains missing-pixel evidence for geometry-stable capture invalidation", as
     pixels: { total: 0, missingCells: 1 },
   });
   expect(f.counts().captures).toBe(2);
+});
+
+it("retains the actual failed pair outside the removed profile, without recapture or replacing the draw failure", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "hover-retention-"));
+  try {
+    const profile = path.join(root, "profile");
+    await mkdir(path.join(profile, "renderer"), { recursive: true });
+    for (const file of ["main.cjs", "preload.cjs", "renderer/index.js"])
+      await writeFile(path.join(profile, file), "synthetic bundle");
+    const destination = {
+      directory: path.join(root, "failure"),
+      sourceDirectory: profile,
+      sourceCommit: "a".repeat(40),
+    };
+    const f = fixture({
+      earlyCapture: "changed",
+      failureDestination: destination,
+    });
+    await expect(f.run()).rejects.toMatchObject({ category: "cue-not-drawn" });
+    expect(f.counts()).toEqual({ captures: 2, bitmapReads: 2 });
+    await rm(profile, { recursive: true });
+    const metadata = JSON.parse(
+      await readFile(path.join(destination.directory, "metadata.json"), "utf8"),
+    ) as { sourceBundleSha256: Record<string, string> };
+    expect(metadata).toMatchObject({
+      sourceCommit: "a".repeat(40),
+      control: "early-capture",
+      phase: "modified",
+      pixels: { total: 1 },
+      baseline: { width: 24, height: 24 },
+      snapshots: { after: { draw: { drawCellRevision: 2, cellRevision: 3 } } },
+    });
+    const bundleHash = createHash("sha256")
+      .update("synthetic bundle")
+      .digest("hex");
+    expect(metadata.sourceBundleSha256).toEqual({
+      "main.cjs": bundleHash,
+      "preload.cjs": bundleHash,
+      "renderer/index.js": bundleHash,
+    });
+    const baseline = await readFile(
+      path.join(destination.directory, "baseline.bgra"),
+    );
+    const modified = await readFile(
+      path.join(destination.directory, "modified.bgra"),
+    );
+    expect(baseline).toEqual(Buffer.alloc(24 * 24 * 4));
+    const expected = Buffer.from(baseline);
+    expected[(4 * 24 + 12) * 4] = 255;
+    expect(modified).toEqual(expected);
+
+    // A real filesystem rejection, not a mocked writer or a path-only check.
+    const blocked = path.join(root, "blocked");
+    await writeFile(blocked, "not a directory");
+    const failedWrite = fixture({
+      earlyCapture: "changed",
+      failureDestination: {
+        ...destination,
+        directory: path.join(blocked, "failure"),
+      },
+    });
+    await expect(failedWrite.run()).rejects.toMatchObject({
+      category: "cue-not-drawn",
+    });
+    expect(failedWrite.counts()).toEqual({ captures: 2, bitmapReads: 2 });
+    expect(await readFile(blocked, "utf8")).toBe("not a directory");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+it("does not export a passing negative control or ordinary successful captures", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "hover-no-retention-"));
+  try {
+    const failureDestination = {
+      directory: path.join(root, "failure"),
+      sourceDirectory: root,
+      sourceCommit: "b".repeat(40),
+    };
+    const negative = fixture({ earlyCapture: "unchanged", failureDestination });
+    await expect(negative.run()).rejects.toMatchObject({
+      category: "cue-not-drawn",
+    });
+    expect(negative.records().at(-1)?.pixels?.total).toBe(0);
+    await expect(fixture({ failureDestination }).run()).resolves.toMatchObject({
+      modifiedHoverChangedPixels: 1,
+    });
+    expect(await readdir(root)).toEqual([]);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 });
 
 function frameFixture() {

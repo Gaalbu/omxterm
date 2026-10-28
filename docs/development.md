@@ -263,6 +263,32 @@ While iterating on a specific subsystem, you can run targeted test files before 
 | Unix native resize failure                     | `npx vitest run test/integration/terminal-resize-race.test.ts test/unit/terminal-resize-failure.test.ts`                                                                                      |
 | Linux foreground Busy decision                 | `npx vitest run test/unit/linux-foreground.test.ts test/unit/postinstall.test.ts test/integration/linux-foreground.test.ts`                                                                   |
 
+The hover `early-capture` negative control retains its two already inspected
+synthetic BGRA bitmaps only when the modified `cue-not-drawn` failure also has
+nonzero changed pixels (the unchanged-bitmap oracle fails). No additional capture,
+wait, tolerance, retry or success-path image export is added. Each image is bounded
+to 32 MiB. The runner owns a unique `*-hover-failure` directory beside its
+`.scratch/native-fixtures/<id>.json` supervisor receipt, outside the deleted
+profile. `metadata.json` records the source checkout commit (`unavailable` for
+archives without Git), SHA-256 of the actual
+emitted main/preload/renderer JavaScript bundles, control/phase, dimensions,
+pixel comparison and draw/geometry snapshots. Bundle hashes distinguish local
+JavaScript edits from the commit label; they are not a full runtime/environment
+manifest. `baseline.bgra` and `modified.bgra` preserve the exact compared bytes.
+The supervisor request arguments identify the destination; the fixed
+`__OMXTERM_HOVER_FAILURE__` receipt reports `retained` or `write-failed` without
+logging paths or terminal text. Partial writes stay in that same owned directory.
+Inspect and remove this directory with the invocation's other evidence after its
+consumer finishes; it is not automatically removed with the profile.
+
+Export errors preserve the original draw failure and existing frame-release and
+native-settlement paths. Diagnostic I/O remains subject to the unchanged outer
+fixture deadline and can be interrupted, leaving partial evidence. Retention
+may modestly affect timing; neither this seam nor headless checks guarantee
+reproduction or explain the original #721 failure. The issue remains unresolved.
+Headless actual-retention coverage (controlled images, real filesystem, no native
+window): `npm test -- test/unit/restty-hover-readiness.test.ts`.
+
 The `font-read-reload` suite holds one actual main-process `FileHandle.read`
 before its positional read, retaining native discovery, bounded bytes/face
 validation, production preload, host, Surface and supervised PTYs. One window
