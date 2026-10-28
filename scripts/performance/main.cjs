@@ -42,6 +42,7 @@ app
           workingSetKiB: memory.workingSetSize,
         })),
     });
+    await evaluate("performanceFixture.ready");
     const phases = [];
     for (const [name, count] of [
       ["one", 1],

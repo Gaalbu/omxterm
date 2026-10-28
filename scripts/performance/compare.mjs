@@ -23,6 +23,8 @@ const fixtureFiles = [
 function signature(report, run) {
   return {
     environment: report.environment,
+    buildNode: report.buildNode,
+    electronSha256: report.electronSha256,
     protocol: report.protocol,
     fixture: fixtureFiles.map((file) => report.hashes[file]),
     platform: run.platform,
@@ -46,36 +48,63 @@ function signature(report, run) {
 }
 
 function metrics(run) {
+  if (
+    !equal(
+      run.phases.map((phase) => phase.name),
+      ["one", "three", "closed"],
+    )
+  )
+    throw new Error("Expected one, three, closed phases in order");
   const result = {};
+  const identities = new Map();
   for (const phase of run.phases) {
     if (phase.samples.length !== 4)
       throw new Error("Expected four phase snapshots");
+    const snapshots = [phase.before, ...phase.samples];
+    if (
+      snapshots.some(
+        (sample, index) =>
+          !Number.isFinite(sample.timeMs) ||
+          (index > 0 && sample.timeMs <= snapshots[index - 1].timeMs),
+      )
+    )
+      throw new Error("Invalid snapshot times");
     const initial = phase.samples[0];
     const final = phase.samples.at(-1);
     const duration = (final.timeMs - initial.timeMs) / 1000;
     if (!(duration > 0)) throw new Error("Invalid sampling duration");
     for (const role of ["Browser", "Tab", "GPU"]) {
-      const rows = phase.samples.map((sample) =>
+      const rows = snapshots.map((sample) =>
         sample.processes.filter((row) => row.type === role),
       );
       if (rows.some((row) => row.length !== 1))
         throw new Error(`Expected exactly one ${role} process`);
-      const processes = rows.map((row) => row[0]);
+      const all = rows.map((row) => row[0]);
+      const identity = identities.get(role) ?? [
+        all[0].pid,
+        all[0].creationTime,
+      ];
+      identities.set(role, identity);
       if (
-        processes.some(
+        all.some(
           (row) =>
-            row.pid !== processes[0].pid ||
-            row.creationTime !== processes[0].creationTime,
+            !Number.isSafeInteger(row.pid) ||
+            row.pid <= 0 ||
+            !Number.isFinite(row.creationTime) ||
+            !equal([row.pid, row.creationTime], identity),
         )
       )
-        throw new Error(`Process changed during ${phase.name}`);
-      for (const row of processes)
+        throw new Error(`Process changed during repetition: ${role}`);
+      for (const [index, row] of all.entries())
         if (
           !Number.isFinite(row.workingSetKiB) ||
           row.workingSetKiB <= 0 ||
-          !Number.isFinite(row.cpuSeconds)
+          !Number.isFinite(row.cpuSeconds) ||
+          row.cpuSeconds < 0 ||
+          (index > 0 && row.cpuSeconds < all[index - 1].cpuSeconds)
         )
-          throw new Error("Unavailable memory/CPU metric");
+          throw new Error("Unavailable or decreasing memory/CPU metric");
+      const processes = all.slice(1);
       const cpu = processes.at(-1).cpuSeconds - processes[0].cpuSeconds;
       if (cpu < 0) throw new Error("CPU counter decreased");
       result[`${phase.name}/${role}/workingSetMiB`] = median(
@@ -83,51 +112,44 @@ function metrics(run) {
       );
       result[`${phase.name}/${role}/idleCpuPercentOneCore`] =
         (100 * cpu) / duration;
-      const before = phase.before.processes.find(
-        (row) =>
-          row.pid === processes[0].pid &&
-          row.creationTime === processes[0].creationTime,
-      );
-      if (!before || processes[0].cpuSeconds < before.cpuSeconds)
-        throw new Error("Workload process changed");
       result[`${phase.name}/${role}/workloadCpuSeconds`] =
-        processes[0].cpuSeconds - before.cpuSeconds;
+        processes[0].cpuSeconds - all[0].cpuSeconds;
     }
   }
   return result;
 }
 
 export function compare(baseline, candidate) {
-  const reasons = [];
-  for (const report of [baseline, candidate]) {
-    if (
-      report.schema !== 1 ||
-      report.protocol !== "surface-1-3-1-v1" ||
-      report.repetitions !== 3 ||
-      report.runs?.length !== 3
-    )
-      reasons.push(
-        "Incomplete or unsupported report (three settled repetitions required)",
-      );
-    if (!/^[a-f0-9]{40}$/u.test(report.source ?? ""))
-      reasons.push("Missing exact source identity");
-    if (
-      !report.environment ||
-      fixtureFiles.some((file) => !report.hashes?.[file])
-    )
-      reasons.push("Missing environment/fixture provenance");
-  }
-  if (reasons.length) return { comparable: false, reasons, rows: [] };
-  const reference = signature(baseline, baseline.runs[0]);
-  for (const report of [baseline, candidate])
-    for (const run of report.runs)
-      if (!equal(reference, signature(report, run)))
-        reasons.push(
-          "Environment, runtime, fixture, GPU or geometry differs (including within a run set)",
-        );
-  if (reasons.length)
-    return { comparable: false, reasons: [...new Set(reasons)], rows: [] };
   try {
+    const reasons = [];
+    for (const report of [baseline, candidate]) {
+      if (
+        report.schema !== 1 ||
+        report.protocol !== "surface-1-3-1-v1" ||
+        report.repetitions !== 3 ||
+        report.runs?.length !== 3
+      )
+        reasons.push(
+          "Incomplete or unsupported report (three settled repetitions required)",
+        );
+      if (!/^[a-f0-9]{40}$/u.test(report.source ?? ""))
+        reasons.push("Missing exact source identity");
+      if (
+        !report.environment ||
+        fixtureFiles.some((file) => !report.hashes?.[file])
+      )
+        reasons.push("Missing environment/fixture provenance");
+    }
+    if (reasons.length) return { comparable: false, reasons, rows: [] };
+    const reference = signature(baseline, baseline.runs[0]);
+    for (const report of [baseline, candidate])
+      for (const run of report.runs)
+        if (!equal(reference, signature(report, run)))
+          reasons.push(
+            "Environment, runtime, fixture, GPU or geometry differs (including within a run set)",
+          );
+    if (reasons.length)
+      return { comparable: false, reasons: [...new Set(reasons)], rows: [] };
     const before = baseline.runs.map(metrics);
     const after = candidate.runs.map(metrics);
     if (!equal(Object.keys(before[0]), Object.keys(after[0])))

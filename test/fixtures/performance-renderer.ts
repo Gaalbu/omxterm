@@ -6,6 +6,7 @@ const fixture = depthRenderingFixture();
 let retained: Uint8Array | undefined;
 Object.assign(globalThis, {
   performanceFixture: {
+    ready: fixture.then(() => true),
     async phase(count: number, control: boolean) {
       if (control && !retained) {
         retained = new Uint8Array(128 * 1024 * 1024);

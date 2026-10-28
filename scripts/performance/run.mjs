@@ -34,6 +34,8 @@ const files = [
   "test/fixtures/restty-hidden-presentation.ts",
   "src/renderer/terminal-window.css",
   "src/renderer/index.html",
+  "node_modules/restty/dist/chunk-c0rcpsc5.js",
+  "assets/restty/omxterm-restty-core.wasm",
 ];
 const hashes = Object.fromEntries(
   await Promise.all(
@@ -54,6 +56,8 @@ const { runNativeFixture } = await import(pathToFileURL(supervisor).href);
 const electron = createRequire(import.meta.url)("electron");
 const summary = {
   schema: 1,
+  buildNode: process.version,
+  electronSha256: hash(await readFile(electron)),
   source: git("rev-parse", "HEAD"),
   tree: git("rev-parse", "HEAD^{tree}"),
   environment,
@@ -79,6 +83,8 @@ for (let trial = 0; trial < summary.repetitions; trial++) {
     timeout: 70000,
     evidencePath: path.join(root, `settlement-${trial}.json`),
     async prepare() {
+      for (const name of ["home", "config", "state"])
+        await mkdir(path.join(profile, name));
       await build({
         entryPoints: ["test/fixtures/performance-renderer.ts"],
         outfile: path.join(profile, "renderer.js"),
@@ -120,6 +126,7 @@ for (let trial = 0; trial < summary.repetitions; trial++) {
     JSON.stringify(execution, null, 2),
   );
   if (
+    execution.reason !== "exit" ||
     execution.exitCode !== 0 ||
     execution.signal ||
     execution.cleanupErrors.length

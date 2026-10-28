@@ -99,6 +99,33 @@ it("refuses cross-environment, geometry, runtime and fixture comparisons", () =>
   }
 });
 
+it("rejects malformed phases, missing counters and cross-phase process replacement", () => {
+  for (const mutate of [
+    (value) => {
+      delete value.runs[0].phases[0].before.processes[1].cpuSeconds;
+    },
+    (value) => {
+      value.runs[1].phases[1].name = "unexpected";
+    },
+    (value) => {
+      for (const run of value.runs) run.phases = [];
+    },
+    (value) => {
+      delete value.runs[1].contentBounds;
+    },
+    (value) => {
+      for (const phase of value.runs[0].phases.slice(1))
+        for (const sample of [phase.before, ...phase.samples])
+          sample.processes[1].pid = 99;
+    },
+  ]) {
+    const candidate = report();
+    mutate(candidate);
+    expect(compare(report(), candidate).comparable).toBe(false);
+    expect(compare(candidate, candidate).comparable).toBe(false);
+  }
+});
+
 it("refuses incomplete, unavailable or restarted process measurements", () => {
   for (const mutate of [
     (value) => {
