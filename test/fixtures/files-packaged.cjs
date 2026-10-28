@@ -7,6 +7,11 @@ const { readFile, writeFile, stat } = require("node:fs/promises");
 const { readFileSync, writeFileSync } = require("node:fs");
 const path = require("node:path");
 
+let catalogTransport;
+async function cleanup() {
+  await catalogTransport?.close();
+}
+
 // Runtime.evaluate has no dynamic-import callback. Load this ordinary CommonJS
 // observer through Node's createRequire, without replacing the application entry.
 function inspect(options) {
@@ -260,8 +265,42 @@ async function run(options) {
   await js(
     "window.__packagedCanvas = document.querySelector('.terminal-surface canvas')",
   );
+  if (options.catalogMode === "controlled") {
+    catalogTransport = await require("./files-catalog-transport.cjs").start(
+      options,
+    );
+  }
   await settings();
-  await click(core, "Install local .omxext…");
+  if (options.catalogMode) {
+    assert.equal(
+      catalogTransport?.requests.length ?? 0,
+      0,
+      "Settings must not fetch the catalog",
+    );
+    await click(core, "Browse official extensions");
+    if (catalogTransport) {
+      await state("Catalog unavailable.");
+      assert.equal(approvals, 0);
+      catalogTransport.available(true);
+      await click(core, "Retry catalog");
+    }
+    await state("Catalog loaded.");
+    if (catalogTransport) {
+      catalogTransport.available(false);
+      await click(core, "Refresh catalog");
+      await state("last successful snapshot");
+      await click(core, "Install");
+      await state("do not match the selected catalog release");
+      assert.equal(approvals, 0, "wrong bytes never reach consent");
+      assert.equal(children.length, 0);
+      catalogTransport.validArchive(true);
+    }
+    await writeFile(
+      path.join(options.evidence, "catalog.png"),
+      (await core.capturePage()).toPNG(),
+    );
+    await click(core, "Install");
+  } else await click(core, "Install local .omxext…");
   await state("generation 1");
   assert.equal(approvals, 1);
   assert.equal(children.length, 0);
@@ -316,8 +355,18 @@ async function run(options) {
     path.join(options.evidence, "files.png"),
     (await view.capturePage()).toPNG(),
   );
+  const requestsBeforeReopen = catalogTransport?.requests.length;
   await settings();
-  await click(core, "Install local .omxext…");
+  if (catalogTransport)
+    assert.equal(
+      catalogTransport.requests.length,
+      requestsBeforeReopen,
+      "reopening Settings must not fetch",
+    );
+  await click(
+    core,
+    options.catalogMode ? "Reinstall" : "Install local .omxext…",
+  );
   await state("generation 2");
   await until(
     () => hosted().length === 0 && children[0].closed,
@@ -354,7 +403,25 @@ async function run(options) {
     path.join(options.evidence, "terminal-after.png"),
     (await core.capturePage()).toPNG(),
   );
+  if (catalogTransport) {
+    assert.deepEqual(catalogTransport.requests, [
+      "/catalog",
+      "/catalog",
+      "/catalog",
+      "/archive",
+      "/archive",
+      "/archive",
+    ]);
+    await cleanup();
+  }
   const result = {
+    catalog: options.catalogMode
+      ? {
+          mode: options.catalogMode,
+          requests: catalogTransport?.requests ?? null,
+          transportClosed: catalogTransport ? true : null,
+        }
+      : null,
     checks,
     approvals,
     children,
@@ -388,6 +455,7 @@ async function run(options) {
 module.exports = {
   inspect,
   run,
+  cleanup,
   assertNormalBackendRetirement,
   quit: () => app.quit(),
 };

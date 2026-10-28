@@ -22,11 +22,22 @@ const appImage = process.env.OMXTERM_FILES_PACKAGED_APPIMAGE;
 const archive = process.env.OMXTERM_FILES_PACKAGED_ARCHIVE;
 const attachOnly = process.env.OMXTERM_FILES_PACKAGED_ATTACH_ONLY === "1";
 const terminalOnly = process.env.OMXTERM_FILES_PACKAGED_TERMINAL_ONLY === "1";
-const scope = attachOnly
-  ? "observer-attachment-only"
-  : terminalOnly
-    ? "terminal-entry-only"
-    : "Files-lifecycle";
+const catalogMode = process.env.OMXTERM_FILES_PACKAGED_CATALOG;
+assert.ok(
+  !catalogMode || ["controlled", "public"].includes(catalogMode),
+  "Unknown catalog qualification mode",
+);
+assert.ok(
+  !catalogMode || (!attachOnly && !terminalOnly),
+  "Catalog mode requires the full lifecycle",
+);
+const scope = catalogMode
+  ? `Files-catalog-${catalogMode}`
+  : attachOnly
+    ? "observer-attachment-only"
+    : terminalOnly
+      ? "terminal-entry-only"
+      : "Files-lifecycle";
 assert.ok(
   !(attachOnly && terminalOnly),
   "Choose only one diagnostic stopping point",
@@ -133,6 +144,53 @@ async function inspector(url: string) {
   };
 }
 
+async function prepareCatalog(root: string) {
+  if (catalogMode !== "controlled") return;
+  await cp(
+    "test/fixtures/files-catalog-transport.cjs",
+    path.join(root, "files-catalog-transport.cjs"),
+  );
+  assert.ok(
+    process.env.OMXTERM_FILES_PACKAGED_CATALOG_FILE,
+    "Controlled catalog candidate required",
+  );
+  await cp(
+    process.env.OMXTERM_FILES_PACKAGED_CATALOG_FILE,
+    path.join(root, "catalog.json"),
+  );
+  await execute(
+    "/usr/bin/openssl",
+    [
+      "req",
+      "-x509",
+      "-newkey",
+      "rsa:2048",
+      "-nodes",
+      "-keyout",
+      path.join(root, "catalog.key"),
+      "-out",
+      path.join(root, "catalog.crt"),
+      "-days",
+      "1",
+      "-subj",
+      "/CN=127.0.0.1",
+      "-addext",
+      "subjectAltName=IP:127.0.0.1",
+    ],
+    { timeout: 15000 },
+  );
+}
+async function closeObserver(
+  client: Awaited<ReturnType<typeof inspector>> | undefined,
+  observer: string | undefined,
+): Promise<unknown> {
+  if (!client || !observer) return;
+  try {
+    await client.evaluate(`${observer}.cleanup()`, 5000);
+  } catch (error) {
+    return error;
+  }
+}
 async function observeScenario(
   client: Awaited<ReturnType<typeof inspector>>,
   observer: string,
@@ -163,6 +221,13 @@ async function observeScenario(
     path.join(evidence, terminalOnly ? "terminal-entry.json" : "scenario.json"),
     JSON.stringify(result, null, 2),
   );
+  if (catalogMode)
+    expect(result).toMatchObject({
+      catalog: {
+        mode: catalogMode,
+        transportClosed: catalogMode === "controlled" ? true : null,
+      },
+    });
   if (terminalOnly)
     expect(result).toMatchObject({
       check: "terminal-entry-only",
@@ -210,6 +275,7 @@ it.skipIf(
     let owner:
       Awaited<ReturnType<typeof launchLinuxPackagedProcess>> | undefined;
     let client: Awaited<ReturnType<typeof inspector>> | undefined;
+    let observer: string | undefined;
     let outcome: unknown;
     let nativeStderr = "";
     let failure: unknown;
@@ -279,6 +345,7 @@ it.skipIf(
         "test/fixtures/files-packaged.cjs",
         path.join(root, "observer.cjs"),
       );
+      await prepareCatalog(root);
       const env: NodeJS.ProcessEnv = {
         HOME: path.join(root, "home"),
         PATH: path.join(root, "bin"),
@@ -372,8 +439,12 @@ it.skipIf(
         files: path.join(root, "owned-files"),
         readiness,
         terminalOnly,
+        catalogMode,
+        catalogFile: path.join(root, "catalog.json"),
+        catalogCertificate: path.join(root, "catalog.crt"),
+        catalogKey: path.join(root, "catalog.key"),
       };
-      const observer = `process.getBuiltinModule('module').createRequire(${JSON.stringify(path.join(asar, "package.json"))})(${JSON.stringify(path.join(root, "observer.cjs"))})`;
+      observer = `process.getBuiltinModule('module').createRequire(${JSON.stringify(path.join(asar, "package.json"))})(${JSON.stringify(path.join(root, "observer.cjs"))})`;
       await observeScenario(client, observer, options, evidence);
       await owner.verifyMain();
       await client.evaluate(`${observer}.quit(); true`, 5000);
@@ -420,6 +491,7 @@ it.skipIf(
         }
       }
     } finally {
+      cleanupFailure = await closeObserver(client, observer);
       client?.close();
       if (owner) {
         try {

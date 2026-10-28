@@ -235,6 +235,25 @@ modules are not used as product entries or dependency ancestors. Test-only
 observer code is identified separately from the package and receives no publisher
 or runtime authority outside this disposable test.
 
+For catalog qualification, set `OMXTERM_FILES_PACKAGED_CATALOG=controlled` and
+`OMXTERM_FILES_PACKAGED_CATALOG_FILE` to the generated candidate JSON. The same
+packaged lifecycle first observes cold catalog failure, explicit retry, stale
+snapshot retention and wrong-archive refusal before consent, then installs and
+reinstalls exact Files bytes through the catalog. A fixture-only HTTPS request
+interceptor routes only the fixed catalog and selected asset URLs to an owned
+loopback TLS server with a one-day certificate (`/usr/bin/openssl` required).
+Certificate verification stays enabled with an explicit fixture CA; production
+endpoint/configuration and package bytes are unchanged. The server, sockets and
+interceptor are retired before successful Quit. This is controlled transport
+composition, **not public GitHub TLS/availability qualification**.
+
+After actual publication, `OMXTERM_FILES_PACKAGED_CATALOG=public` uses the fixed
+public endpoint and release URLs without interception, fixture CA or catalog file.
+It skips the controlled offline/wrong-byte negatives, retaining catalog install,
+reinstall and the full Files/PTY/Quit assertions against the supplied known archive
+hash. Record this as a separate source/artifact/public-readback milestone. Neither
+catalog mode can be combined with attachment/terminal-only diagnostics.
+
 The existing packaged-process owner verifies actual main executable/lineage,
 tracks children and joins exit/streams/owned settlement. `scenario.json` records
 assertions, `quit.json` records backend exit/close and shell kernel exit at normal
