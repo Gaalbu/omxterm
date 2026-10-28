@@ -30,6 +30,9 @@ export function inspectWindowsInstallerInputs(
   // #704 excludes Linux prebuilds and redundant third_party native inputs from
   // the payload. App ID/name, NSIS options, registration/cache paths, shortcuts
   // and the locked builder/templates remain unchanged; retain exact guarding.
+  // #726 excludes separately distributed Files archives/receipts from all host
+  // payloads. The six exclusion lines change no app identity, NSIS option,
+  // registry/cache location, shortcut, template or locked builder dependency.
   const digest = createHash("sha256")
     .update(configuration.replaceAll("\r\n", "\n"))
     .digest("hex");
@@ -37,7 +40,7 @@ export function inspectWindowsInstallerInputs(
     builderVersion !== "26.15.3" ||
     packageName !== "omxterm" ||
     digest !==
-      "2968aba47725a35838909be20dba72b44e37461054d2a56e28c88b97cdf4c071"
+      "07c1b2f2b9ab2e30d168e416ca5a6f6342cdd88a88dc0828e195bf1cfcf93a3d"
   )
     throw new Error(
       "Unknown Windows installer footprint; review the pinned packaging inputs before exact installer verification",
