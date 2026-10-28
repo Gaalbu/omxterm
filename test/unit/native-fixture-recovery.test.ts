@@ -299,7 +299,11 @@ it("refuses a missing profile rather than treating absence as settlement", async
 it("does not treat the temporary area itself as a fixture profile", async () => {
   await actual.writeFile(
     blocked,
-    JSON.stringify({ root: tmpdir(), evidencePath: oldEvidence }),
+    // Reach the temporary-root guard, not the earlier symlink-profile guard.
+    JSON.stringify({
+      root: await actual.realpath(tmpdir()),
+      evidencePath: oldEvidence,
+    }),
   );
   await refused("profile is outside the temporary fixture area");
 });
