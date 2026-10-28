@@ -13,9 +13,7 @@ it.skipIf(process.platform === "win32")(
   async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "omxterm-catalog-tls-"));
     const helper = require("../fixtures/files-catalog-transport.cjs") as {
-      start(
-        options: Record<string, string>,
-      ): Promise<{
+      start(options: Record<string, string>): Promise<{
         requests: string[];
         available(value: boolean): void;
         validArchive(value: boolean): void;
