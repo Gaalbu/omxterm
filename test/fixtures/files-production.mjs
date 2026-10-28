@@ -216,7 +216,20 @@ void ready.then(async (window) => {
     assert.equal(children.length, 0);
     checks.push("Settings-captured-trust-dormant-no-backend");
     menu("Files");
-    await until(() => hosted().length === 1, "first Files view");
+    // A navigation URL precedes load completion and Application Tab selection.
+    // Stabilize the intended palette owner; do not bypass its stale-target guard.
+    await until(async () => {
+      if (hosted().length !== 1) return false;
+      if (
+        !(await js(
+          "!!document.querySelector('#tab-strip [role=tab][aria-selected=true]')?.textContent.includes('Files')",
+        ))
+      )
+        return false;
+      return hosted()[0].executeJavaScript(
+        "!!document.querySelector('form.location')",
+      );
+    }, "first Files selected and loaded");
     menu("Command Palette");
     await until(
       () =>
@@ -235,6 +248,13 @@ void ready.then(async (window) => {
     await until(
       () => view.executeJavaScript("!!document.querySelector('form.location')"),
       "Files UI loaded",
+    );
+    await until(
+      () =>
+        js(
+          "[...document.querySelectorAll('#tab-strip [role=tab]')].filter(tab => tab.textContent.includes('Files')).length === 2 && !!document.querySelector('#tab-strip [role=tab][aria-selected=true]')?.textContent.includes('Files')",
+        ),
+      "two registered Files tabs",
     );
     await location(view);
     await click(view, "New file");
