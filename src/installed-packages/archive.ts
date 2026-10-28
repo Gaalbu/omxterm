@@ -5,6 +5,7 @@ import path from "node:path";
 import { crc32 } from "node:zlib";
 import { satisfies, valid, validRange } from "semver";
 import { fromBufferPromise, type Entry, type ZipFile } from "yauzl";
+import { isExtensionResource } from "../shared/extensions.js";
 
 export class PackageError extends Error {
   cleanupFailed = false;
@@ -118,10 +119,11 @@ function validateView(view: unknown, id: string): void {
   if (
     !isRecord(view) ||
     !keys(view, ["entry", "action", "title"]) ||
-    typeof view.entry !== "string" ||
+    !isExtensionResource(view.entry) ||
     !view.entry.endsWith(".html") ||
     !validId(view.action) ||
     !view.action.startsWith(`${id}.`) ||
+    view.action.slice(id.length + 1).includes(".") ||
     typeof view.title !== "string" ||
     !view.title.trim() ||
     view.title.length > 128 ||

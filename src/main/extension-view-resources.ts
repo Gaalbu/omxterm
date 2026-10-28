@@ -1,3 +1,6 @@
+import { isExtensionResource } from "../shared/extensions.js";
+export { isExtensionResource } from "../shared/extensions.js";
+
 export interface CapturedResourceOwner {
   // Adapter contract: already-pinned immutable bytes, no latest lookup. Bound
   // allocation DURING the read (not readFile followed by a size check), retain
@@ -29,19 +32,6 @@ const types: Record<string, string> = {
   gif: "image/gif",
   webp: "image/webp",
 };
-
-export function isExtensionResource(value: unknown): value is string {
-  return (
-    typeof value === "string" &&
-    value.length <= 512 &&
-    value
-      .split("/")
-      .every(
-        (part) =>
-          /^[A-Za-z0-9_-][A-Za-z0-9_.-]*$/.test(part) && !part.endsWith("."),
-      )
-  );
-}
 
 export function extensionResourceFromUrl(
   url: string,

@@ -321,27 +321,29 @@ void ready.then(async (window) => {
         (await core.capturePage()).toPNG(),
       );
     }
-    const sibling = hosted()[0];
-    assert.notEqual(sibling.getOSProcessId(), view.getOSProcessId());
-    view.forcefullyCrashRenderer();
-    await until(() => view.isDestroyed(), "renderer-domain retirement");
-    assert.equal(
-      await sibling.executeJavaScript(
-        "document.querySelector('h1').textContent",
-      ),
-      "Files",
-    );
+    // Backend loss is observed before deliberately losing the view domain.
+    // Chromium need not place two hosted views in different renderer processes.
     assert.equal(children.length, 1);
     children[0].child.kill("SIGKILL");
     await until(() => children[0].closed, "actual backend close");
-    await click(sibling, "Refresh");
+    await click(view, "Refresh");
     await until(
       () =>
-        sibling.executeJavaScript(
+        view.executeJavaScript(
           "document.body.textContent.includes('Outcome unknown')",
         ),
       "truthful backend transport failure",
     );
+    const coreRenderer = core.getOSProcessId();
+    assert.notEqual(view.getOSProcessId(), coreRenderer);
+    view.forcefullyCrashRenderer();
+    await until(() => view.isDestroyed(), "renderer-domain retirement");
+    assert.equal(core.getOSProcessId(), coreRenderer);
+    assert.equal(
+      await js("!!document.querySelector('.terminal-surface canvas')"),
+      true,
+    );
+    assert.equal(children.length, 1, "no automatic backend restart");
     checks.push("renderer-domain-isolation-backend-loss-no-mutation-retry");
     await terminal("OMX_FILES_WITH_VIEWS");
     assert.equal(

@@ -33,7 +33,9 @@ Application Tabs, with exactly one selected. It starts with a Terminal Tab.
 
 **Application Tab** — A terminal, graphical Settings or internal hosted-content entry in one window's
 single ordered tab collection. Reordering and literal/next/previous navigation
-include all kinds; hosted activation is not user-accessible. Removing the last Application Tab follows the window-close
+include all kinds. Separately installed Files preview activation is available through
+its explicit shared action, within the documented preview qualification limits.
+Removing the last Application Tab follows the window-close
 lifecycle, including pending failure acknowledgement.
 
 **Terminal Tab** — An Application Tab owning one or more Terminal Panes,

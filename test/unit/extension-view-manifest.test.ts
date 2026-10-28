@@ -24,12 +24,23 @@ const manifest = {
 describe("concrete application-view declaration", () => {
   it("accepts one namespaced action and retains backend-only compatibility", () => {
     expect(parseManifest(manifest)).toEqual(manifest);
+    expect(
+      parseManifest({
+        ...manifest,
+        id: "example.files.extra",
+        view: { ...manifest.view, action: "example.files.extra.open" },
+      }).view?.action,
+    ).toBe("example.files.extra.open");
     const { view: _view, ...backendOnly } = manifest;
     expect(parseManifest(backendOnly)).toEqual(backendOnly);
   });
   it("rejects foreign action identities, paths, titles and unimplemented declarations", () => {
     for (const view of [
       { ...manifest.view, action: "core.quit" },
+      { ...manifest.view, action: "example.files.extra.open" },
+      { ...manifest.view, entry: "view/my page.html" },
+      { ...manifest.view, entry: "view/á.html" },
+      { ...manifest.view, entry: `${"a/".repeat(254)}index.html` },
       { ...manifest.view, entry: "../index.html" },
       { ...manifest.view, title: "Files\nQuit" },
       { ...manifest.view, title: " " },

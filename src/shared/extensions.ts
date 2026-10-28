@@ -1,6 +1,20 @@
 // Development-preview management only. No paths, executable text or caller-owned
 // window identity cross this bridge.
 export const extensionsIpc = "omxterm:extensions";
+
+// The installer and hosted resource reader admit the same portable URL paths.
+export function isExtensionResource(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    value.length <= 512 &&
+    value
+      .split("/")
+      .every(
+        (part) =>
+          /^[A-Za-z0-9_-][A-Za-z0-9_.-]*$/.test(part) && !part.endsWith("."),
+      )
+  );
+}
 export type ExtensionEntry = {
   id: string;
   generation: number;
