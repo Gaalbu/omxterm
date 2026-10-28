@@ -185,8 +185,8 @@ export function assertSettingsLayout(
   expectedPanel: string,
 ) {
   const { panels, categories, contentWidth } = observation;
-  assert.equal(panels.length, 6, "Settings panel inventory changed");
-  assert.equal(categories.length, 6, "Settings category inventory changed");
+  assert.equal(panels.length, 7, "Settings panel inventory changed");
+  assert.equal(categories.length, 7, "Settings category inventory changed");
   assert.deepEqual(
     categories
       .filter((category) => category.selected)
