@@ -191,7 +191,12 @@ executable/app.asar, and checks package identity and unchanged bytes; it does no
 qualify FUSE launch or Linux helper installation.
 
 This fixture attaches only to a randomly assigned loopback main-inspector port
-to observe backend retirement and supply native-dialog responses. Product entry,
+to observe backend retirement and supply native-dialog responses. The observer is
+ordinary CommonJS loaded via Node `createRequire`: inspector evaluation does not
+supply a dynamic-import callback. For attachment diagnosis only, set
+`OMXTERM_FILES_PACKAGED_ATTACH_ONLY=1`; that checks module loading and actual
+packaged identity, then quits without running Files. Its separately labeled
+attachment-only outcome is never a Files lifecycle pass. Product entry,
 preload, runtime, resources and Files code remain the packaged bytes. It exercises
 local captured-digest trust, dormant installation, real Files creation and
 no-clobber conflict/move, reinstall retirement, fresh activation, disable/uninstall,

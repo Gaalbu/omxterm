@@ -1,18 +1,31 @@
 // Test-only observer injected through the main inspector after the untouched
 // packaged application starts. Native dialog responses and input are controlled.
-import { app, BrowserWindow, Menu, dialog, webContents } from "electron";
-import assert from "node:assert/strict";
-import { createRequire, syncBuiltinESMExports } from "node:module";
-import { readFile, writeFile, stat } from "node:fs/promises";
-import { readFileSync, writeFileSync } from "node:fs";
-import path from "node:path";
+const { app, BrowserWindow, Menu, dialog, webContents } = require("electron");
+const assert = require("node:assert/strict");
+const { syncBuiltinESMExports } = require("node:module");
+const { readFile, writeFile, stat } = require("node:fs/promises");
+const { readFileSync, writeFileSync } = require("node:fs");
+const path = require("node:path");
 
-export async function run(options) {
+// Runtime.evaluate has no dynamic-import callback. Load this ordinary CommonJS
+// observer through Node's createRequire, without replacing the application entry.
+function inspect(options) {
   assert.equal(app.isPackaged, true);
   assert.equal(app.getVersion(), options.version);
   assert.equal(app.getAppPath(), options.asar);
   assert.equal(process.execPath, options.executable);
-  const require = createRequire(path.join(options.asar, "package.json"));
+  return {
+    packaged: app.isPackaged,
+    version: app.getVersion(),
+    appPath: app.getAppPath(),
+    executable: process.execPath,
+    observer: "CommonJS",
+    runType: typeof run,
+  };
+}
+
+async function run(options) {
+  inspect(options);
   const window = BrowserWindow.getAllWindows()[0];
   assert.ok(window);
   const core = window.webContents;
@@ -315,6 +328,7 @@ export async function run(options) {
       ),
     );
   });
-  globalThis.__omxtermPackagedQuit = () => app.quit();
   return result;
 }
+
+module.exports = { inspect, run, quit: () => app.quit() };

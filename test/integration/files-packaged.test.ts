@@ -13,7 +13,6 @@ import {
 } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 import { expect, it } from "vitest";
 import { launchLinuxPackagedProcess } from "../../scripts/linux-packaged-process.mjs";
@@ -21,6 +20,7 @@ import { launchLinuxPackagedProcess } from "../../scripts/linux-packaged-process
 const execute = promisify(execFile);
 const appImage = process.env.OMXTERM_FILES_PACKAGED_APPIMAGE;
 const archive = process.env.OMXTERM_FILES_PACKAGED_ARCHIVE;
+const attachOnly = process.env.OMXTERM_FILES_PACKAGED_ATTACH_ONLY === "1";
 const digest = (bytes: Buffer) =>
   createHash("sha256").update(bytes).digest("hex");
 const delay = () => new Promise((resolve) => setTimeout(resolve, 25));
@@ -132,7 +132,9 @@ it.skipIf(
     !appImage ||
     !archive,
 )(
-  "uses separate Files through the exact packaged application and joins normal Quit",
+  attachOnly
+    ? "loads the observer in the exact packaged application without running Files"
+    : "uses separate Files through the exact packaged application and joins normal Quit",
   { timeout: 240000 },
   async () => {
     const root = await mkdtemp(
@@ -212,8 +214,8 @@ it.skipIf(
       await writeFile(path.join(root, "owned-files/source.txt"), "source");
       await writeFile(path.join(root, "owned-files/conflict.txt"), "preserved");
       await cp(
-        "test/fixtures/files-packaged.mjs",
-        path.join(root, "observer.mjs"),
+        "test/fixtures/files-packaged.cjs",
+        path.join(root, "observer.cjs"),
       );
       const env: NodeJS.ProcessEnv = {
         HOME: path.join(root, "home"),
@@ -308,34 +310,54 @@ it.skipIf(
         files: path.join(root, "owned-files"),
         readiness,
       };
-      const result = await client.evaluate(
-        `import(${JSON.stringify(pathToFileURL(path.join(root, "observer.mjs")).href)}).then(module => module.run(${JSON.stringify(options)}))`,
+      const observer = `process.getBuiltinModule('module').createRequire(${JSON.stringify(path.join(asar, "package.json"))})(${JSON.stringify(path.join(root, "observer.cjs"))})`;
+      const attached = await client.evaluate(
+        `${observer}.inspect(${JSON.stringify(options)})`,
+        5000,
       );
-      await writeFile(
-        path.join(evidence, "scenario.json"),
-        JSON.stringify(result, null, 2),
-      );
-      expect(result).toMatchObject({
-        approvals: 2,
-        checks: [
-          "exact-archive-trust-dormant-install",
-          "packaged-backend-create-move-conflict",
-          "explicit-reinstall-actual-retirement-dormant",
-          "fresh-activation-disable-uninstall",
-          "same-PTY-and-Surface",
-        ],
+      expect(attached).toEqual({
+        packaged: true,
+        version: options.version,
+        appPath: asar,
+        executable,
+        observer: "CommonJS",
+        runType: "function",
       });
-      await owner.verifyMain();
-      await client.evaluate("globalThis.__omxtermPackagedQuit(); true", 5000);
-      await until(
-        async () =>
-          (
-            await readFile(path.join(evidence, "quit.json"), "utf8").catch(
-              () => "",
-            )
-          ).length > 0,
-        "normal Quit receipt",
+      await writeFile(
+        path.join(evidence, "attachment.json"),
+        JSON.stringify(attached, null, 2),
       );
+      if (!attachOnly) {
+        const result = await client.evaluate(
+          `${observer}.run(${JSON.stringify(options)})`,
+        );
+        await writeFile(
+          path.join(evidence, "scenario.json"),
+          JSON.stringify(result, null, 2),
+        );
+        expect(result).toMatchObject({
+          approvals: 2,
+          checks: [
+            "exact-archive-trust-dormant-install",
+            "packaged-backend-create-move-conflict",
+            "explicit-reinstall-actual-retirement-dormant",
+            "fresh-activation-disable-uninstall",
+            "same-PTY-and-Surface",
+          ],
+        });
+      }
+      await owner.verifyMain();
+      await client.evaluate(`${observer}.quit(); true`, 5000);
+      if (!attachOnly)
+        await until(
+          async () =>
+            (
+              await readFile(path.join(evidence, "quit.json"), "utf8").catch(
+                () => "",
+              )
+            ).length > 0,
+          "normal Quit receipt",
+        );
       client.close();
       client = undefined;
       await until(
@@ -392,6 +414,7 @@ it.skipIf(
                 : cleanupFailure,
             root,
             mode: "exact AppImage extraction; no FUSE/helper installation",
+            scope: attachOnly ? "observer-attachment-only" : "Files-lifecycle",
             sourceFallback:
               "no developer entry/import; packaged appPath/bootstrap; no build tools on PATH",
           },
