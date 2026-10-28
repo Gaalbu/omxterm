@@ -196,14 +196,6 @@ void ready.then(async (window) => {
       () => js("!!document.querySelector('#settings-tab-extensions')"),
       "production Settings",
     );
-    await click(core, "Config File");
-    await until(
-      () => js("!!document.querySelector('.settings-config-file textarea')"),
-      "retained draft",
-    );
-    await js(
-      "window.__filesDraft = document.querySelector('.settings-config-file textarea'); window.__filesDraft.value += '\\n '; window.__filesDraft.dispatchEvent(new Event('input', {bubbles:true})); window.__filesDraftValue = window.__filesDraft.value",
-    );
     await click(core, "Extensions");
     await click(core, "Install local .omxext…");
     await until(
@@ -215,6 +207,12 @@ void ready.then(async (window) => {
     );
     assert.equal(children.length, 0);
     checks.push("Settings-captured-trust-dormant-no-backend");
+    // Shared actions must not bypass Settings' modal input ownership.
+    await js("document.querySelector('.settings-close').click()");
+    await until(
+      () => js("!document.querySelector('.settings-dialog')"),
+      "Settings closed",
+    );
     menu("Files");
     // A navigation URL precedes load completion and Application Tab selection.
     // Stabilize the intended palette owner; do not bypass its stale-target guard.
@@ -358,12 +356,15 @@ void ready.then(async (window) => {
         js("!document.querySelector('.settings-dialog').closest('[hidden]')"),
       "Settings return",
     );
-    assert.equal(
-      await js(
-        "window.__filesDraft === document.querySelector('.settings-config-file textarea') && window.__filesDraft.value === window.__filesDraftValue",
-      ),
-      true,
+    await click(core, "Config File");
+    await until(
+      () => js("!!document.querySelector('.settings-config-file textarea')"),
+      "retained draft",
     );
+    await js(
+      "window.__filesDraft = document.querySelector('.settings-config-file textarea'); window.__filesDraft.value += '\\n '; window.__filesDraft.dispatchEvent(new Event('input', {bubbles:true})); window.__filesDraftValue = window.__filesDraft.value",
+    );
+    await click(core, "Extensions");
     await click(core, "Disable");
     await until(
       () => hosted().length === 0 && children[0].closed,
@@ -376,6 +377,17 @@ void ready.then(async (window) => {
           "document.querySelector('.extensions-panel').textContent.includes('uninstalled')",
         ),
       "uninstall tombstone",
+    );
+    assert.equal(
+      await js(
+        "window.__filesDraft === document.querySelector('.settings-config-file textarea') && window.__filesDraft.value === window.__filesDraftValue",
+      ),
+      true,
+    );
+    await js("document.querySelector('.settings-close').click()");
+    await until(
+      () => js("!document.querySelector('.settings-dialog')"),
+      "Settings closed after cleanup",
     );
     await terminal("OMX_FILES_AFTER");
     assert.equal(ptys.length, 1);
