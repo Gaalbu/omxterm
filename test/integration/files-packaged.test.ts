@@ -1,0 +1,391 @@
+import assert from "node:assert/strict";
+import { extractFile } from "@electron/asar";
+import { execFile } from "node:child_process";
+import { createHash } from "node:crypto";
+import {
+  cp,
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import { pathToFileURL } from "node:url";
+import { promisify } from "node:util";
+import { expect, it } from "vitest";
+import { launchLinuxPackagedProcess } from "../../scripts/linux-packaged-process.mjs";
+
+const execute = promisify(execFile);
+const appImage = process.env.OMXTERM_FILES_PACKAGED_APPIMAGE;
+const archive = process.env.OMXTERM_FILES_PACKAGED_ARCHIVE;
+const digest = (bytes: Buffer) =>
+  createHash("sha256").update(bytes).digest("hex");
+const delay = () => new Promise((resolve) => setTimeout(resolve, 25));
+async function until(
+  check: () => Promise<boolean> | boolean,
+  label: string,
+  timeout = 20000,
+) {
+  const deadline = Date.now() + timeout;
+  while (Date.now() < deadline) {
+    if (await check()) return;
+    await delay();
+  }
+  throw new Error(`Timed out: ${label}`);
+}
+
+async function inspector(url: string) {
+  assert.match(url, /^ws:\/\/127\.0\.0\.1:\d+\/[a-f0-9-]+$/);
+  const socket = new WebSocket(url);
+  await new Promise<void>((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      socket.close();
+      reject(new Error("Inspector connection deadline"));
+    }, 5000);
+    socket.addEventListener(
+      "open",
+      () => {
+        clearTimeout(timeout);
+        resolve();
+      },
+      { once: true },
+    );
+    socket.addEventListener(
+      "error",
+      () => {
+        clearTimeout(timeout);
+        reject(new Error("Inspector connection failed"));
+      },
+      { once: true },
+    );
+  });
+  let sequence = 0;
+  const pending = new Map<
+    number,
+    { resolve(value: unknown): void; reject(error: Error): void }
+  >();
+  socket.addEventListener("message", (event) => {
+    const message = JSON.parse(String(event.data)) as {
+      id?: number;
+      error?: unknown;
+      result?: { exceptionDetails?: unknown; result?: { value?: unknown } };
+    };
+    if (message.id === undefined) return;
+    const request = pending.get(message.id);
+    if (!request) return;
+    pending.delete(message.id);
+    if (message.error || message.result?.exceptionDetails)
+      request.reject(
+        new Error(
+          JSON.stringify(message.error ?? message.result?.exceptionDetails),
+        ),
+      );
+    else request.resolve(message.result?.result?.value);
+  });
+  socket.addEventListener("close", () => {
+    for (const request of pending.values())
+      request.reject(new Error("Inspector closed during request"));
+    pending.clear();
+  });
+  return {
+    evaluate(expression: string, timeout = 90000) {
+      const id = ++sequence;
+      return new Promise<unknown>((resolve, reject) => {
+        const timer = setTimeout(() => {
+          pending.delete(id);
+          reject(new Error("Inspector request deadline"));
+        }, timeout);
+        pending.set(id, {
+          resolve(value) {
+            clearTimeout(timer);
+            resolve(value);
+          },
+          reject(error) {
+            clearTimeout(timer);
+            reject(error);
+          },
+        });
+        socket.send(
+          JSON.stringify({
+            id,
+            method: "Runtime.evaluate",
+            params: { expression, awaitPromise: true, returnByValue: true },
+          }),
+        );
+      });
+    },
+    close() {
+      socket.close();
+    },
+  };
+}
+
+// The exact AppImage is extracted, not rebuilt or patched. No default_app.asar,
+// development Electron or replacement application entry is used. The main
+// inspector is loopback-only, controlled by this disposable fixture, and closed.
+it.skipIf(
+  process.platform !== "linux" ||
+    process.arch !== "arm64" ||
+    !appImage ||
+    !archive,
+)(
+  "uses separate Files through the exact packaged application and joins normal Quit",
+  { timeout: 240000 },
+  async () => {
+    const root = await mkdtemp(
+      path.join(os.tmpdir(), "omxterm-files-packaged-"),
+    );
+    const evidence = path.resolve(
+      process.env.OMXTERM_FILES_PACKAGED_EVIDENCE ??
+        path.join(root, "evidence"),
+    );
+    await mkdir(evidence, { recursive: true });
+    let owner:
+      Awaited<ReturnType<typeof launchLinuxPackagedProcess>> | undefined;
+    let client: Awaited<ReturnType<typeof inspector>> | undefined;
+    let outcome: unknown;
+    let nativeStderr = "";
+    let failure: unknown;
+    let cleanupFailure: unknown;
+    let passed = false;
+    try {
+      assert.notEqual(process.getuid?.(), 0);
+      const appBytes = await readFile(appImage!);
+      const archiveBytes = await readFile(archive!);
+      const identities = {
+        appImage: { bytes: appBytes.length, sha256: digest(appBytes) },
+        archive: { bytes: archiveBytes.length, sha256: digest(archiveBytes) },
+      };
+      assert.equal(
+        identities.appImage.sha256,
+        process.env.OMXTERM_FILES_PACKAGED_APPIMAGE_SHA256,
+      );
+      assert.equal(
+        identities.archive.sha256,
+        process.env.OMXTERM_FILES_PACKAGED_ARCHIVE_SHA256,
+      );
+      await writeFile(
+        path.join(evidence, "artifacts.json"),
+        JSON.stringify(identities, null, 2),
+      );
+      await execute(path.resolve(appImage!), ["--appimage-extract"], {
+        cwd: root,
+        timeout: 60000,
+        maxBuffer: 16 * 1024 * 1024,
+      });
+      const executable = path.join(root, "squashfs-root/omxterm");
+      const asar = path.join(root, "squashfs-root/resources/app.asar");
+      const readonlyAsarHash = digest(await readFile(asar));
+      for (const name of [
+        "home",
+        "profile",
+        "state",
+        "data",
+        "bin",
+        "owned-files",
+        "config/omxterm",
+      ])
+        await mkdir(path.join(root, name), { recursive: true });
+      // No Node, npm, Python or compiler on the application/user PATH. Core's
+      // X11 background facility may use xprop; the explicit shell is absolute.
+      await symlink("/usr/bin/xprop", path.join(root, "bin/xprop"));
+      await symlink("/bin/sh", path.join(root, "bin/sh"));
+      await writeFile(
+        path.join(root, "config/omxterm/config.json"),
+        JSON.stringify({
+          version: 1,
+          language: "en-US",
+          confirmClose: false,
+          window: { blur: false },
+        }),
+      );
+      const readiness = path.join(root, "shell.json");
+      await writeFile(
+        path.join(root, "shell.sh"),
+        'printf \'{"mainPid":%s,"probePid":%s}\' "$PPID" "$$" > "$1"\nexec /bin/sh -i\n',
+      );
+      const localArchive = path.join(root, "files.omxext");
+      await writeFile(localArchive, archiveBytes);
+      await writeFile(path.join(root, "owned-files/source.txt"), "source");
+      await writeFile(path.join(root, "owned-files/conflict.txt"), "preserved");
+      await cp(
+        "test/fixtures/files-packaged.mjs",
+        path.join(root, "observer.mjs"),
+      );
+      const env: NodeJS.ProcessEnv = {
+        HOME: path.join(root, "home"),
+        PATH: path.join(root, "bin"),
+        XDG_CONFIG_HOME: path.join(root, "config"),
+        XDG_STATE_HOME: path.join(root, "state"),
+        XDG_DATA_HOME: path.join(root, "data"),
+      };
+      for (const key of [
+        "DISPLAY",
+        "XAUTHORITY",
+        "DBUS_SESSION_BUS_ADDRESS",
+        "XDG_RUNTIME_DIR",
+        "LANG",
+        "USER",
+        "LOGNAME",
+      ])
+        if (process.env[key]) env[key] = process.env[key];
+      owner = await launchLinuxPackagedProcess({
+        executable,
+        args: [
+          "--no-sandbox",
+          "--ozone-platform=x11",
+          "--inspect=127.0.0.1:0",
+          `--user-data-dir=${path.join(root, "profile")}`,
+          "-e",
+          "/bin/sh",
+          path.join(root, "shell.sh"),
+          readiness,
+        ],
+        env,
+        expectedExecutable: executable,
+        readinessFile: readiness,
+        profileRoot: root,
+      });
+      const child = owner.child;
+      let exited = false;
+      child.once("exit", () => {
+        exited = true;
+      });
+      await until(
+        async () =>
+          (await readFile(readiness, "utf8").catch(() => "")).length > 0,
+        "real shell readiness",
+      );
+      await owner.verifyMain();
+      await until(
+        () =>
+          /Debugger listening on ws:\/\/127\.0\.0\.1:/.test(
+            owner!.stderrText(),
+          ),
+        "main inspector",
+      );
+      const url =
+        /Debugger listening on (ws:\/\/127\.0\.0\.1:\d+\/[a-f0-9-]+)/.exec(
+          owner.stderrText(),
+        )?.[1];
+      assert.ok(url);
+      client = await inspector(url);
+      const options = {
+        root,
+        evidence,
+        asar,
+        executable,
+        archive: localArchive,
+        archiveSha256: identities.archive.sha256,
+        version: (
+          JSON.parse(extractFile(asar, "package.json").toString("utf8")) as {
+            version: string;
+          }
+        ).version,
+        files: path.join(root, "owned-files"),
+        readiness,
+      };
+      const result = await client.evaluate(
+        `import(${JSON.stringify(pathToFileURL(path.join(root, "observer.mjs")).href)}).then(module => module.run(${JSON.stringify(options)}))`,
+      );
+      await writeFile(
+        path.join(evidence, "scenario.json"),
+        JSON.stringify(result, null, 2),
+      );
+      expect(result).toMatchObject({
+        approvals: 2,
+        checks: [
+          "exact-archive-trust-dormant-install",
+          "packaged-backend-create-move-conflict",
+          "explicit-reinstall-actual-retirement-dormant",
+          "fresh-activation-disable-uninstall",
+          "same-PTY-and-Surface",
+        ],
+      });
+      await owner.verifyMain();
+      await client.evaluate("globalThis.__omxtermPackagedQuit(); true", 5000);
+      await until(
+        async () =>
+          (
+            await readFile(path.join(evidence, "quit.json"), "utf8").catch(
+              () => "",
+            )
+          ).length > 0,
+        "normal Quit receipt",
+      );
+      client.close();
+      client = undefined;
+      await until(
+        () => exited,
+        "actual main exit after debugger disconnect",
+        5000,
+      );
+      outcome = await owner.stop();
+      nativeStderr = owner.stderrText();
+      owner = undefined;
+      expect(outcome).toEqual({ code: 0, signal: null });
+      expect(digest(await readFile(asar))).toBe(readonlyAsarHash);
+      expect(digest(await readFile(appImage!))).toBe(
+        identities.appImage.sha256,
+      );
+      passed = true;
+    } catch (error) {
+      failure = error;
+      if (client) {
+        try {
+          const state = await client.evaluate(
+            "JSON.stringify(globalThis.__omxtermPackagedState ?? {})",
+            3000,
+          );
+          await writeFile(
+            path.join(evidence, "observer-failure.json"),
+            String(state),
+          );
+        } catch {
+          /* Preserve the primary failure if the debugger is unavailable. */
+        }
+      }
+    } finally {
+      client?.close();
+      if (owner) {
+        try {
+          outcome = await owner.stop();
+        } catch (error) {
+          cleanupFailure = error;
+        }
+        nativeStderr = owner.stderrText();
+      }
+      await writeFile(
+        path.join(evidence, "supervisor.json"),
+        JSON.stringify(
+          {
+            passed,
+            outcome,
+            nativeStderr,
+            failure: failure instanceof Error ? failure.stack : failure,
+            cleanupFailure:
+              cleanupFailure instanceof Error
+                ? cleanupFailure.stack
+                : cleanupFailure,
+            root,
+            mode: "exact AppImage extraction; no FUSE/helper installation",
+            sourceFallback:
+              "no developer entry/import; packaged appPath/bootstrap; no build tools on PATH",
+          },
+          null,
+          2,
+        ),
+      );
+      if (passed && !cleanupFailure && !evidence.startsWith(root + path.sep))
+        await rm(root, { recursive: true, force: true });
+    }
+    if (failure || cleanupFailure)
+      throw new AggregateError(
+        [failure, cleanupFailure].filter(Boolean),
+        "Packaged Files vertical failed; retained evidence/profile",
+      );
+  },
+);

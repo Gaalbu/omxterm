@@ -180,6 +180,36 @@ local replacement, retained real terminal/PTY and joined Quit. Its loopback TLS
 server is fixture-owned and closed before Quit. Consent answers and clicks remain
 controlled; it does not qualify public hosting, physical dialogs or other platforms.
 
+For exact-package qualification, the separate opt-in
+`test/integration/files-packaged.test.ts` takes absolute
+`OMXTERM_FILES_PACKAGED_APPIMAGE` and `OMXTERM_FILES_PACKAGED_ARCHIVE` paths, plus
+`OMXTERM_FILES_PACKAGED_APPIMAGE_SHA256` and `OMXTERM_FILES_PACKAGED_ARCHIVE_SHA256`
+from the retained artifact receipts. Set `OMXTERM_FILES_PACKAGED_EVIDENCE` to a
+separate evidence directory. Run it alone on the assigned idle ordinary-user
+Linux ARM64 desktop. It extracts the exact AppImage, launches its unchanged
+executable/app.asar, and checks package identity and unchanged bytes; it does not
+qualify FUSE launch or Linux helper installation.
+
+This fixture attaches only to a randomly assigned loopback main-inspector port
+to observe backend retirement and supply native-dialog responses. Product entry,
+preload, runtime, resources and Files code remain the packaged bytes. It exercises
+local captured-digest trust, dormant installation, real Files creation and
+no-clobber conflict/move, reinstall retirement, fresh activation, disable/uninstall,
+the same shell/Surface and normal Quit. The application PATH contains only shell
+and X11 presentation support, not Node/npm/Python/compilers. Source checkout
+modules are not used as product entries or dependency ancestors. Test-only
+observer code is identified separately from the package and receives no publisher
+or runtime authority outside this disposable test.
+
+The existing packaged-process owner verifies actual main executable/lineage,
+tracks children and joins exit/streams/owned settlement. `scenario.json` records
+assertions, `quit.json` records backend exit/close and shell kernel exit at normal
+Quit, and `supervisor.json` records the native outcome/cleanup distinction. A
+failure preserves its profile/diagnostics, never a successful cleanup as a pass.
+Input is synthetic Chromium and trust answers are controlled, not physical native
+dialog qualification. Successful inspection-only evidence does not substitute for
+this opt-in vertical.
+
 Qualification is phase-specific, not one final replay of every workflow:
 
 - A production vertical passed local Settings trust, shared actions, two views sharing
