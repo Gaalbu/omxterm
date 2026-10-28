@@ -1536,8 +1536,13 @@ host DOM overlays and restores only a still-current content owner. Field input
 and clipboard remain in the child, never forwarded into a terminal. Closing or
 crashing a hosted epoch retires its known views, not core PTYs. This is a
 production-facing development module consumed by the Linux ARM64 Files preview.
-Catalog acquisition and stable SDK exposure remain separate; source wiring does
-not establish the surviving-browser main-death gate.
+Catalog acquisition and stable SDK exposure remain separate. See the
+[Files development preview qualification](files-development-preview.md#build-and-evidence-boundary)
+for distinct production workflow, renderer-crash/core-survival and module-native
+management evidence. The bounded actual-main-death observation saw renderer exit
+and independent backend-pin retention through kernel exit and collection; it does
+not establish surviving-browser later/fresh resource-read exclusion or universal
+renderer termination. That gate remains unqualified.
 
 The optional Linux AppImage desktop installer accepts only a user-supplied,
 previously checksum-verified local Linux ARM64/x64 OMXTerm AppImage matching the

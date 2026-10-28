@@ -108,7 +108,7 @@ void ready.then(async (window) => {
   }
   function click(contents, label) {
     return contents.executeJavaScript(
-      `(() => { const button = [...document.querySelectorAll('button')].find(b => b.textContent === ${JSON.stringify(label)} && !b.closest('[hidden]')); if (!button) throw Error('button missing'); button.click(); })()`,
+      `(() => { const button = [...document.querySelectorAll('button')].find(b => b.textContent === ${JSON.stringify(label)} && !b.closest('[hidden]')); if (!button) throw Error('button missing'); if (button.disabled || button.closest('[inert]')) throw Error('button unavailable'); button.click(); })()`,
     );
   }
   const hosted = () =>

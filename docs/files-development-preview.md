@@ -1,6 +1,6 @@
 # Files development preview implementation
 
-Work in progress for [#723](https://github.com/luizomf/omxterm/issues/723).
+Development preview for [#723](https://github.com/luizomf/omxterm/issues/723).
 Linux ARM64 source builds wire the production Settings install route and shared
 Files action. This is not yet a qualified distribution or a stable extension SDK.
 
@@ -114,7 +114,35 @@ archive first. `OMXTERM_FILES_PRODUCTION_EVIDENCE` optionally captures fixture-o
 screenshots and the native supervisor receipt. Native chooser/consent answers are
 fixture-controlled, not physical-dialog-widget qualification; terminal input is
 synthetic Chromium input. Native input-lane admission is verified separately.
-Production Settings/actions/Quit, visual inspection, same-terminal continuity,
-real renderer failure domains and the surviving-browser main-death resource gate
-remain outstanding until their actual composed fixtures run. All-browser exit or normal
-retirement is not proof of surviving-browser read exclusion.
+Qualification is phase-specific, not one final replay of every workflow:
+
+- A production vertical passed local Settings trust, shared actions, two views sharing
+  a backend, create/folder/no-clobber move/trash/confirmed deletion, backend loss without
+  replay, disable/uninstall, retained draft, same-PTY continuity and joined Quit.
+  The composed native window was inspected; selected hosted Copy/Paste and About
+  were exercised separately.
+- After author corrections, native checks passed dormant installation, modal refusal,
+  and actual hosted-renderer crash retirement while the same core remained responsive
+  and its backend remained active. No per-view renderer-process isolation is promised.
+- A separate headless Electron module qualification used the real manager/store,
+  runtime, Files archive, native leases and children: Disable joined actual backend
+  exit/close before Enable; Enable stayed dormant; explicit opening acquired a fresh
+  generation/backend and independent view pin. Both children settled cooperatively.
+  View presentation was controlled in this case: it is not a graphical recovery pass.
+  Headless renderer/main/store checks separately cover management admission and stale
+  generations. A resolved DOM click is not proof that a disabled control sent a request.
+
+Failed composite recovery attempts remain failures; their historical Disable
+admission, an earlier directory-list failure and an uncorrelated negative backend
+reply remain unexplained. Correcting private fixture readiness and an invalid
+optional-argument assertion does not retroactively turn those attempts into passes.
+
+An actual main-process SIGKILL observation delivered and began reading pinned A;
+its hosted renderer exited. An independent backend pin retained A through uninstall
+and collection attempts until that backend's kernel exit, after which A was collected.
+The original orphan's exit code was not observed. This is bounded lifetime evidence,
+not proof of universal browser termination or later/fresh A or B read exclusion in a
+surviving renderer. **Surviving-browser main-death file-read exclusion remains
+unqualified.** Normal retirement or all-browser exit cannot establish that property.
+These Linux ARM64 observations do not qualify other platforms, a display/locale
+matrix, signed distribution or a stable SDK.

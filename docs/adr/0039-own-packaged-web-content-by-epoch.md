@@ -1,6 +1,6 @@
 # ADR 0039: Own packaged web content by activation epoch
 
-Status: Accepted internal module; end-user activation and main-death qualification remain gated.
+Status: Accepted internal module, consumed by the Linux ARM64 Files development preview; surviving-browser main-death file-read exclusion remains unqualified.
 
 ## Context
 
@@ -70,19 +70,27 @@ There is no per-view process-isolation promise.
 
 ## Gates and consequences
 
-The module has no installer/catalog/backend/Files activation UI. Its consumers
-are internal composition and test harnesses using the same host/reader/tab seam.
+The host module itself does not own installation, catalogs or backend activation.
+The separately installed [Files development preview](../files-development-preview.md)
+composes production Settings, shared actions, backends and this host/reader/tab seam.
+Its phase-specific product evidence is separate from host-module qualification;
+there is no public SDK or catalog acquisition.
 The installed-package adapter and ordinary browser retirement must be qualified
 separately. Main death may leave already delivered bytes in browser memory;
 materialized Responses alone do not prove that a surviving Chromium process has
 no later disk route. Until a bounded actual-death discriminator establishes that
 property, **main-death file-read exclusion remains unqualified** and cannot be
 claimed as package cleanup safety after main death. No reboot, quarantine or
-extra supervisor compensates for this missing evidence.
+extra supervisor compensates for this missing evidence. A bounded actual-main-SIGKILL
+observation saw the hosted renderer exit and an independent backend pin retain A
+through uninstall/collection until that backend's kernel exit. Collection then
+completed; the original orphan's exit code was unknown. This neither establishes a
+surviving renderer's later/fresh A or B read exclusion nor guarantees renderer
+termination on other platforms or configurations.
 
 Retained native views have material memory cost; create substantial views lazily,
 not one native view per widget. Hidden views retain drafts only within their
-epoch. A future activation layer must supply trusted admission, the main-approved
+epoch. Activation consumers must supply trusted admission, the main-approved
 slot and existing core command routing; this module is not successful no-op
 extension support. Theme/language adaptation beyond the owning core tab chrome
 is not a public web-content capability in this internal slice.
