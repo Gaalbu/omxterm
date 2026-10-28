@@ -160,8 +160,11 @@ See
 ## Privacy and security
 
 OMXTerm collects no telemetry and makes no background network requests. The Linux
-ARM64 development preview downloads extension archives only from an explicitly
-supplied HTTPS link ([transport and trust policy](docs/files-development-preview.md#https-archive-installation)). Local diagnostic
+ARM64 development preview fetches its official catalog only on explicit
+Browse/Refresh, and downloads extension archives only after a catalog selection
+or an explicitly supplied HTTPS link ([transport and trust policy](docs/files-development-preview.md#https-archive-installation)).
+See the [published Files preview](docs/installation.md#optional-files-preview).
+Local diagnostic
 logs exclude your terminal output, commands, clipboard data, and settings. To
 report a security vulnerability privately, see [SECURITY.md](SECURITY.md).
 

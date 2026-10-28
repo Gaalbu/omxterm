@@ -8,9 +8,10 @@ OMXTerm ships packages for Apple Silicon Macs, Linux ARM64 or x64, and Windows 1
 
 Files is separately installed, never bundled. It requires a compatible Linux ARM64
 preview host (local/link installation from `0.23.0-dev.8`; catalog browsing from
-`0.23.0-dev.9`), not the stable `v0.22.0` download. Source support does not mean
-preview artifacts have been published; use only explicitly published preview
-release assets and their checksums.
+`0.23.0-dev.9`), not the stable `v0.22.0` download. The published
+[Linux ARM64 host preview](https://github.com/luizomf/omxterm/releases/tag/v0.23.0-dev.9)
+and separate [Files 0.1.0 archive](https://github.com/luizomf/omxterm/releases/tag/ext-files-v0.1.0)
+include checksums. Both are prereleases; `v0.22.0` remains Latest.
 
 In a catalog-capable preview, open Settings → Extensions → **Browse official
 extensions**. Choose Install/Update/Reinstall, then review the exact version/digest

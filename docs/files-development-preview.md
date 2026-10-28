@@ -1,8 +1,15 @@
 # Files development preview implementation
 
-Development preview for [#723](https://github.com/luizomf/omxterm/issues/723).
-Linux ARM64 source builds wire the production Settings install route and shared
-Files action. This is not yet a qualified distribution or a stable extension SDK.
+Development preview for [#723](https://github.com/luizomf/omxterm/issues/723) and
+[#728](https://github.com/luizomf/omxterm/issues/728). The separate
+[Linux ARM64 host dev.9](https://github.com/luizomf/omxterm/releases/tag/v0.23.0-dev.9)
+and [Files 0.1.0](https://github.com/luizomf/omxterm/releases/tag/ext-files-v0.1.0)
+prereleases are published with checksums; neither replaces stable Latest.
+Actual public catalog/archive installation passed with the exact extracted
+AppImage, Files operations/conflicts, reinstall/management, the same live PTY
+and joined Quit. Input and consent were fixture-controlled. FUSE/helper
+installation, other platforms and a stable extension SDK are not qualified
+by this milestone.
 
 ## Concrete consumer
 
