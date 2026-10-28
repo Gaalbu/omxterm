@@ -17,10 +17,12 @@ export function createGraphicalTabs(
   keyboard: ReturnType<typeof retainDismissalGesture>,
   owner: {
     available(): boolean;
+    canFocus?: (() => boolean) | undefined;
     selected(): ApplicationTab | undefined;
     select(index: number, passive?: boolean): void;
     close(tab: ApplicationTab): void;
     remove(tab: ApplicationTab): void;
+    render(): void;
   },
 ) {
   const hosted = createHostedContentTabs(
@@ -39,7 +41,10 @@ export function createGraphicalTabs(
           return;
         }
         tabs.push(tab);
-        owner.select(tabs.length - 1, true);
+        // Late activation may finish while a modal owns selection. Keep the
+        // new tab in the background without changing the modal's owner/generation.
+        if (owner.canFocus?.() === false) owner.render();
+        else owner.select(tabs.length - 1, true);
       },
       retired(id) {
         const tab = tabs.find(

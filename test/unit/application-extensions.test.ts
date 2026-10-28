@@ -1,4 +1,5 @@
 import { EventEmitter } from "node:events";
+import { translatorFor, type SupportedLanguage } from "../../src/shared/i18n";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -22,6 +23,7 @@ type Host = {
   retire: ReturnType<typeof vi.fn<() => Promise<{ status: "settled" }>>>;
 };
 import { startApplicationExtensions } from "../../src/main/application-extensions";
+import { createTerminalContextMenuTarget } from "../../src/main/terminal-context-menu";
 
 const adapters = vi.hoisted(() => ({
   root: "",
@@ -37,6 +39,7 @@ const adapters = vi.hoisted(() => ({
       ) => Promise<{ response: number }>
     >(),
   activate: vi.fn(),
+  sendOpen: vi.fn(),
   retire: vi.fn(),
   hosts: [] as Host[],
 }));
@@ -91,6 +94,7 @@ const originalArch = Object.getOwnPropertyDescriptor(process, "arch")!;
 let service: Awaited<ReturnType<typeof startApplicationExtensions>>;
 let window: BrowserWindow;
 let archive: string;
+let language: SupportedLanguage = "en-US";
 const manifest = {
   format: 1,
   id: "example.files",
@@ -126,6 +130,12 @@ beforeEach(async () => {
     configurable: true,
   });
   adapters.root = await mkdtemp(path.join(os.tmpdir(), "omxterm-service-"));
+  language = "en-US";
+  adapters.sendOpen
+    .mockReset()
+    .mockImplementation((_sender, _channel, { token }) => {
+      void request({ operation: "open", token, accepted: true });
+    });
   adapters.hosts.length = 0;
   adapters.handlers.clear();
   adapters.windows.clear();
@@ -155,10 +165,16 @@ beforeEach(async () => {
       leases: { tryAcquire: async () => ({ release: async () => {} }) },
     });
     const entry = (await packages.snapshot())[0]!;
-    return { selection: entry, call: vi.fn(async () => ({ ok: true })) };
+    return {
+      selection: entry,
+      state: () => "active",
+      call: vi.fn(async () => ({ ok: true })),
+    };
   });
   service = await startApplicationExtensions({
     applicationRoot: adapters.root,
+    translator: () => translatorFor(language),
+    sendAction: adapters.sendOpen,
     isTrustedSender: (event) => event.sender === contents,
     changed() {},
     keybind() {},
@@ -191,7 +207,7 @@ it("Settings installs captured bytes through explicit trust without activating c
     { id: "example.files.open", accelerator: null },
   ]);
 });
-it("the terminal context contribution retains its source when selection changes before click", async () => {
+it("a valid claimed terminal contribution retains its captured directory", async () => {
   await request({ operation: "install" });
   let directory = "/original";
   service.registerWindow(window, () => ({
@@ -199,7 +215,7 @@ it("the terminal context contribution retains its source when selection changes 
     signal: new AbortController().signal,
     terminalDirectory: directory,
   }));
-  const item = service.contextMenu(window)[0]!;
+  const item = service.contextMenu(window, "s1", () => true)[0]!;
   directory = "/later-selection";
   item.click();
   await vi.waitFor(() => expect(adapters.hosts).toHaveLength(1));
@@ -211,6 +227,92 @@ it("the terminal context contribution retains its source when selection changes 
   ).toEqual({ ok: true, directory: "/original" });
 });
 
+it.each(["selection", "new-popup", "window"])(
+  "rejects a Files popup after %s invalidation",
+  async (cause) => {
+    await request({ operation: "install" });
+    let focused = true;
+    const popup = createTerminalContextMenuTarget({
+      isOwnerAlive: () => true,
+      isFocusedSession: () => focused,
+      show() {},
+    });
+    const target = { sessionId: "s1", menuId: 1 };
+    popup.show(target);
+    const item = service.contextMenu(window, target.sessionId, () =>
+      popup.claim(target),
+    )[0]!;
+    if (cause === "selection") {
+      focused = false;
+      popup.selectionChanged();
+    }
+    if (cause === "new-popup") popup.show({ ...target, menuId: 2 });
+    if (cause === "window") adapters.selected = {};
+    item.click();
+    expect(adapters.sendOpen).not.toHaveBeenCalled();
+    expect(adapters.activate).not.toHaveBeenCalled();
+  },
+);
+it("consumes a valid popup once before guarded renderer admission", async () => {
+  await request({ operation: "install" });
+  const popup = createTerminalContextMenuTarget({
+    isOwnerAlive: () => true,
+    isFocusedSession: () => true,
+    show() {},
+  });
+  const target = { sessionId: "s1", menuId: 1 };
+  popup.show(target);
+  const item = service.contextMenu(window, target.sessionId, () =>
+    popup.claim(target),
+  )[0]!;
+  item.click();
+  item.click();
+  await vi.waitFor(() => expect(adapters.hosts).toHaveLength(1));
+  expect(adapters.sendOpen).toHaveBeenCalledOnce();
+});
+it("revokes issued actions across disable/enable without reviving new authority", async () => {
+  await request({ operation: "install" });
+  const old = service.actions()[0]!;
+  await request({ operation: "disable", id: manifest.id, generation: 1 });
+  await request({ operation: "enable", id: manifest.id, generation: 2 });
+  old.invoke();
+  await vi.waitFor(() => expect(adapters.consent).toHaveBeenCalledTimes(2));
+  expect(adapters.activate).not.toHaveBeenCalled();
+  service.actions()[0]!.invoke();
+  await vi.waitFor(() => expect(adapters.hosts).toHaveLength(1));
+  expect(adapters.activate).toHaveBeenCalledWith(
+    manifest.id,
+    expect.objectContaining({ generation: 3 }),
+  );
+});
+it("denied modal admission consumes the token without starting installed code", async () => {
+  await request({ operation: "install" });
+  adapters.sendOpen.mockImplementation(() => {});
+  service.actions()[0]!.invoke();
+  const token = adapters.sendOpen.mock.calls[0]![2].token;
+  expect(adapters.activate).not.toHaveBeenCalled();
+  expect(
+    await request({ operation: "open", token, accepted: false }),
+  ).toMatchObject({ ok: false });
+  expect(
+    await request({ operation: "open", token, accepted: true }),
+  ).toMatchObject({ ok: false });
+  expect(adapters.activate).not.toHaveBeenCalled();
+});
+it("localizes native trust at display time without changing captured package identity", async () => {
+  language = "pt-BR";
+  await request({ operation: "install" });
+  expect(adapters.picker.mock.calls[0]![1].title).toBe(
+    "Instalar extensão local",
+  );
+  expect(adapters.consent.mock.calls[0]![1]).toMatchObject({
+    title: "Confiar no código da extensão?",
+  });
+  expect(adapters.consent.mock.calls[0]![1].detail).toMatch(
+    /SHA-256: [a-f0-9]{64}/,
+  );
+  expect(adapters.activate).not.toHaveBeenCalled();
+});
 it("cancelled consent does not install or activate", async () => {
   adapters.consent.mockResolvedValueOnce({ response: 0 });
   expect(await request({ operation: "install" })).toMatchObject({

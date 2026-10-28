@@ -98,7 +98,13 @@ export function activate(context: {
     };
   };
   async function list(directory: string, signal: AbortSignal) {
-    if (listings.size + pendingListings >= 8) throw new Error("busy");
+    if (listings.size + pendingListings >= 8) {
+      // Completed snapshots are revocable, not permanent reservations held by
+      // disappeared views. Never evict an in-flight read or rebind an old token.
+      const oldest = listings.keys().next().value;
+      if (!oldest) throw new Error("busy");
+      listings.delete(oldest);
+    }
     pendingListings++;
     try {
       return await readListing(directory, signal);
@@ -196,7 +202,10 @@ export function activate(context: {
         check(signal);
         switch (request.operation) {
           case "prepare-delete": {
-            if (deletions.size >= 8) throw new Error("busy");
+            // A crashed view cannot cancel its token. Capacity expires the oldest
+            // confirmation; using it later fails closed and requires fresh consent.
+            if (deletions.size >= 8)
+              deletions.delete(deletions.keys().next().value!);
             const stat = await lstat(target);
             const token = randomUUID();
             deletions.set(token, { target, device: stat.dev, inode: stat.ino });

@@ -48,6 +48,7 @@ async function setup() {
   const runtime = {
     activate: vi.fn(async (_id: string): Promise<Backend> => ({
       epoch: "backend-epoch",
+      state: () => "active",
       selection: {
         id: entry.id,
         generation: entry.generation,
@@ -147,6 +148,11 @@ it("replaces captured packages and re-enables dormantly without reviving old vie
   };
   await manager.open(manifest.id, target);
   const old = views[0]!;
+  const issued = manager.action({
+    id: old.pin.id,
+    generation: old.pin.generation,
+    digest: old.pin.digest,
+  });
   const archive = path.join(root, "replacement.omxext");
   await writeFile(
     archive,
@@ -161,6 +167,7 @@ it("replaces captured packages and re-enables dormantly without reviving old vie
   );
   const approval = await manager.prepare(target.owner, archive);
   await manager.approve(target.owner, approval.token);
+  await expect(issued(target)).rejects.toThrow("unavailable");
   expect(runtime.retire).toHaveBeenCalledWith(manifest.id);
   expect(runtime.activate).toHaveBeenCalledTimes(1);
   await expect(old.call(null, new AbortController().signal)).rejects.toThrow(
@@ -215,6 +222,49 @@ it("a management change during held activation cannot create a late orphan view"
   await rejected;
   await disable;
   expect(createViews).not.toHaveBeenCalled();
+});
+it("reports actual backend lifecycle without poisoning it on request-local refusal", async () => {
+  const { manager, runtime, views, call } = await setup();
+  await manager.open(manifest.id, {
+    owner: {},
+    signal: new AbortController().signal,
+    terminalDirectory: null,
+  });
+  const backend = await runtime.activate.mock.results[0]!.value;
+  call.mockRejectedValueOnce(new Error("busy"));
+  await expect(
+    views[0]!.call(null, new AbortController().signal),
+  ).rejects.toThrow("busy");
+  expect((await manager.snapshot())[0]?.local).toBe("active");
+  await views[0]!.call(null, new AbortController().signal);
+  expect((await manager.snapshot())[0]?.local).toBe("active");
+  vi.spyOn(backend, "state").mockReturnValue("failed");
+  expect((await manager.snapshot())[0]?.local).toBe("failed");
+  await manager.dispose();
+});
+it("retains cleanup uncertainty when a later view opens successfully", async () => {
+  const { manager, createViews } = await setup();
+  const owner = new AbortController();
+  createViews.mockImplementationOnce(() => ({
+    open: async () => {},
+    retire: async () => ({ status: "failed" }),
+  }));
+  await manager.open(manifest.id, {
+    owner: {},
+    signal: owner.signal,
+    terminalDirectory: null,
+  });
+  owner.abort();
+  await vi.waitFor(async () =>
+    expect((await manager.snapshot())[0]?.local).toBe("unknown"),
+  );
+  await manager.open(manifest.id, {
+    owner: {},
+    signal: new AbortController().signal,
+    terminalDirectory: null,
+  });
+  expect((await manager.snapshot())[0]?.local).toBe("unknown");
+  expect(await manager.dispose()).toBe(false);
 });
 it("Quit latches admission and joins actual owners instead of treating disposal as stop proof", async () => {
   const { manager, createViews, runtime } = await setup();

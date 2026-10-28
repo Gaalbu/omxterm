@@ -421,7 +421,7 @@ function buildSettingsView(
       addPage(
         "extensions",
         "settings.page.extensions",
-        renderExtensions(document, extensions, live),
+        renderExtensions(document, extensions, live, labels),
       );
     addPage(
       "config-file",

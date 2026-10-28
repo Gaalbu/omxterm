@@ -2,6 +2,7 @@ import {
   PackageError,
   type InstalledPackages,
   type OpenVersion,
+  type VersionSelection,
 } from "../installed-packages/installed-packages.js";
 import type {
   Backend,
@@ -58,6 +59,7 @@ export function createExtensionManager(options: Options) {
   const approvals = new Map<object, { token: string; id: string }>();
   const revisions = new Map<string, number>();
   const state = new Map<string, LocalState>();
+  const backends = new Map<string, Backend>();
   const busy = new Set<string>();
   const opening = new Map<Promise<void>, string>();
   let pendingCleanup: boolean | undefined;
@@ -96,14 +98,20 @@ export function createExtensionManager(options: Options) {
     );
     return results.every(Boolean);
   }
-  async function start(id: string, target: ExtensionTarget): Promise<void> {
+  async function start(
+    id: string,
+    target: ExtensionTarget,
+    expected?: VersionSelection,
+  ): Promise<void> {
     const captured = revision(id);
     if (!alive(id, captured, target)) throw new PackageError("unavailable");
-    state.set(id, "starting");
+    if (backends.get(id)?.state() !== "active") backends.delete(id);
+    if (state.get(id) !== "unknown") state.set(id, "starting");
     let pin: OpenVersion | undefined;
     let backend: Backend;
     try {
-      backend = await options.runtime.activate(id);
+      backend = await options.runtime.activate(id, expected);
+      backends.set(id, backend);
       if (!alive(id, captured, target)) throw new PackageError("unavailable");
       pin = await options.packages.openVersion(id, backend.selection);
       if (
@@ -135,15 +143,10 @@ export function createExtensionManager(options: Options) {
           call: async (value, signal) => {
             if (abort.signal.aborted || !alive(id, captured, target))
               throw new PackageError("unavailable");
-            try {
-              return await backend.call(
-                value,
-                AbortSignal.any([signal, abort.signal, target.signal]),
-              );
-            } catch (error) {
-              state.set(id, "unknown");
-              throw error;
-            }
+            return backend.call(
+              value,
+              AbortSignal.any([signal, abort.signal, target.signal]),
+            );
           },
           retired: () => {
             abort.abort();
@@ -159,10 +162,11 @@ export function createExtensionManager(options: Options) {
         await views.open();
       }
       if (!alive(id, captured, target)) throw new PackageError("unavailable");
-      state.set(id, "active");
+      if (state.get(id) !== "unknown") state.set(id, "active");
     } catch (error) {
       await pin?.release();
-      if (alive(id, captured, target)) state.set(id, "failed");
+      if (alive(id, captured, target) && state.get(id) !== "unknown")
+        state.set(id, "failed");
       throw error;
     }
   }
@@ -198,6 +202,7 @@ export function createExtensionManager(options: Options) {
             .map(([work]) => work.catch(() => {})),
         ),
       ]);
+      if (!backend || backend.settled) backends.delete(id);
       state.set(
         id,
         views && (!backend || backend.settled) && pending
@@ -214,6 +219,21 @@ export function createExtensionManager(options: Options) {
       busy.delete(id);
     }
   }
+  function open(
+    id: string,
+    target: ExtensionTarget,
+    expected?: VersionSelection,
+  ): Promise<void> {
+    if (opening.size + groups.size >= 32)
+      return Promise.reject(new PackageError("busy"));
+    const work = start(id, { ...target }, expected);
+    opening.set(work, id);
+    void work.then(
+      () => opening.delete(work),
+      () => opening.delete(work),
+    );
+    return work;
+  }
   return {
     pendingCleanup: () => pendingCleanup,
     collect,
@@ -221,7 +241,11 @@ export function createExtensionManager(options: Options) {
       const installations = await options.packages.snapshot();
       return installations.map((entry) => ({
         ...entry,
-        local: state.get(entry.id) ?? "dormant",
+        local: ["unknown", "stopping"].includes(state.get(entry.id) ?? "")
+          ? state.get(entry.id)!
+          : (backends.get(entry.id)?.state() ??
+            state.get(entry.id) ??
+            "dormant"),
         otherInstances: "unknown" as const,
       }));
     },
@@ -250,18 +274,14 @@ export function createExtensionManager(options: Options) {
     uninstall(id: string, generation: number) {
       return manage(id, () => options.packages.uninstall(id, generation));
     },
-    open(id: string, target: ExtensionTarget): Promise<void> {
-      if (opening.size + groups.size >= 32)
-        return Promise.reject(new PackageError("busy"));
-      // Capture context before activation; never consult selected pane later.
-      const captured = { ...target };
-      const work = start(id, captured);
-      opening.set(work, id);
-      void work.then(
-        () => opening.delete(work),
-        () => opening.delete(work),
-      );
-      return work;
+    open,
+    action(selection: VersionSelection) {
+      const expected = { ...selection };
+      const issued = revision(expected.id);
+      return (target: ExtensionTarget) =>
+        issued !== revision(expected.id)
+          ? Promise.reject(new PackageError("unavailable"))
+          : open(expected.id, target, expected);
     },
     dispose(): Promise<boolean> {
       if (disposal) return disposal;

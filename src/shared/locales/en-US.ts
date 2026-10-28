@@ -199,6 +199,53 @@ export const englishMessages = {
   "settings.page.window": "New Windows",
   "settings.page.file": "Config File",
   "settings.page.extensions": "Extensions",
+  "extensions.heading": "Local extensions · development preview",
+  "extensions.explanation":
+    "Install a separately downloaded .omxext package. Trusted extension code has your user permissions; it is not sandboxed. Installed packages stay dormant until invoked. This preview is Linux ARM64 only.",
+  "extensions.install": "Install local .omxext…",
+  "extensions.refresh": "Refresh",
+  "extensions.enable": "Enable",
+  "extensions.disable": "Disable",
+  "extensions.uninstall": "Uninstall",
+  "extensions.empty": "No local extensions installed.",
+  "extensions.error":
+    "{reason}. No automatic retry. Refresh to inspect current state.",
+  "extensions.cleanupUnchecked":
+    "Retained-byte cleanup has not been inspected. ",
+  "extensions.cleanupPending":
+    "Pending Cleanup: a package is still pinned or cleanup has not settled. Other app instances: unknown.",
+  "extensions.refreshed":
+    "Registry snapshot refreshed. Local activity belongs to this app instance; activity in other instances is unknown.",
+  "extensions.state":
+    "{id} · generation {generation} · {installed} · local {local} · other instances unknown",
+  "extensions.enabled": "enabled",
+  "extensions.disabled": "disabled",
+  "extensions.uninstalled": "uninstalled",
+  "extensions.dormant": "dormant",
+  "extensions.starting": "starting",
+  "extensions.active": "active",
+  "extensions.stopping": "stopping",
+  "extensions.failed": "failed",
+  "extensions.unknown": "unknown",
+  "extensions.busy": "An operation is already in progress",
+  "extensions.invalid-package": "Invalid extension package",
+  "extensions.incompatible": "Incompatible extension package",
+  "extensions.invalid-store": "Invalid extension store",
+  "extensions.conflict": "The installed generation changed",
+  "extensions.outcome-unknown": "Operation outcome unknown",
+  "extensions.runtime-unavailable":
+    "Extension store or runtime unavailable. Terminal sessions remain usable",
+  "extensions.unsupported": "Files development preview requires Linux ARM64",
+  "extensions.unavailable": "Extension unavailable",
+  "extensions.unavailableDetail":
+    "Refresh Extensions in Settings to inspect the installed state. No operation was automatically retried.",
+  "extensions.chooserTitle": "Install local extension",
+  "extensions.chooserType": "OMXTerm extension",
+  "extensions.trustTitle": "Trust extension code?",
+  "extensions.trustMessage": "Install {name} {version}?",
+  "extensions.trustDetail":
+    "This is trusted local code, not a sandbox. It can read/change files, run programs and use the network with your user permissions. Third-party authors are responsible for their extensions. Only install packages you trust. Installation is dormant until you invoke its action.\n\nPackage: {id}\nSHA-256: {digest}\nCurrent generation: {generation}",
+  "extensions.trustInstall": "Trust and install",
   "settings.language": "Language",
   "settings.english": "English (United States)",
   "settings.portuguese": "Português (Brasil)",

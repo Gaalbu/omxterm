@@ -17,6 +17,33 @@ afterEach(() => {
 });
 
 describe("author correction ownership regressions", () => {
+  it("binds initial acquisition to issued bytes and refuses a different active selection", async () => {
+    const f = fixture();
+    const expected = { ...selection };
+    f.openVersion.mockRejectedValueOnce(new PackageError("unavailable"));
+    await expect(f.runtime.activate(selection.id, expected)).rejects.toThrow(
+      "activation-failed",
+    );
+    expect(f.openVersion).toHaveBeenCalledWith(selection.id, selection);
+    expect(f.spawn).not.toHaveBeenCalled();
+    const a = await active();
+    await expect(
+      a.runtime.activate(selection.id, { ...selection, generation: 2 }),
+    ).rejects.toThrow("unavailable");
+    expect(a.backend.state()).toBe("active");
+    expect(a.spawn).toHaveBeenCalledOnce();
+  });
+  it("exposes actual unexpected exit and stream settlement, not a stale active label", async () => {
+    const f = await active();
+    expect(f.backend.state()).toBe("active");
+    f.child.exit(null, "SIGKILL");
+    await flush();
+    expect(f.backend.state()).toBe("stopping");
+    f.child.close();
+    await flush();
+    expect(f.backend.state()).toBe("failed");
+    expect(f.spawn).toHaveBeenCalledOnce();
+  });
   it.each(["resolve", "reject", "cleanup-failed"])(
     "retains held import revalidation across exit/close until %s",
     async (outcome) => {

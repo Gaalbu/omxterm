@@ -32,6 +32,7 @@ export type ExtensionsResult = {
 };
 export type ExtensionsRequest =
   | { operation: "snapshot" | "install" }
+  | { operation: "open"; token: string; accepted: boolean }
   | {
       operation: "enable" | "disable" | "uninstall";
       id: string;
@@ -45,6 +46,13 @@ export function isExtensionsRequest(
 ): value is ExtensionsRequest {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const item = value as Record<string, unknown>;
+  if (item.operation === "open")
+    return (
+      Object.keys(item).length === 3 &&
+      typeof item.token === "string" &&
+      /^[0-9a-f-]{36}$/.test(item.token) &&
+      typeof item.accepted === "boolean"
+    );
   if (item.operation === "snapshot" || item.operation === "install")
     return Object.keys(item).length === 1;
   return (

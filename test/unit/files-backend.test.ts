@@ -34,6 +34,60 @@ function object(value: Value) {
   return value as Record<string, Value>;
 }
 describe("separately installed Files backend", () => {
+  it("reclaims abandoned cursor/confirmation capacity and never rebinds expired authority", async () => {
+    await Promise.all(
+      Array.from({ length: 101 }, (_, i) =>
+        writeFile(path.join(root, `item-${i}`), "retained"),
+      ),
+    );
+    const files = backend();
+    const cursors: Value[] = [];
+    const tokens: Value[] = [];
+    const target = path.join(root, "item-0");
+    for (let i = 0; i < 9; i++) {
+      const departed = new AbortController();
+      const list = object(
+        await files.invoke({ operation: "list", path: root }, departed.signal),
+      );
+      const confirmation = object(
+        await files.invoke(
+          { operation: "prepare-delete", path: target },
+          departed.signal,
+        ),
+      );
+      expect(list.ok).toBe(true);
+      expect(confirmation.ok).toBe(true);
+      cursors.push(list.cursor!);
+      tokens.push(confirmation.token!);
+      departed.abort();
+    }
+    expect(
+      object(
+        await files.invoke(
+          { operation: "list-next", cursor: cursors[0]! },
+          signal,
+        ),
+      ).ok,
+    ).toBe(false);
+    expect(
+      object(
+        await files.invoke({ operation: "delete", token: tokens[0]! }, signal),
+      ).ok,
+    ).toBe(false);
+    expect(await readFile(target, "utf8")).toBe("retained");
+    expect(
+      object(
+        await files.invoke(
+          { operation: "list-next", cursor: cursors[1]! },
+          signal,
+        ),
+      ).ok,
+    ).toBe(true);
+    expect(
+      await files.invoke({ operation: "delete", token: tokens[1]! }, signal),
+    ).toEqual({ ok: true });
+    await expect(lstat(target)).rejects.toMatchObject({ code: "ENOENT" });
+  });
   it("lists bounded snapshots, identifies symlinks, and consumes cursors", async () => {
     await Promise.all(
       Array.from({ length: 202 }, (_, i) =>

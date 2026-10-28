@@ -14,9 +14,41 @@ export type RuntimeOptions = {
 export type Backend = {
   readonly epoch: string;
   readonly selection: VersionSelection;
+  state(): "active" | "stopping" | "dormant" | "failed" | "unknown";
   call(value: Value, signal?: AbortSignal): Promise<Value>;
   retire(): Promise<Retirement>;
 };
+
+export type Pending = {
+  resolve(value: Value): void;
+  reject(reason: unknown): void;
+  cleanup(): void;
+  cancelled: boolean;
+};
+
+// Bounded process-lifetime coordination; a timeout never claims settlement.
+export function deferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason: unknown) => void;
+  const promise = new Promise<T>((yes, no) => {
+    resolve = yes;
+    reject = no;
+  });
+  return { promise, resolve, reject };
+}
+export function within<T>(
+  promise: Promise<T>,
+  milliseconds: number,
+  fallback: () => T,
+): Promise<T> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => resolve(fallback()), milliseconds);
+    void promise.then((value) => {
+      clearTimeout(timer);
+      resolve(value);
+    });
+  });
+}
 
 /** Actual process exit and stream closure are separate retirement facts. */
 export type Retirement = {

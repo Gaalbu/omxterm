@@ -71,6 +71,7 @@ export const MAX_TAB_SELECT_POSITION = 9;
 // a failed session's tab after its native failure dialog was acknowledged.
 export type TerminalTabCommand =
   | { readonly action: "new" }
+  | { readonly action: "open-extension"; readonly token: string }
   | { readonly action: "close" }
   | { readonly action: "prepare-close" }
   | { readonly action: "resolve-close"; readonly confirmed: boolean }
@@ -199,6 +200,12 @@ export function isTerminalTabCommand(
   value: unknown,
 ): value is TerminalTabCommand {
   if (isTerminalPaneCommand(value)) return true;
+  if (isStrictRecord(value, ["action", "token"]))
+    return (
+      value.action === "open-extension" &&
+      typeof value.token === "string" &&
+      /^[0-9a-f-]{36}$/.test(value.token)
+    );
   if (isStrictRecord(value, ["action"]))
     return (
       value.action === "new" ||

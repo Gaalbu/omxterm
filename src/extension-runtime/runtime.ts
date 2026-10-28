@@ -20,36 +20,10 @@ import type {
   BackendProcess,
   Retirement,
   RuntimeOptions,
+  Pending,
 } from "./backend-process.js";
+import { deferred, within } from "./backend-process.js";
 export type * from "./backend-process.js";
-function deferred<T>() {
-  let resolve!: (value: T | PromiseLike<T>) => void;
-  let reject!: (reason: unknown) => void;
-  const promise = new Promise<T>((yes, no) => {
-    resolve = yes;
-    reject = no;
-  });
-  return { promise, resolve, reject };
-}
-function within<T>(
-  promise: Promise<T>,
-  milliseconds: number,
-  fallback: () => T,
-): Promise<T> {
-  return new Promise((resolve) => {
-    const timer = setTimeout(() => resolve(fallback()), milliseconds);
-    void promise.then((value) => {
-      clearTimeout(timer);
-      resolve(value);
-    });
-  });
-}
-type Pending = {
-  resolve(value: Value): void;
-  reject(reason: unknown): void;
-  cleanup(): void;
-  cancelled: boolean;
-};
 class Activation {
   readonly epoch = randomUUID();
   readonly ready = deferred<Backend>();
@@ -82,9 +56,11 @@ class Activation {
   private killAccepted: boolean | null = null;
   private deactivated = false;
   private cleanupFailed = false;
+  private failed = false;
   constructor(
     readonly id: string,
     private readonly options: RuntimeOptions,
+    private readonly expected: VersionSelection | undefined,
     private readonly finished: () => void,
   ) {
     void this.ready.promise.catch(() => {});
@@ -100,7 +76,10 @@ class Activation {
   }
   private async start(): Promise<void> {
     try {
-      this.guard = await this.options.packages.openVersion(this.id);
+      this.guard = await this.options.packages.openVersion(
+        this.id,
+        this.expected,
+      );
       this.selection = {
         id: this.guard.id,
         generation: this.guard.generation,
@@ -195,6 +174,11 @@ class Activation {
       this.ready.resolve({
         epoch: this.epoch,
         selection: { ...this.selection! },
+        state: () => {
+          if (this.cleanupFailed) return "unknown";
+          if (this.ownershipSettled) return this.failed ? "failed" : "dormant";
+          return this.phase === "active" ? "active" : "stopping";
+        },
         call: (value, signal) => this.call(value, signal),
         retire: () => this.stop(),
       });
@@ -255,7 +239,17 @@ class Activation {
       else pending.reject(new RuntimeError("outcome-unknown"));
     }
   }
-  reuse(): Promise<Backend> {
+  reuse(expected?: VersionSelection): Promise<Backend> {
+    if (expected)
+      return this.ready.promise.then((backend) => {
+        if (
+          backend.selection.generation !== expected.generation ||
+          backend.selection.digest !== expected.digest ||
+          backend.selection.id !== expected.id
+        )
+          throw new RuntimeError("unavailable");
+        return this.reuse();
+      });
     if (this.phase === "stopping")
       return Promise.reject(new RuntimeError("unavailable"));
     if (this.phase !== "active") return this.ready.promise;
@@ -378,6 +372,7 @@ class Activation {
     });
   }
   private fail(code: ConstructorParameters<typeof RuntimeError>[0]): void {
+    this.failed = true;
     this.ready.reject(new RuntimeError(code));
     void this.stop();
   }
@@ -424,6 +419,7 @@ class Activation {
     code: number | null,
     signal: string | null,
   ): Promise<void> {
+    if (this.phase !== "stopping") this.failed = true;
     this.spawned = true;
     this.exitObserved = true;
     this.exitCode = code;
@@ -479,14 +475,15 @@ export class ExtensionRuntime {
     options.owner.addEventListener("abort", this.onAbort, { once: true });
     if (options.owner.aborted) this.disposed = true;
   }
-  activate(id: string): Promise<Backend> {
+  activate(id: string, expected?: VersionSelection): Promise<Backend> {
+    if (expected) expected = { ...expected };
     if (this.disposed || this.options.owner.aborted)
       return Promise.reject(new RuntimeError("unavailable"));
     const existing = this.activations.get(id);
-    if (existing) return existing.reuse();
+    if (existing) return existing.reuse(expected);
     if (this.activations.size >= 32)
       return Promise.reject(new RuntimeError("busy"));
-    const activation = new Activation(id, this.options, () => {
+    const activation = new Activation(id, this.options, expected, () => {
       if (this.activations.get(id) === activation) this.activations.delete(id);
     });
     this.activations.set(id, activation);

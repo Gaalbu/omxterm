@@ -18,10 +18,7 @@ import {
   type TerminalSurfaceConfiguration,
   type TerminalSurfaceOptions,
 } from "../terminal-surface/terminal-surface";
-import type {
-  TerminalSessionId,
-  TerminalTabCommand,
-} from "../shared/terminal-contract";
+import type { TerminalSessionId } from "../shared/terminal-contract";
 import type { TerminalRendererConfiguration } from "../shared/user-configuration";
 import type { TerminalSnippetsResponse } from "../shared/terminal-snippets";
 import type { TerminalTheme } from "../shared/terminal-theme";
@@ -67,6 +64,7 @@ interface TerminalWindowPageOptions extends TerminalWindowActionSubscriptions {
   readonly about?: AboutBridge;
   readonly palette?: CommandPaletteBridge;
   readonly settings?: SettingsBridge;
+  readonly extensions?: import("../shared/extensions").ExtensionsBridge;
   readonly createAdapter: (
     fontConfigurationId?: string,
     workingDirectoryOf?: TerminalSessionId,
@@ -87,9 +85,6 @@ interface TerminalWindowPageOptions extends TerminalWindowActionSubscriptions {
   readonly surfaceFailureBanner?: HTMLElement;
   readonly clipboard?: TerminalClipboard;
   readonly droppedFilePathInsertion?: (files: readonly File[]) => string;
-  readonly subscribeToTabCommands?: (
-    listener: (command: TerminalTabCommand) => void,
-  ) => () => void;
   readonly subscribeToTabTitles?: (
     listener: (sessionId: TerminalSessionId, title: string) => void,
   ) => () => void;
@@ -129,7 +124,6 @@ export function mountTerminalWindowPage(
   const mount = options.mount ?? mountTerminalSurface;
   let disposed = false;
   let removeConfigurationUpdateListener: (() => void) | undefined;
-  let removeTabCommandListener: (() => void) | undefined;
   let removeTabTitleListener: (() => void) | undefined;
   let removeSettingsOpen: (() => void) | undefined;
   let removeGuardedActionListeners: (() => void) | undefined;
@@ -197,6 +191,7 @@ export function mountTerminalWindowPage(
     {
       language,
       ...(options.settings ? { settings: options.settings } : {}),
+      ...(options.extensions ? { extensions: options.extensions } : {}),
       ...hostedTabOptions(options.hostedContent, () =>
         auxiliaryPanel?.deactivate(),
       ),
@@ -282,7 +277,6 @@ export function mountTerminalWindowPage(
     removeGuardedActionListeners?.();
     removeConfigurationUpdateListener?.();
     pageLabels.dispose();
-    removeTabCommandListener?.();
     removeTabTitleListener?.();
     removeSettingsOpen?.();
     removeSnippetsToggleListener?.();
@@ -354,11 +348,6 @@ export function mountTerminalWindowPage(
           (auxiliaryPanel?.clipboardAction(action) ?? false),
         (action) => palette?.clipboardAction(action) ?? false,
       );
-      removeTabCommandListener = options.subscribeToTabCommands?.((command) => {
-        if (previewActive() && MODAL_COMPETING_TAB_ACTIONS.has(command.action))
-          return;
-        tabs.handleCommand(command);
-      });
       if (options.snippets) {
         const snippets = options.snippets;
         const { panel, preview } = mountSnippetsPanel(page.document, snippets, {
@@ -386,18 +375,6 @@ export function mountTerminalWindowPage(
 
   return { ready: tabs.ready, dispose };
 }
-
-// Closure preparation/resolution and failure acknowledgement are deliberately
-// absent: modal ownership suppresses competing navigation, not lifecycle delivery.
-const MODAL_COMPETING_TAB_ACTIONS = new Set<TerminalTabCommand["action"]>([
-  "new",
-  "next",
-  "previous",
-  "select",
-  "split",
-  "focus-pane",
-  "equalize-panes",
-]);
 
 function bindPageTheme(
   document: Document,

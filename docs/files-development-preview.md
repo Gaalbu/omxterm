@@ -17,7 +17,13 @@ third-party notices elsewhere in the application remain unchanged.
 The backend lists directories using `opendir` and sequential `lstat`, with a
 5,000-entry visit limit and explicit truncation. Replies contain at most100 rows,
 with at most eight active backend invocations; snapshots/cursors are ephemeral,
-not filesystem watchers. Links are labeled as links. Home and explicit absolute
+not filesystem watchers. At most eight completed snapshots and eight deletion
+confirmations are retained. At capacity, a new request expires the oldest retained
+token rather than allowing abandoned views to reserve capacity forever. In-flight
+reads still count toward the limit and are never evicted. Expired cursors require
+an explicit refresh; expired confirmations require fresh confirmation and can never
+be rebound to a new entry. No timers, polling or automatic mutation retry are added.
+Links are labeled as links. Home and explicit absolute
 local paths are supported. Exclusive file creation and nonrecursive folder
 creation never overwrite an existing entry. Rename/move uses the host-provided
 async no-replace primitive, not a check-then-rename or copy/delete fallback.
@@ -37,11 +43,17 @@ unknown. No failed or uncertain mutation is retried automatically.
 `createExtensionManager` owns consent/store/runtime/view composition. It reopens
 an independent UI pin for the exact backend generation/digest, then revalidates
 before creating views. Invocation context is copied before asynchronous
-activation. Management revokes local callbacks and pending admissions, publishes
+activation. Issued actions retain the installation generation/digest and local
+revocation revision; runtime acquisition checks that exact selection before spawning
+or importing code. Retained old actions never acquire a replacement installation.
+Management revokes local callbacks and pending admissions, publishes
 through the existing short store transaction and joins known views/backend;
 status distinguishes installed metadata from local dormant/starting/active/
 stopping/failed/unknown and other-instance uncertainty. Disposal latches admission
 and reports actual known settlement rather than treating a kill request as exit.
+Local backend state is read from its actual owned lifetime, including exit and stream
+settlement. A request-local refusal does not change an active backend to unknown;
+view/management cleanup uncertainty is still reported separately.
 `startApplicationExtensions` connects the production startup, Settings, shared
 action catalog and Quit. Startup opens infrastructure but never imports installed
 code. Settings → Extensions offers local selection, explicit native trust,
@@ -49,10 +61,17 @@ Refresh, enable/disable and uninstall. Selecting another archive for the same ID
 is an explicit replacement/reinstall with the observed generation. Its captured
 bytes, identity, version and digest are shown before approval; third-party authors
 remain responsible for trusted code, including its filesystem/program/network
-access. Missing runtime/store infrastructure leaves terminals usable.
+access. Core-owned Settings controls/statuses and native trust/error dialogs use the
+configured en-US/pt-BR language; retained controls relabel without replaying requests
+or changing their captured generation. This does not add an extension localization
+SDK. Missing runtime/store infrastructure leaves terminals usable.
 
 Files appears in the shared palette, File menu and terminal context menu with no
-default or configurable shortcut. Each invocation owns its copied terminal
+default or configurable shortcut. Terminal-popup actions must claim the same live,
+one-shot popup/window target as core actions. All explicit openings pass through
+core renderer modal admission before activation. An already-admitted opening that
+finishes during a modal appends a background tab without stealing the modal's selected
+owner or restoration generation. Each invocation owns its copied terminal
 context and independent view pin, even within one window; backends remain shared.
 Use terminal directory reports captured local OSC7 provenance, never later
 selection or process inspection. No local report means an explicit unavailable

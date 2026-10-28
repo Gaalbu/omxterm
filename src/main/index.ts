@@ -176,6 +176,8 @@ app
         let rebuildMenu = () => {};
         let actionCatalog: CoreActionCatalog;
         extensions = await startApplicationExtensions({
+          translator: () => currentTranslator(),
+          sendAction,
           applicationRoot,
           isTrustedSender: terminalIpcRouter.isTrustedSender,
           changed: () => rebuildMenu(),
@@ -354,7 +356,12 @@ app
                       .closePane,
                     currentTranslator().t,
                   ),
-                  ...extensions!.contextMenu(window, request?.sessionId),
+                  ...extensions!.contextMenu(
+                    window,
+                    request?.sessionId,
+                    () =>
+                      !!request && controller.claimContextMenuTarget(request),
+                  ),
                 ]).popup({ window });
               },
             });
