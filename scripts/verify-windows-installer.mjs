@@ -31,7 +31,8 @@ export function inspectWindowsInstallerInputs(
   // the payload. App ID/name, NSIS options, registration/cache paths, shortcuts
   // and the locked builder/templates remain unchanged; retain exact guarding.
   // #726 excludes separately distributed Files archives/receipts from all host
-  // payloads. The six exclusion lines change no app identity, NSIS option,
+  // payloads, including custom-output .omxext.json/.omxext.sha256 sidecars.
+  // These payload-only exclusions change no app identity, NSIS option,
   // registry/cache location, shortcut, template or locked builder dependency.
   const digest = createHash("sha256")
     .update(configuration.replaceAll("\r\n", "\n"))
@@ -40,7 +41,7 @@ export function inspectWindowsInstallerInputs(
     builderVersion !== "26.15.3" ||
     packageName !== "omxterm" ||
     digest !==
-      "07c1b2f2b9ab2e30d168e416ca5a6f6342cdd88a88dc0828e195bf1cfcf93a3d"
+      "957b2e409bec4bf690b15e578c0d57efcb900f0f5e6758fed9a3ce41866a1604"
   )
     throw new Error(
       "Unknown Windows installer footprint; review the pinned packaging inputs before exact installer verification",

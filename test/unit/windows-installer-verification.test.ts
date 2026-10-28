@@ -49,6 +49,16 @@ describe("exact Windows installer verification", () => {
         "26.15.3",
         "omxterm",
       ],
+      [
+        configuration.replaceAll('    - "!dist/**/*.omxext.json"\n', ""),
+        "26.15.3",
+        "omxterm",
+      ],
+      [
+        configuration.replaceAll('    - "!dist/**/*.omxext.sha256"\n', ""),
+        "26.15.3",
+        "omxterm",
+      ],
       [configuration, "26.15.4", "omxterm"],
       [configuration, "26.15.3", "other-package"],
     ] as const) {

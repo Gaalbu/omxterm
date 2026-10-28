@@ -24,6 +24,23 @@ function inspect(options) {
   };
 }
 
+function assertNormalBackendRetirement(child) {
+  assert.ok(
+    child.closed && child.exit !== null,
+    "backend exit and close joined",
+  );
+  assert.equal(
+    child.exit.code,
+    0,
+    "ordinary backend retirement must exit zero",
+  );
+  assert.equal(
+    child.exit.signal,
+    null,
+    "ordinary backend retirement must not be signaled",
+  );
+}
+
 async function run(options) {
   inspect(options);
   const window = BrowserWindow.getAllWindows()[0];
@@ -306,6 +323,7 @@ async function run(options) {
     () => hosted().length === 0 && children[0].closed,
     "replacement retired actual backend/view",
   );
+  assertNormalBackendRetirement(children[0]);
   assert.equal(children.length, 1, "replacement remains dormant");
   assert.equal(approvals, 2);
   checks.push("explicit-reinstall-actual-retirement-dormant");
@@ -319,6 +337,7 @@ async function run(options) {
     () => hosted().length === 0 && children[1].closed,
     "Disable retirement",
   );
+  assertNormalBackendRetirement(children[1]);
   await click(core, "Uninstall");
   await state("uninstalled");
   checks.push("fresh-activation-disable-uninstall");
@@ -353,10 +372,7 @@ async function run(options) {
         remaining.state === "Z",
       "shell kernel exit before will-quit",
     );
-    assert.ok(
-      children.every((child) => child.closed && child.exit !== null),
-      "actual backend exit/close before Quit",
-    );
+    children.forEach(assertNormalBackendRetirement);
     writeFileSync(
       path.join(options.evidence, "quit.json"),
       JSON.stringify(
@@ -369,4 +385,9 @@ async function run(options) {
   return result;
 }
 
-module.exports = { inspect, run, quit: () => app.quit() };
+module.exports = {
+  inspect,
+  run,
+  assertNormalBackendRetirement,
+  quit: () => app.quit(),
+};

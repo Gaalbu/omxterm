@@ -55,6 +55,8 @@ mac:
     - dist/**
     - "!dist/extensions/**"
     - "!dist/**/*.omxext"
+    - "!dist/**/*.omxext.json"
+    - "!dist/**/*.omxext.sha256"
     - "!dist/**/*.map"
     - "!node_modules/**/*.map"
     - "!node_modules/restty/**"
@@ -94,6 +96,8 @@ linux:
     - dist/**
     - "!dist/extensions/**"
     - "!dist/**/*.omxext"
+    - "!dist/**/*.omxext.json"
+    - "!dist/**/*.omxext.sha256"
     - "!dist/main/macos-window-blur.node"
     - "!dist/**/*.map"
     - "!node_modules/**/*.map"
@@ -129,6 +133,8 @@ win:
     - dist/**
     - "!dist/extensions/**"
     - "!dist/**/*.omxext"
+    - "!dist/**/*.omxext.json"
+    - "!dist/**/*.omxext.sha256"
     - "!dist/main/macos-window-blur.node"
     - "!dist/**/*.map"
     - "!node_modules/**/*.map"
