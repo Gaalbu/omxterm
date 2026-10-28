@@ -220,6 +220,34 @@ it("cancelled consent does not install or activate", async () => {
   expect(service.actions()).toEqual([]);
   expect(adapters.activate).not.toHaveBeenCalled();
 });
+it("revokes pending consent without reading a closed window's native getter", async () => {
+  let approve!: (value: { response: number }) => void;
+  adapters.consent.mockReturnValueOnce(
+    new Promise((resolve) => {
+      approve = resolve;
+    }),
+  );
+  const installation = request({ operation: "install" });
+  await vi.waitFor(() => expect(adapters.consent).toHaveBeenCalledOnce());
+  Object.defineProperty(window, "webContents", {
+    get() {
+      throw new Error("Object has been destroyed");
+    },
+  });
+  // Settle the outstanding operation even on the original broken close path.
+  let closeError: unknown;
+  try {
+    window.emit("closed");
+  } catch (error) {
+    closeError = error;
+  }
+  approve({ response: 1 });
+  const result = await installation;
+  expect(closeError).toBeUndefined();
+  expect(result).toEqual({ ok: false, error: "unavailable" });
+  expect(service.capture(window)).toBeUndefined();
+  expect(adapters.activate).not.toHaveBeenCalled();
+});
 it("authenticates main frame and rejects caller paths and malformed generations", async () => {
   await expect(
     request(

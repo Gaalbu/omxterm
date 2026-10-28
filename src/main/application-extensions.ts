@@ -274,10 +274,12 @@ export async function startApplicationExtensions(options: {
       window: BrowserWindow,
       target: (sessionId?: string) => ExtensionTarget,
     ) {
+      const contents = window.webContents;
       windows.set(window, target);
       window.once("closed", () => {
         windows.delete(window);
-        manager?.cancel(window.webContents);
+        // The native window getter is no longer usable after closed.
+        manager?.cancel(contents);
       });
     },
     async dispose() {
