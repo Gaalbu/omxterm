@@ -249,7 +249,7 @@ export function createExtensionManager(options: Options) {
         otherInstances: "unknown" as const,
       }));
     },
-    async prepare(owner: object, filename: string) {
+    async prepare(owner: object, filename: string | Buffer) {
       approvals.delete(owner);
       const preview = await options.trust.prepare(owner, filename);
       approvals.set(owner, { token: preview.token, id: preview.manifest.id });

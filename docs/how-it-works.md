@@ -56,7 +56,7 @@ See [Everyday use](usage.md#windows-tabs-and-sessions) for tab and window shortc
 
 ## Privacy and local data
 
-- **No network calls:** OMXTerm makes zero network requests — no telemetry, analytics, or background update checks. The CLI tools you run inside your shell keep their normal network access.
+- **Explicit network access only:** OMXTerm makes no telemetry, analytics or background update requests. The Linux ARM64 development preview can download an extension archive from a user-supplied HTTPS link through [bounded acquisition and explicit trust](files-development-preview.md#https-archive-installation). The CLI tools you run inside your shell keep their normal network access.
 - **Memory-only terminal output:** your terminal scrollback and images live only in memory while the tab is open. Local diagnostic logs record only app-level events and never log your commands, terminal output, or clipboard.
 
 <a id="a-short-demonstration"></a>

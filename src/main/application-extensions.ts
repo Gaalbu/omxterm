@@ -16,6 +16,8 @@ import {
 } from "./extension-manager";
 import { createExtensionPackageTrust } from "./extension-package-trust";
 import { installExtensionFromDialog } from "./extension-install-dialog";
+import { ExtensionDownloadError } from "./extension-download";
+import { createExtensionLinkInstaller } from "./extension-link-install";
 import { extensionResourceOwner } from "./extension-view-reader";
 import { startExtensionViewHost } from "./extension-view-ipc";
 import {
@@ -25,6 +27,15 @@ import {
 } from "../shared/extensions";
 import type { IpcEvent } from "./terminal-ipc-types";
 import type { CoreAction } from "./action-catalog";
+
+function managementFailure(error: unknown): ExtensionsResult {
+  // Never expose native errors/URLs or turn uncertain publication into success.
+  const errorCode =
+    error instanceof PackageError || error instanceof ExtensionDownloadError
+      ? error.code
+      : "outcome-unknown";
+  return { ok: false, error: errorCode };
+}
 
 function managementEntry(
   entry: Awaited<
@@ -185,6 +196,10 @@ export async function startApplicationExtensions(options: {
     };
   }
   const busy = new Set<BrowserWindow>();
+  const links = createExtensionLinkInstaller(
+    () => stopping,
+    options.translator,
+  );
   ipcMain.handle(
     extensionsIpc,
     async (event, ...args: unknown[]): Promise<ExtensionsResult> => {
@@ -216,13 +231,19 @@ export async function startApplicationExtensions(options: {
         await issued.invoke();
         return { ok: true };
       }
+      if (args[0].operation === "cancel-install") {
+        links.cancel(window, args[0].token);
+        return { ok: true };
+      }
       if (!manager) return refresh();
       if (busy.has(window)) return { ok: false, error: "busy" };
       busy.add(window);
       try {
         const request = args[0];
         if (request.operation === "snapshot") await manager.collect();
-        if (request.operation === "install")
+        if (request.operation === "install-link")
+          await links.install(window, manager, request);
+        else if (request.operation === "install")
           await installExtensionFromDialog(
             window,
             manager,
@@ -242,11 +263,7 @@ export async function startApplicationExtensions(options: {
           );
         return await refresh();
       } catch (error) {
-        // Do not turn an uncertain publication into a retry or a success snapshot.
-        return {
-          ok: false,
-          error: error instanceof PackageError ? error.code : "outcome-unknown",
-        };
+        return managementFailure(error);
       } finally {
         busy.delete(window);
       }
@@ -341,6 +358,7 @@ export async function startApplicationExtensions(options: {
     },
     async dispose() {
       stopping = true;
+      links.dispose();
       pending.clear();
       ipcMain.removeHandler(extensionsIpc);
       lifetime.abort();

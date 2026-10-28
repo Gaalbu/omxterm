@@ -203,6 +203,18 @@ export const englishMessages = {
   "extensions.explanation":
     "Install a separately downloaded .omxext package. Trusted extension code has your user permissions; it is not sandboxed. Installed packages stay dormant until invoked. This preview is Linux ARM64 only.",
   "extensions.install": "Install local .omxext…",
+  "extensions.url": "HTTPS archive link",
+  "extensions.installLink": "Install from link",
+  "extensions.downloading":
+    "Downloading and validating the archive… Review the trust dialog before installation. Cancel stops work before installation is approved.",
+  "extensions.invalid-url":
+    "Use an HTTPS link without credentials or a fragment",
+  "extensions.download-failed":
+    "Download failed. Check the link, network and certificate; login pages are not supported",
+  "extensions.download-limit":
+    "Download exceeds the 64 MiB archive or five-redirect limit",
+  "extensions.download-timeout": "Download exceeded the 60-second limit",
+  "extensions.cancelled": "Installation cancelled before approval",
   "extensions.refresh": "Refresh",
   "extensions.enable": "Enable",
   "extensions.disable": "Disable",

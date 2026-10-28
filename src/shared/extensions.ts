@@ -32,6 +32,8 @@ export type ExtensionsResult = {
 };
 export type ExtensionsRequest =
   | { operation: "snapshot" | "install" }
+  | { operation: "install-link"; url: string; token: string }
+  | { operation: "cancel-install"; token: string }
   | { operation: "open"; token: string; accepted: boolean }
   | {
       operation: "enable" | "disable" | "uninstall";
@@ -41,16 +43,28 @@ export type ExtensionsRequest =
 export type ExtensionsBridge = {
   request(request: ExtensionsRequest): Promise<ExtensionsResult>;
 };
+function isToken(value: unknown): value is string {
+  return typeof value === "string" && /^[0-9a-f-]{36}$/.test(value);
+}
 export function isExtensionsRequest(
   value: unknown,
 ): value is ExtensionsRequest {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const item = value as Record<string, unknown>;
+  if (item.operation === "install-link" || item.operation === "cancel-install")
+    return (
+      Object.keys(item).length ===
+        (item.operation === "install-link" ? 3 : 2) &&
+      isToken(item.token) &&
+      (item.operation === "cancel-install" ||
+        (typeof item.url === "string" &&
+          item.url.length > 0 &&
+          item.url.length <= 8192))
+    );
   if (item.operation === "open")
     return (
       Object.keys(item).length === 3 &&
-      typeof item.token === "string" &&
-      /^[0-9a-f-]{36}$/.test(item.token) &&
+      isToken(item.token) &&
       typeof item.accepted === "boolean"
     );
   if (item.operation === "snapshot" || item.operation === "install")

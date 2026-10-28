@@ -5,6 +5,7 @@ import assert from "node:assert/strict";
 import { createRequire, syncBuiltinESMExports } from "node:module";
 import { mkdir, readFile, writeFile, stat } from "node:fs/promises";
 import path from "node:path";
+import { createServer } from "node:https";
 import { pathToFileURL } from "node:url";
 const root = import.meta.dirname;
 const fixture = JSON.parse(
@@ -25,6 +26,46 @@ const files = path.join(root, "owned-files");
 await mkdir(files);
 await writeFile(path.join(files, "source.txt"), "preserved-source");
 await writeFile(path.join(files, "conflict.txt"), "preserved-destination");
+let server;
+let archiveUrl;
+let slowStarted = false;
+let slowClosed = false;
+if (fixture.https) {
+  const archive = await readFile(
+    path.join(source, "dist/extensions/files-0.1.0.omxext"),
+  );
+  server = createServer(
+    {
+      key: await readFile(path.join(root, "key.pem")),
+      cert: await readFile(path.join(root, "cert.pem")),
+    },
+    (request, response) => {
+      if (request.url === "/slow") {
+        slowStarted = true;
+        response.on("close", () => {
+          slowClosed = true;
+        });
+        response.writeHead(200);
+        response.write("pending");
+      } else if (request.url === "/bad") {
+        response.end("not an archive");
+      } else if (request.url === "/redirect") {
+        response.writeHead(302, { location: "/archive" });
+        response.end();
+      } else {
+        response.writeHead(200, { "content-length": archive.length });
+        response.end(archive);
+      }
+    },
+  );
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  archiveUrl = `https://localhost:${server.address().port}`;
+}
+async function closeServer() {
+  if (!server) return;
+  server.closeAllConnections();
+  await new Promise((resolve) => server.close(resolve));
+}
 const checks = [];
 let failed = false;
 let output = "";
@@ -197,7 +238,45 @@ void ready.then(async (window) => {
       "production Settings",
     );
     await click(core, "Extensions");
-    await click(core, "Install local .omxext…");
+    if (fixture.https) {
+      await until(
+        () =>
+          js(
+            "![...document.querySelectorAll('.extensions-panel button')].some(b => b.disabled)",
+          ),
+        "initial snapshot",
+      );
+      const installLink = async (route) => {
+        await js(
+          `document.querySelector('.extensions-panel input').value = ${JSON.stringify(archiveUrl)} + ${JSON.stringify(route)}`,
+        );
+        await click(core, "Install from link");
+      };
+      await installLink("/slow");
+      await until(() => slowStarted, "actual HTTPS pending stream");
+      await click(core, "Cancel");
+      await until(() => slowClosed, "actual HTTPS socket cancellation");
+      await until(
+        () =>
+          js(
+            "document.querySelector('.extensions-panel').textContent.includes('Installation cancelled')",
+          ),
+        "cancel feedback",
+      );
+      assert.equal(approved, 0);
+      checks.push("HTTPS-cancellation-before-trust");
+      await installLink("/bad");
+      await until(
+        () =>
+          js(
+            "document.querySelector('.extensions-panel').textContent.includes('Invalid extension package')",
+          ),
+        "malformed archive feedback",
+      );
+      assert.equal(approved, 0);
+      checks.push("HTTPS-malformed-before-trust");
+      await installLink("/redirect");
+    } else await click(core, "Install local .omxext…");
     await until(
       () =>
         js(
@@ -206,6 +285,38 @@ void ready.then(async (window) => {
       "dormant install",
     );
     assert.equal(children.length, 0);
+    if (fixture.https) {
+      assert.equal(approved, 1);
+      checks.push("HTTPS-redirect-captured-trust-dormant-no-backend");
+      await click(core, "Install local .omxext…");
+      await until(
+        () =>
+          js(
+            "document.querySelector('.extensions-panel').textContent.includes('generation 2')",
+          ),
+        "explicit local replacement",
+      );
+      assert.equal(approved, 2);
+      assert.equal(children.length, 0);
+      if (fixture.evidence) {
+        await writeFile(
+          path.join(fixture.evidence, "https-settings.png"),
+          (await core.capturePage()).toPNG(),
+        );
+      }
+      await terminal("OMX_HTTPS_AFTER");
+      assert.equal(ptys.length, 1);
+      assert.equal(
+        await js(
+          "window.__filesOriginalCanvas === document.querySelector('.terminal-surface canvas')",
+        ),
+        true,
+      );
+      checks.push("HTTPS-local-replacement-same-PTY");
+      await closeServer();
+      app.quit();
+      return;
+    }
     checks.push("Settings-captured-trust-dormant-no-backend");
     // Shared actions must not bypass Settings' modal input ownership.
     await js("document.querySelector('.settings-close').click()");
@@ -397,6 +508,7 @@ void ready.then(async (window) => {
     failed = true;
     process.stderr.write(`${error.stack}\n`);
     process.exitCode = 1;
+    await closeServer();
     app.quit();
   }
 });

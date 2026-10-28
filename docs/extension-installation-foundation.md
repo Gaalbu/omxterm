@@ -39,12 +39,12 @@ The first internal manifest is strict and deliberately small:
 ```
 
 The main-owned `createExtensionPackageTrust` service validates captured chooser
-bytes by extracting without importing, returns identity/digest and the observed
+bytes (or a synchronously copied, bounded main-owned download Buffer) by extracting without importing, returns identity/digest and the observed
 installation generation, and retains one one-shot approval per infrastructure
 owner. Cancellation, owner disposal and replacement revoke that consent. Approval
 installs the retained bytes with the observed generation; conflicts or unknown
 publication consume the approval and never authorize an automatic retry. This
-service is consumed by the production Settings local install dialog; it never activates code.
+service is consumed by the production Settings local/HTTPS install dialog; it never activates code. HTTPS acquisition is a separate main-owned caller, not part of Installed Packages.
 
 Unknown fields are rejected. ID is bounded lowercase ASCII namespace/name; version is semver; application and API ranges must parse and match the explicitly supplied runtime. Normal semver prerelease rules apply: a development application requires a range admitting that prerelease tuple. Backend must name an exact regular archive entry. It is validated but never imported. An optional exact `view` object declares one concrete application-tab entry and shared action: `{ "entry": "view/index.html", "action": "example.files.open", "title": "Files" }`. The entry must be an exact regular `.html` archive member admitted by the hosted resource grammar: at most 512 characters, slash-separated ASCII components starting with a letter, digit, underscore or hyphen, containing only letters, digits, underscores, hyphens and dots, with no trailing dot. The action is the exact package ID plus one dot-separated leaf (no further dots), preventing nested package namespaces from claiming the same action; the title is bounded nonblank display text. It grants no startup activation or shortcut. Other contribution fields, platform declarations and publisher/source trust metadata remain rejected, not permissive placeholders. This internal schema is not a stable extension author API or an assignment of an application release number.
 

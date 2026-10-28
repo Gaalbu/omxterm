@@ -1519,9 +1519,13 @@ IPC, PTY control, resize, duration, and failures; they must never contain PTY
 input/output, clipboard data, environment contents, configuration contents,
 executable names, command arguments, commands, titles, secrets, or transcripts.
 
-The application performs no remote network requests: no analytics, telemetry,
-crash reporting, update check, or remote log delivery. Child processes retain
-their normal network access. The internal Extension View Host may load only its
+The application makes remote requests only for deliberate HTTPS extension archive
+installation in the Linux ARM64 development preview. Main bounds acquisition and
+passes captured bytes through existing archive validation and explicit trust;
+see the [transport policy](files-development-preview.md#https-archive-installation).
+There is no analytics, telemetry, crash reporting, update check or remote log
+delivery. URLs and archive contents are excluded from operational logs. Child
+processes retain their normal network access. The internal Extension View Host may load only its
 owned epoch-local `omx-extension` packaged-resource origin, returning bounded
 materialized bytes under a captured immutable-version pin. This exception does
 not enable catalog fetching, downloads, external web content or a public SDK.
@@ -1637,7 +1641,7 @@ validation/installation, compatibility, immutable version pins, generation-based
 admission, disable/tombstones and deferred physical cleanup. The Linux ARM64
 Files preview consumes it through production Settings with captured-byte trust.
 This foundation itself owns neither extension execution nor catalog/network
-acquisition or a public SDK. Application network/terminal ownership is unchanged. Its implemented interface and
+acquisition or a public SDK. Main owns HTTPS acquisition separately; terminal ownership is unchanged. Its implemented interface and
 limits are governed by the [foundation contract](extension-installation-foundation.md)
 and [ADR 0038](adr/0038-pin-immutable-installed-packages.md).
 
@@ -1661,10 +1665,10 @@ changing the separately owned web-content host.
 The [runtime contract](extension-backend-runtime.md) and
 [ADR 0040](adr/0040-run-backends-in-owned-node-children.md) govern its internal
 interfaces, limits and qualification boundary. The [Files development preview](files-development-preview.md)
-connects Settings local installation, shared namespaced actions, independently
+connects Settings local/HTTPS archive installation, shared namespaced actions, independently
 pinned application views and bounded normal Quit retirement on Linux ARM64.
 Startup never activates installed code; explicit invocation does. There is no
-catalog/network acquisition, public SDK or extension shortcut configuration.
+catalog, public SDK or extension shortcut configuration.
 Trusted children retain ordinary Node capabilities. Production/native/visual and
 main-death qualification remain explicit obligations, not consequences of wiring.
 

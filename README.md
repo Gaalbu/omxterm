@@ -159,7 +159,9 @@ See
 
 ## Privacy and security
 
-OMXTerm makes zero network requests and collects no telemetry. Local diagnostic
+OMXTerm collects no telemetry and makes no background network requests. The Linux
+ARM64 development preview downloads extension archives only from an explicitly
+supplied HTTPS link ([transport and trust policy](docs/files-development-preview.md#https-archive-installation)). Local diagnostic
 logs exclude your terminal output, commands, clipboard data, and settings. To
 report a security vulnerability privately, see [SECURITY.md](SECURITY.md).
 

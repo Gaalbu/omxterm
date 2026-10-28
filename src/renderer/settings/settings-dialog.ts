@@ -391,6 +391,7 @@ function buildSettingsView(
     panels.append(panel);
   };
 
+  const disposers: (() => void)[] = [];
   let shortcuts: ReturnType<typeof renderShortcuts> | undefined;
   // Pages depend on the main-reported platform, so they are built with the
   // first snapshot; until then the retained editor shows a loading status.
@@ -421,7 +422,7 @@ function buildSettingsView(
       addPage(
         "extensions",
         "settings.page.extensions",
-        renderExtensions(document, extensions, live, labels),
+        renderExtensions(document, extensions, live, labels, disposers),
       );
     addPage(
       "config-file",
@@ -458,7 +459,10 @@ function buildSettingsView(
 
   return {
     element,
-    dispose: unbind,
+    dispose() {
+      unbind();
+      for (const dispose of disposers) dispose();
+    },
     release: () => shortcuts?.release(),
     async load() {
       try {

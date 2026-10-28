@@ -7,24 +7,30 @@ export async function installExtensionFromDialog(
   manager: ReturnType<typeof createExtensionManager>,
   stopping: () => boolean,
   translator: () => Translator = () => translatorFor("en-US"),
+  captured?: Buffer,
 ) {
   const owner = window.webContents;
   const cancelled = () => manager.cancel(owner);
   owner.once("destroyed", cancelled);
   try {
-    const selected = await dialog.showOpenDialog(window, {
-      title: translator().t("extensions.chooserTitle"),
-      properties: ["openFile"],
-      filters: [
-        {
-          name: translator().t("extensions.chooserType"),
-          extensions: ["omxext"],
-        },
-      ],
-    });
-    if (selected.canceled || owner.isDestroyed() || stopping()) return;
-    const preview = await manager.prepare(owner, selected.filePaths[0]!);
-    if (owner.isDestroyed() || stopping()) return;
+    const selected = captured
+      ? undefined
+      : await dialog.showOpenDialog(window, {
+          title: translator().t("extensions.chooserTitle"),
+          properties: ["openFile"],
+          filters: [
+            {
+              name: translator().t("extensions.chooserType"),
+              extensions: ["omxext"],
+            },
+          ],
+        });
+    if (selected?.canceled || owner.isDestroyed() || stopping()) return false;
+    const preview = await manager.prepare(
+      owner,
+      captured ?? selected!.filePaths[0]!,
+    );
+    if (owner.isDestroyed() || stopping()) return false;
     const consent = await dialog.showMessageBox(window, {
       type: "warning",
       title: translator().t("extensions.trustTitle"),
@@ -44,8 +50,10 @@ export async function installExtensionFromDialog(
       defaultId: 0,
       cancelId: 0,
     });
-    if (consent.response === 1 && !owner.isDestroyed() && !stopping())
-      await manager.approve(owner, preview.token);
+    if (consent.response !== 1 || owner.isDestroyed() || stopping())
+      return false;
+    await manager.approve(owner, preview.token);
+    return true;
   } finally {
     cancelled();
     owner.removeListener("destroyed", cancelled);

@@ -28,6 +28,50 @@ function click(text: string) {
     .find((button) => button.textContent === text)!
     .click();
 }
+it("retains a pending HTTPS request across language changes and cancels its exact identity on dismissal", async () => {
+  let finish!: (result: ExtensionsResult) => void;
+  const request = vi
+    .fn<(value: ExtensionsRequest) => Promise<ExtensionsResult>>()
+    .mockImplementation(async (value) => {
+      if (value.operation === "install-link")
+        return new Promise((resolve) => {
+          finish = resolve;
+        });
+      return snapshot;
+    });
+  const labels: ((t: Translate) => void)[] = [];
+  const disposers: (() => void)[] = [];
+  document.body.append(
+    renderExtensions(document, { request }, () => true, labels, disposers),
+  );
+  await vi.waitFor(() =>
+    expect(document.body.textContent).toContain("generation 4"),
+  );
+  const input = document.querySelector("input")!;
+  input.value = "https://example.org/archive?signature=abc";
+  click("Install from link");
+  const submitted = request.mock.calls[1]![0];
+  expect(submitted).toMatchObject({
+    operation: "install-link",
+    url: input.value,
+  });
+  expect(input.disabled).toBe(true);
+  expect(document.body.textContent).toContain("Downloading and validating");
+  labels.forEach((label) => label(translatorFor("pt-BR").t));
+  expect(input.value).toBe("https://example.org/archive?signature=abc");
+  expect(document.body.textContent).toContain("Baixando e validando");
+  expect(request).toHaveBeenCalledTimes(2);
+  disposers.forEach((dispose) => dispose());
+  expect(request).toHaveBeenLastCalledWith({
+    operation: "cancel-install",
+    token: "token" in submitted ? submitted.token : undefined,
+  });
+  finish({ ok: false, error: "cancelled" });
+  await vi.waitFor(() =>
+    expect(document.body.textContent).toContain("Instalação cancelada"),
+  );
+  expect(input.disabled).toBe(false);
+});
 it("shows separate registry/local/other-instance/cleanup states and captures the displayed generation", async () => {
   const request = vi
     .fn<(_request: ExtensionsRequest) => Promise<ExtensionsResult>>()

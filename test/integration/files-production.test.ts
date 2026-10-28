@@ -1,4 +1,5 @@
 import { createRequire } from "node:module";
+import { execFileSync } from "node:child_process";
 import { cp, mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -9,6 +10,7 @@ import { productionFixtureArguments } from "../fixtures/supported-fixture-chromi
 // Explicit built-production lane, serialized on an assigned Linux ARM64 desktop.
 // Portable unit/native fixtures do not imply this opt-in production qualification.
 const source = process.env.OMXTERM_FILES_PRODUCTION_SOURCE;
+const https = process.env.OMXTERM_FILES_HTTPS === "1";
 it.skipIf(process.platform !== "linux" || process.arch !== "arm64" || !source)(
   "installs separate Files through production Settings, uses real operations and joins normal Quit",
   { timeout: 180_000 },
@@ -17,6 +19,31 @@ it.skipIf(process.platform !== "linux" || process.arch !== "arm64" || !source)(
       path.join(tmpdir(), "omxterm-files-production-"),
     );
     const evidence = process.env.OMXTERM_FILES_PRODUCTION_EVIDENCE;
+    const previousCA = process.env.NODE_EXTRA_CA_CERTS;
+    if (https) {
+      execFileSync(
+        "openssl",
+        [
+          "req",
+          "-x509",
+          "-newkey",
+          "rsa:2048",
+          "-nodes",
+          "-keyout",
+          path.join(root, "key.pem"),
+          "-out",
+          path.join(root, "cert.pem"),
+          "-days",
+          "1",
+          "-subj",
+          "/CN=localhost",
+          "-addext",
+          "subjectAltName=DNS:localhost",
+        ],
+        { stdio: "pipe", timeout: 10_000 },
+      );
+      process.env.NODE_EXTRA_CA_CERTS = path.join(root, "cert.pem");
+    }
     const execution = await runNativeFixture({
       executable: createRequire(import.meta.url)("electron") as string,
       args: productionFixtureArguments(root),
@@ -39,13 +66,16 @@ it.skipIf(process.platform !== "linux" || process.arch !== "arm64" || !source)(
         );
         await writeFile(
           path.join(root, "fixture.json"),
-          JSON.stringify({ source: path.resolve(source!), evidence }),
+          JSON.stringify({ source: path.resolve(source!), evidence, https }),
         );
         await cp(
           "test/fixtures/files-production.mjs",
           path.join(root, "main.mjs"),
         );
       },
+    }).finally(() => {
+      if (previousCA === undefined) delete process.env.NODE_EXTRA_CA_CERTS;
+      else process.env.NODE_EXTRA_CA_CERTS = previousCA;
     });
     if (evidence)
       await writeFile(
@@ -69,15 +99,22 @@ it.skipIf(process.platform !== "linux" || process.arch !== "arm64" || !source)(
     const result: unknown = JSON.parse(lines[0]!.slice(prefix.length));
     expect(result).toMatchObject({
       failed: false,
-      approved: 1,
+      approved: https ? 2 : 1,
       quit: "joined",
-      checks: [
-        "Settings-captured-trust-dormant-no-backend",
-        "shared-menu-palette-two-real-views-one-backend",
-        "real-create-folder-no-clobber-move-trash-confirmed-delete",
-        "renderer-domain-isolation-backend-loss-no-mutation-retry",
-        "disable-uninstall-real-settlement-retained-draft-same-PTY",
-      ],
+      checks: https
+        ? [
+            "HTTPS-cancellation-before-trust",
+            "HTTPS-malformed-before-trust",
+            "HTTPS-redirect-captured-trust-dormant-no-backend",
+            "HTTPS-local-replacement-same-PTY",
+          ]
+        : [
+            "Settings-captured-trust-dormant-no-backend",
+            "shared-menu-palette-two-real-views-one-backend",
+            "real-create-folder-no-clobber-move-trash-confirmed-delete",
+            "renderer-domain-isolation-backend-loss-no-mutation-retry",
+            "disable-uninstall-real-settlement-retained-draft-same-PTY",
+          ],
     });
   },
 );

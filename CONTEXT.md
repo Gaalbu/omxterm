@@ -287,10 +287,12 @@ local resource responses, and retires known views/reads without terminating core
 PTYs. The Application Tab adapter acknowledges native hiding before DOM overlays.
 It is not a public SDK, activation UI or proof of main-death disk-read exclusion.
 
-**Application Network Boundary** — OMXTerm makes no remote application network
-requests. Its sole internal web-content loading exception is an owned epoch-local
-packaged-resource protocol, not remote content or catalog access. Child processes
-retain normal network access; explicitly activated web links open through the OS.
+**Application Network Boundary** — OMXTerm requests remote bytes only for explicit
+HTTPS extension archive installation in the Linux ARM64 development preview,
+through bounded main-owned acquisition and captured-byte trust. No telemetry,
+catalog or background update requests are made. Internal hosted content remains
+restricted to its owned epoch-local packaged-resource protocol. Child processes
+retain normal network access; explicitly activated terminal web links open through the OS.
 
 **Release Artifact** — An exact native package (ARM64, or x64 on Linux/Windows)
 (DMG, AppImage or NSIS) published with its source tag, checksum and verification

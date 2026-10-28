@@ -49,11 +49,16 @@ const adapters = vi.hoisted(() => ({
         options: { detail?: string },
       ) => Promise<{ response: number }>
     >(),
+  download: vi.fn<(url: string, signal: AbortSignal) => Promise<Buffer>>(),
   activate: vi.fn(),
   sendOpen:
     vi.fn<Parameters<typeof startApplicationExtensions>[0]["sendAction"]>(),
   retire: vi.fn(),
   hosts: [] as Host[],
+}));
+vi.mock("../../src/main/extension-download", async (original) => ({
+  ...(await original<typeof import("../../src/main/extension-download")>()),
+  downloadExtension: adapters.download,
 }));
 vi.mock("electron", () => ({
   app: { getVersion: () => "0.23.0-dev.5", getPath: () => adapters.root },
@@ -153,6 +158,7 @@ beforeEach(async () => {
   adapters.hosts.length = 0;
   adapters.handlers.clear();
   adapters.windows.clear();
+  adapters.download.mockReset().mockResolvedValue(bytes());
   adapters.activate.mockReset();
   adapters.retire.mockReset().mockResolvedValue(null);
   adapters.picker.mockReset();
@@ -204,6 +210,77 @@ afterEach(async () => {
   Object.defineProperty(process, "platform", originalPlatform);
   Object.defineProperty(process, "arch", originalArch);
   await rm(adapters.root, { recursive: true, force: true });
+});
+it("HTTPS installs exact captured bytes with the same consent, replacement generation and dormant runtime", async () => {
+  await request({ operation: "install" });
+  adapters.download.mockResolvedValueOnce(bytes("2.0.0"));
+  const result = await request({
+    operation: "install-link",
+    url: "https://example.org/archive?signature=private",
+    token: "11111111-1111-1111-1111-111111111111",
+  });
+  expect(result).toMatchObject({
+    ok: true,
+    entries: [{ version: "2.0.0", generation: 2, local: "dormant" }],
+  });
+  expect(adapters.picker).toHaveBeenCalledTimes(1);
+  expect(adapters.consent).toHaveBeenCalledTimes(2);
+  expect(adapters.consent.mock.calls[1]![1].detail).not.toContain("private");
+  expect(adapters.activate).not.toHaveBeenCalled();
+});
+it("cancellation is owner/request bound and late acquisition cannot open consent", async () => {
+  let finish!: (bytes: Buffer) => void;
+  adapters.download.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  const token = "11111111-1111-1111-1111-111111111111";
+  const pending = request({
+    operation: "install-link",
+    url: "https://example.org/a",
+    token,
+  });
+  const signal = adapters.download.mock.calls[0]![1];
+  await request({
+    operation: "cancel-install",
+    token: "22222222-2222-2222-2222-222222222222",
+  });
+  expect(signal.aborted).toBe(false);
+  await request({ operation: "cancel-install", token });
+  expect(signal.aborted).toBe(true);
+  finish(bytes());
+  expect(await pending).toMatchObject({ ok: false, error: "cancelled" });
+  expect(adapters.consent).not.toHaveBeenCalled();
+  expect(await request({ operation: "snapshot" })).toMatchObject({
+    entries: [],
+  });
+});
+it("renderer loss revokes a pending HTTPS consent and malformed bytes preserve the old installation", async () => {
+  await request({ operation: "install" });
+  adapters.download.mockResolvedValueOnce(Buffer.from("not zip"));
+  expect(
+    await request({
+      operation: "install-link",
+      url: "https://example.org/a",
+      token: "11111111-1111-1111-1111-111111111111",
+    }),
+  ).toMatchObject({ ok: false, error: "invalid-package" });
+  adapters.consent.mockImplementationOnce(async () => {
+    window.webContents.emit("render-process-gone");
+    return { response: 1 };
+  });
+  expect(
+    await request({
+      operation: "install-link",
+      url: "https://example.org/a",
+      token: "22222222-2222-2222-2222-222222222222",
+    }),
+  ).toMatchObject({ ok: false, error: "cancelled" });
+  expect(await request({ operation: "snapshot" })).toMatchObject({
+    entries: [{ version: "1.0.0", generation: 1 }],
+  });
 });
 it("Settings installs captured bytes through explicit trust without activating code", async () => {
   adapters.consent.mockImplementationOnce(async () => {

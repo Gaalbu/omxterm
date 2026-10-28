@@ -56,7 +56,7 @@ settlement. A request-local refusal does not change an active backend to unknown
 view/management cleanup uncertainty is still reported separately.
 `startApplicationExtensions` connects the production startup, Settings, shared
 action catalog and Quit. Startup opens infrastructure but never imports installed
-code. Settings → Extensions offers local selection, explicit native trust,
+code. Settings → Extensions offers local selection or an explicit HTTPS archive link, explicit native trust,
 Refresh, enable/disable and uninstall. Selecting another archive for the same ID
 is an explicit replacement/reinstall with the observed generation. Its captured
 bytes, identity, version and digest are shown before approval; third-party authors
@@ -91,6 +91,41 @@ view, captures bounded JSON and binds cancellation to view destruction. A payloa
 cannot choose a backend/window/epoch. The terminal renderer has no Files request
 route. Late replies after retirement cannot regain view authority.
 
+## HTTPS archive installation
+
+In Settings → Extensions, paste an HTTPS archive link and choose **Install from
+link**. Acquisition/validation shows a pending notice and Cancel; after validation,
+the same native trust dialog shows the exact archive identity, version, SHA-256
+and observed replacement generation used by local installation. A digest identifies
+bytes, not a verified publisher. Downloading never activates code. Cancelling before
+approval leaves the installation unchanged; after approval, publication may already
+be underway and cannot be recalled. Conflict/unknown publication is never retried.
+Refresh inspects current installed state before a new deliberate attempt.
+
+Main uses Node HTTPS with ordinary certificate/hostname verification, no browser
+cookies/session, authentication prompts, inherited authorization headers, proxy
+discovery or HTTP content decoding. Signed query URLs are supported; credentials
+in userinfo, fragments, whitespace/control characters, backslashes and URLs over
+8,192 characters are rejected. Only status 200 supplies an archive. Up to five
+relative or cross-origin redirects are followed, revalidating HTTPS and URL policy
+at every hop; downgrade is refused. Each requested host receives its URL/query and
+the usual network metadata. Deliberate private-network HTTPS hosts are allowed;
+this is a user-directed desktop download, not a public-server URL fetch service.
+TLS trust follows the bundled Node runtime, not the browser login/proxy session.
+
+A 60-second total acquisition deadline includes redirects/body reads. Headers are
+limited to 16 KiB; declared and actual input are limited to 64 MiB, including
+chunked responses. Empty/truncated bodies and nonidentity HTTP content encodings
+fail. Existing ZIP expanded-byte, entry, path, CRC, compatibility and manifest
+limits still apply to captured bytes before trust. At most four acquisitions run
+across windows, one management operation per window. Cancellation is bound to a
+one-shot request identity and actual sender; closing Settings cancels its pending
+link operation, while renderer loss/navigation, window closure and application
+retirement revoke its authority. Switching tabs retains the pending operation.
+Network errors expose fixed localized categories, never native error text, URL,
+query or archive content in logs. No download history, catalog, background updater,
+remote extension views or stable distribution/SDK is added.
+
 ## Build and evidence boundary
 
 Normal Linux ARM64 application builds include the bootstrap, independent native
@@ -114,6 +149,16 @@ archive first. `OMXTERM_FILES_PRODUCTION_EVIDENCE` optionally captures fixture-o
 screenshots and the native supervisor receipt. Native chooser/consent answers are
 fixture-controlled, not physical-dialog-widget qualification; terminal input is
 synthetic Chromium input. Native input-lane admission is verified separately.
+Set `OMXTERM_FILES_HTTPS=1` on that same opt-in fixture for the bounded HTTPS
+installation lane instead of the full Files operations scenario. It requires
+`openssl`, creates a one-day localhost test certificate and supplies it only to
+the child via `NODE_EXTRA_CA_CERTS`; production TLS verification is not disabled.
+It exercises a real stalled HTTPS stream/cancellation, malformed archive rejection,
+relative redirect, captured-byte native consent/dormant installation, explicit
+local replacement, retained real terminal/PTY and joined Quit. Its loopback TLS
+server is fixture-owned and closed before Quit. Consent answers and clicks remain
+controlled; it does not qualify public hosting, physical dialogs or other platforms.
+
 Qualification is phase-specific, not one final replay of every workflow:
 
 - A production vertical passed local Settings trust, shared actions, two views sharing

@@ -14,6 +14,7 @@ export function renderExtensions(
   bridge: ExtensionsBridge,
   live: () => boolean,
   labels: ((t: Translate) => void)[] = [],
+  disposers: (() => void)[] = [],
 ) {
   let t = englishLanguage.t;
   const bindings = new Map<HTMLElement, () => void>();
@@ -44,6 +45,11 @@ export function renderExtensions(
       "runtime-unavailable",
       "unsupported",
       "unavailable",
+      "invalid-url",
+      "download-failed",
+      "download-limit",
+      "download-timeout",
+      "cancelled",
     ] as const;
     return t(`extensions.${words.find((word) => word === value) ?? "unknown"}`);
   };
@@ -59,6 +65,39 @@ export function renderExtensions(
   notice.setAttribute("role", "status");
   const list = document.createElement("div");
   let busy = false;
+  let token: string | undefined;
+  const urlLabel = document.createElement("label");
+  urlLabel.className = "settings-row";
+  const urlText = document.createElement("span");
+  bind(urlText, () => t("extensions.url"));
+  const url = document.createElement("input");
+  url.type = "url";
+  url.maxLength = 8192;
+  url.placeholder = "https://…/extension.omxext";
+  url.autocomplete = "off";
+  url.spellcheck = false;
+  urlLabel.append(urlText, url);
+  const link = createPageButton(document);
+  bind(link, () => t("extensions.installLink"));
+  link.addEventListener("click", () => {
+    if (!busy)
+      void run({
+        operation: "install-link",
+        url: url.value.trim(),
+        token: crypto.randomUUID(),
+      });
+  });
+  const cancel = createPageButton(document);
+  bind(cancel, () => t("common.cancel"));
+  cancel.hidden = true;
+  const cancelDownload = () => {
+    if (token)
+      void bridge
+        .request({ operation: "cancel-install", token })
+        .catch(() => {});
+  };
+  cancel.addEventListener("click", cancelDownload);
+  disposers.push(cancelDownload);
   let last: ExtensionsResult | undefined;
   const buttons = new Set<HTMLButtonElement>();
   function button(
@@ -76,6 +115,13 @@ export function renderExtensions(
     parent.append(element);
   }
   function renderNotice() {
+    if (token) {
+      setPageNotice(notice, {
+        text: t("extensions.downloading"),
+        severity: "info",
+      });
+      return;
+    }
     if (!last) return;
     setPageNotice(notice, {
       text: !last.ok
@@ -149,14 +195,24 @@ export function renderExtensions(
   async function run(request: ExtensionsRequest) {
     if (busy || !live()) return;
     busy = true;
+    token = request.operation === "install-link" ? request.token : undefined;
+    cancel.hidden = !token;
+    url.disabled = true;
+    link.disabled = true;
+    renderNotice();
     for (const element of buttons) element.disabled = true;
     try {
       const result = await bridge.request(request);
+      token = undefined;
       if (live()) render(result);
     } catch {
+      token = undefined;
       if (live()) render({ ok: false, error: "outcome-unknown" });
     } finally {
       busy = false;
+      cancel.hidden = true;
+      url.disabled = false;
+      link.disabled = false;
       for (const element of buttons) element.disabled = false;
     }
   }
@@ -165,9 +221,10 @@ export function renderExtensions(
     for (const apply of bindings.values()) apply();
     renderNotice();
   });
+  controls.append(link, cancel);
   button("extensions.install", { operation: "install" }, controls);
   button("extensions.refresh", { operation: "snapshot" }, controls);
-  panel.append(heading, explanation, controls, notice, list);
+  panel.append(heading, explanation, urlLabel, controls, notice, list);
   void run({ operation: "snapshot" });
   return panel;
 }

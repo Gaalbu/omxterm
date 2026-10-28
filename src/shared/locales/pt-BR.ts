@@ -215,6 +215,17 @@ export const brazilianPortugueseMessages: Readonly<
   "extensions.explanation":
     "Instale um pacote .omxext baixado separadamente. O código da extensão tem as permissões do seu usuário; não há isolamento de segurança. Pacotes instalados ficam inativos até serem acionados. Esta prévia é exclusiva para Linux ARM64.",
   "extensions.install": "Instalar .omxext local…",
+  "extensions.url": "Link HTTPS do arquivo",
+  "extensions.installLink": "Instalar pelo link",
+  "extensions.downloading":
+    "Baixando e validando o arquivo… Revise o aviso de confiança antes de instalar. Cancelar interrompe o processo antes da aprovação.",
+  "extensions.invalid-url": "Use um link HTTPS sem credenciais ou fragmento",
+  "extensions.download-failed":
+    "Falha no download. Verifique o link, a rede e o certificado; páginas de login não são compatíveis",
+  "extensions.download-limit":
+    "O download excede o limite de 64 MiB ou cinco redirecionamentos",
+  "extensions.download-timeout": "O download excedeu o limite de 60 segundos",
+  "extensions.cancelled": "Instalação cancelada antes da aprovação",
   "extensions.refresh": "Atualizar",
   "extensions.enable": "Habilitar",
   "extensions.disable": "Desabilitar",

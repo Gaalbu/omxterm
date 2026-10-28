@@ -38,7 +38,7 @@ export function createExtensionPackageTrust(options: {
   return {
     async prepare(
       owner: object,
-      filename: string,
+      source: string | Buffer,
     ): Promise<PackageTrustPreview> {
       if (disposed) throw new PackageError("unavailable");
       if (preparing >= 4 || (!candidates.has(owner) && candidates.size >= 4))
@@ -49,12 +49,20 @@ export function createExtensionPackageTrust(options: {
       preparing++;
       let temporary: string | undefined;
       try {
-        if (path.extname(filename).toLowerCase() !== ".omxext")
+        if (
+          typeof source === "string" &&
+          path.extname(source).toLowerCase() !== ".omxext"
+        )
           throw new PackageError("invalid-package");
-        const bytes = await readBoundedFile(
-          filename,
-          PACKAGE_LIMITS.archiveBytes,
-        );
+        if (
+          Buffer.isBuffer(source) &&
+          source.length > PACKAGE_LIMITS.archiveBytes
+        )
+          throw new PackageError("invalid-package");
+        const bytes =
+          typeof source === "string"
+            ? await readBoundedFile(source, PACKAGE_LIMITS.archiveBytes)
+            : Buffer.from(source);
         temporary = await mkdtemp(
           path.join(options.temporaryDirectory, "omxterm-trust-"),
         );
