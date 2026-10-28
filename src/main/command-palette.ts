@@ -67,7 +67,7 @@ export function startCommandPalette(options: {
     )
       return;
     const action = catalog[id as keyof CoreActionCatalog];
-    if (!action.palette) return;
+    if (!action?.palette) return;
     delivery = { sender: event.sender, token };
     try {
       action.invoke();

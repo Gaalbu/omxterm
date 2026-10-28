@@ -74,6 +74,12 @@ export function coreActionMenuTemplate(
         item("newTab"),
         { type: "separator" },
         item("openLocalImage"),
+        ...Object.values(catalog)
+          .filter((action) => action.extension)
+          .map((action) => ({
+            label: action.label,
+            click: action.invoke,
+          })),
         { type: "separator" },
         item("closeTab"),
         item("closeWindow"),

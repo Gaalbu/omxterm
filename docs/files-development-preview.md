@@ -1,8 +1,8 @@
 # Files development preview implementation
 
 Work in progress for [#723](https://github.com/luizomf/omxterm/issues/723).
-The source modules described here are not yet a user-accessible Settings install
-route, a qualified distribution or a stable extension SDK.
+Linux ARM64 source builds wire the production Settings install route and shared
+Files action. This is not yet a qualified distribution or a stable extension SDK.
 
 ## Concrete consumer
 
@@ -42,7 +42,27 @@ through the existing short store transaction and joins known views/backend;
 status distinguishes installed metadata from local dormant/starting/active/
 stopping/failed/unknown and other-instance uncertainty. Disposal latches admission
 and reports actual known settlement rather than treating a kill request as exit.
-The application startup, Settings and Quit callers still need wiring.
+`startApplicationExtensions` connects the production startup, Settings, shared
+action catalog and Quit. Startup opens infrastructure but never imports installed
+code. Settings → Extensions offers local selection, explicit native trust,
+Refresh, enable/disable and uninstall. Selecting another archive for the same ID
+is an explicit replacement/reinstall with the observed generation. Its captured
+bytes, identity, version and digest are shown before approval; third-party authors
+remain responsible for trusted code, including its filesystem/program/network
+access. Missing runtime/store infrastructure leaves terminals usable.
+
+Files appears in the shared palette, File menu and terminal context menu with no
+default or configurable shortcut. Each invocation owns its copied terminal
+context and independent view pin, even within one window; backends remain shared.
+Use terminal directory reports captured local OSC7 provenance, never later
+selection or process inspection. No local report means an explicit unavailable
+result, with Home and explicit paths still usable. Views reserve a 34-DIP
+core-owned recovery strip, further intersected with the real renderer slot.
+
+Management shows registry generations and tombstones separately from local state,
+other-instance uncertainty and Pending Cleanup. Normal Quit revokes admission,
+joins known extension retirement for at most 15 seconds and records an unsettled
+outcome without vetoing Quit. Native PTY exit joining remains independent.
 
 The view router now multiplexes epochs by actual owner WebContents, with issued
 ID-to-host mappings and one monotonic presentation revision per window. A new
@@ -66,8 +86,16 @@ No fuse or Electron version change is required.
 Electron executable with `ELECTRON_RUN_AS_NODE=1`, as an ordinary Linux ARM64
 user, inside an assigned disposable environment. It checks actual file/directory/
 symlink moves, destination races, permissions and cross-device refusal. Source
-inspection and controlled adapter tests are not native qualification. Production
-Settings/actions/Quit, visual inspection, same-terminal continuity, real renderer
-failure domains and the surviving-browser main-death resource gate remain
-outstanding until their actual composed fixtures run. All-browser exit or normal
+inspection and controlled adapter tests are not native qualification.
+
+The opt-in `test/integration/files-production.test.ts` runs the already-built
+production entry point when `OMXTERM_FILES_PRODUCTION_SOURCE` names its exact
+source directory on an assigned Linux ARM64 guest. Build the app and separate
+archive first. `OMXTERM_FILES_PRODUCTION_EVIDENCE` optionally captures fixture-only
+screenshots and the native supervisor receipt. Native chooser/consent answers are
+fixture-controlled, not physical-dialog-widget qualification; terminal input is
+synthetic Chromium input. Native input-lane admission is verified separately.
+Production Settings/actions/Quit, visual inspection, same-terminal continuity,
+real renderer failure domains and the surviving-browser main-death resource gate
+remain outstanding until their actual composed fixtures run. All-browser exit or normal
 retirement is not proof of surviving-browser read exclusion.

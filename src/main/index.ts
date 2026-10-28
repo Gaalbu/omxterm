@@ -21,12 +21,16 @@ import {
   type CoreActionCatalog,
 } from "./action-catalog";
 import { startCommandPalette } from "./command-palette";
+import { terminalMenuActions } from "./terminal-menu-actions";
+import { extensionInvocationTarget } from "./extension-invocation-target";
+import { startApplicationExtensions } from "./application-extensions";
 import { terminalContextMenuTemplate } from "./terminal-context-menu";
 import * as applicationAbout from "./application-about";
 import { startApplicationSettings } from "./application-settings";
 import {
   registerWindowActionDelivery,
   createWindowActionSender,
+  deliverExtensionKeybind,
 } from "./window-action-delivery";
 import { createKeybindCapture } from "./keybind-capture";
 import { createDefaultShellResolver, defaultShellName } from "./default-shell";
@@ -119,9 +123,14 @@ let terminalApplication: TerminalApplication<BrowserWindow> | undefined;
 const keybindCapture = createKeybindCapture(process.platform);
 let operationalEvents: OperationalEventLog | undefined;
 let disposeTerminalSessions = () => {};
+let extensions:
+  Awaited<ReturnType<typeof startApplicationExtensions>> | undefined;
 const shutdown = registerTerminalShutdown(app, {
   application: () => terminalApplication,
   disposeSessions: () => disposeTerminalSessions(),
+  disposeExtensions: () => extensions?.dispose() ?? Promise.resolve(true),
+  onExtensionCleanupUnknown: () =>
+    process.stderr.write("Extension cleanup did not settle before Quit.\n"),
 });
 
 registerExtensionViewScheme();
@@ -166,6 +175,13 @@ app
         disposeTerminalSessions = () => terminalIpcRouter.dispose();
         let rebuildMenu = () => {};
         let actionCatalog: CoreActionCatalog;
+        extensions = await startApplicationExtensions({
+          applicationRoot,
+          isTrustedSender: terminalIpcRouter.isTrustedSender,
+          changed: () => rebuildMenu(),
+          keybind: (event, input) =>
+            deliverExtensionKeybind(actionCatalog, event, input),
+        });
         const nativeTitleInset = terminalNativeTitleInset(process.platform);
         const backgroundEffects = createWindowBackgroundEffectsOwner(
           process.platform,
@@ -254,6 +270,7 @@ app
               app.dock,
             );
             window.once("closed", () => titleController.dispose());
+            const invocationTarget = extensionInvocationTarget(window);
             const controller = terminalIpcRouter.registerController({
               windowId: lifecycle.windowId,
               configuration: terminalRendererConfiguration(
@@ -282,15 +299,21 @@ app
               onTabsEmpty: lifecycle.onTabsEmpty,
               onSessionExit: (exit, context) => {
                 actionDelivery.invalidate();
+                invocationTarget.ended(context.sessionId);
                 titleController.sessionEnded(context.sessionId);
                 lifecycle.onSessionExit(exit, context);
               },
-              onSessionStarted: titleController.sessionStarted,
+              onSessionStarted: (sessionId, title) => {
+                invocationTarget.started(sessionId);
+                titleController.sessionStarted(sessionId, title);
+              },
               onSessionSelected: (sessionId) => {
+                invocationTarget.selected(sessionId);
                 actionDelivery.select(sessionId);
                 titleController.selectSession(sessionId);
               },
               onSettingsSelected: () => {
+                invocationTarget.selected(null);
                 actionDelivery.select("settings");
                 titleController.selectSettings(
                   currentTranslator().t("settings.title"),
@@ -322,8 +345,8 @@ app
                 ),
               confirmPaste: () => nativeDialogs.confirmPaste(window),
               showClipboardContextMenu(request) {
-                Menu.buildFromTemplate(
-                  terminalContextMenuTemplate(
+                Menu.buildFromTemplate([
+                  ...terminalContextMenuTemplate(
                     window,
                     terminalApplication!,
                     request,
@@ -331,10 +354,17 @@ app
                       .closePane,
                     currentTranslator().t,
                   ),
-                ).popup({ window });
+                  ...extensions!.contextMenu(window, request?.sessionId),
+                ]).popup({ window });
               },
             });
 
+            extensions!.registerWindow(window, (source) =>
+              invocationTarget.capture(
+                (id) => controller.reportedWorkingDirectory?.(id),
+                source,
+              ),
+            );
             window.once("ready-to-show", () => backgroundEffects.show(window));
             const windowHost = registerTerminalWindowHost(
               window,
@@ -388,7 +418,7 @@ app
           operationalEvents: operationalEvents!,
         });
 
-        const menuActions = {
+        const menuActions = terminalMenuActions(terminalApplication, {
           newWindow: () => {
             void terminalApplication!.newWindow().catch((cause) => {
               const failure = terminalApplicationFailure("new-window", cause);
@@ -399,43 +429,7 @@ app
               nativeDialogs.applicationFailure(failure);
             });
           },
-          closeSelectedWindow: () =>
-            void terminalApplication!.closeSelectedWindow(),
-          newTabInSelectedWindow: terminalApplication.newTabInSelectedWindow,
-          closeSelectedTab: () => void terminalApplication!.closeSelectedTab(),
-          closeSelectedPane: () =>
-            void terminalApplication!.closeSelectedPane(),
-          splitSelectedPane: terminalApplication.splitSelectedPane,
-          focusSelectedPane: terminalApplication.focusSelectedPane,
-          equalizeSelectedPanes: terminalApplication.equalizeSelectedPanes,
-          selectNextTab: terminalApplication.selectNextTab,
-          selectPreviousTab: terminalApplication.selectPreviousTab,
-          selectTabInSelectedWindow:
-            terminalApplication.selectTabInSelectedWindow,
-          requestQuit: () => void terminalApplication!.requestQuit(),
-          toggleSelectedFullScreen:
-            terminalApplication.toggleSelectedFullScreen,
-          toggleSelectedAlwaysOnTop:
-            terminalApplication.toggleSelectedAlwaysOnTop,
-          toggleSelectedDevTools: terminalApplication.toggleSelectedDevTools,
-          zoomInSelectedWindow: () =>
-            terminalApplication!.zoomSelectedWindow("in"),
-          zoomOutSelectedWindow: () =>
-            terminalApplication!.zoomSelectedWindow("out"),
-          resetSelectedWindowZoom: () =>
-            terminalApplication!.zoomSelectedWindow("reset"),
-          copySelectedTerminal: () =>
-            terminalApplication!.clipboardSelectedWindow("copy"),
-          pasteSelectedTerminal: () =>
-            terminalApplication!.clipboardSelectedWindow("paste"),
-          selectAllSelectedTerminal: () =>
-            terminalApplication!.clipboardSelectedWindow("select-all"),
-          findInSelectedTerminal: terminalApplication.findInSelectedWindow,
-          toggleSelectedSnippets: terminalApplication.toggleSelectedSnippets,
-          toggleSelectedTabBar: terminalApplication.toggleSelectedTabBar,
-          toggleSelectedTitleBar: terminalApplication.toggleSelectedTitleBar,
           reloadUserConfiguration: () => void configurationReloader.reload(),
-          openLocalImage: terminalApplication.openLocalImageInSelectedWindow,
           showAbout: applicationAbout.startApplicationAbout(
             terminalIpcRouter,
             sendAction,
@@ -448,13 +442,14 @@ app
             keybindCapture,
             sendAction,
           ),
-        };
+        });
         rebuildMenu = () => {
           actionCatalog = createCoreActionCatalog(
             app.name,
             menuActions,
             configurationReloader.current().configuration.keybinds,
             currentTranslator().t,
+            extensions?.actions(),
           );
           nativeMenu.installApplicationMenu(
             coreActionMenuTemplate(

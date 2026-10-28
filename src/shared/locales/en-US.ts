@@ -198,6 +198,7 @@ export const englishMessages = {
   "settings.page.terminal": "Terminal",
   "settings.page.window": "New Windows",
   "settings.page.file": "Config File",
+  "settings.page.extensions": "Extensions",
   "settings.language": "Language",
   "settings.english": "English (United States)",
   "settings.portuguese": "Português (Brasil)",

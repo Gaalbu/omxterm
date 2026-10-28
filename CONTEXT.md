@@ -272,6 +272,13 @@ management need not stop.
 validation, IPC, PTY control or failures. Local logs exclude Terminal Payload,
 clipboard, configuration and environment contents, commands and titles.
 
+**Files Development Preview** — Separately installed, precompiled Linux ARM64
+extension consumed through Settings captured-byte trust and shared namespaced
+actions. Its application owner composes independent backend/view version pins,
+per-invocation terminal context, local management and bounded Quit retirement.
+No startup code activation, default/configurable shortcut or stable SDK is implied;
+see [the preview contract](docs/files-development-preview.md) for qualification limits.
+
 **Extension View Host** — Internal owner of lazy native web-content views in a
 nonpersistent epoch. It retains a captured package reader/pin, materializes bounded
 local resource responses, and retires known views/reads without terminating core

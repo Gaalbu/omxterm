@@ -92,6 +92,10 @@ export function createWorkingDirectoryTracker(
         from = end.index + end.length;
       }
     },
+    // Capture without filesystem IO. The backend validates existence when used.
+    reported(sessionId: TerminalSessionId): string | undefined {
+      return directories.get(sessionId);
+    },
     // A reported directory may have been removed since; home is the fallback.
     inherited(sessionId: TerminalSessionId | undefined): string | undefined {
       const directory =

@@ -15,6 +15,47 @@ import {
 } from "../../src/main/action-catalog";
 import { coreActionMenuTemplate } from "../../src/main/application-menu";
 
+it("projects a namespaced extension through the same menu and palette without adding a shortcut or replacing core actions", () => {
+  const invoke = vi.fn();
+  const bindings = terminalDefaultKeybinds("linux");
+  const catalog = createCoreActionCatalog(
+    "OMXTerm",
+    menuActions(),
+    bindings,
+    undefined,
+    [
+      {
+        id: "omxterm.files.open",
+        label: "Files",
+        invoke,
+        palette: true,
+        accelerator: "F9",
+        extension: true,
+      },
+      {
+        id: "quit",
+        label: "Forged",
+        invoke,
+        palette: true,
+        accelerator: null,
+        extension: true,
+      },
+    ],
+  );
+  const contributed = catalog["omxterm.files.open"]!;
+  expect(contributed.accelerator).toBeNull();
+  expect(coreActionKeybinds(catalog)).toEqual(bindings);
+  expect(catalog.quit.label).not.toBe("Forged");
+  expect(corePaletteActions(catalog)).toContain(contributed);
+  expect(
+    flatten(coreActionMenuTemplate("OMXTerm", catalog)).find(
+      (item) => item.label === "Files",
+    )?.click,
+  ).toBe(contributed.invoke);
+  contributed.invoke();
+  expect(invoke).toHaveBeenCalledOnce();
+});
+
 function menuActions(): TerminalApplicationMenuActions {
   return {
     newWindow: vi.fn(),

@@ -1534,8 +1534,9 @@ slot presentations are owner-bound. The host hides native views before admitting
 host DOM overlays and restores only a still-current content owner. Field input
 and clipboard remain in the child, never forwarded into a terminal. Closing or
 crashing a hosted epoch retires its known views, not core PTYs. This is a
-production-facing development module without a shipping extension activation
-path; installed-package/backend activation, catalog UI and Files remain separate.
+production-facing development module consumed by the Linux ARM64 Files preview.
+Catalog acquisition and stable SDK exposure remain separate; source wiring does
+not establish the surviving-browser main-death gate.
 
 The optional Linux AppImage desktop installer accepts only a user-supplied,
 previously checksum-verified local Linux ARM64/x64 OMXTerm AppImage matching the
@@ -1627,10 +1628,10 @@ in main.
 
 An internal, explicitly built Installed Packages module implements local archive
 validation/installation, compatibility, immutable version pins, generation-based
-admission, disable/tombstones and deferred physical cleanup. It has no application
-startup caller, graphical installation, catalog/network operation, public SDK or
-extension execution. This checkpoint does not deliver Files or change the current
-application network/terminal ownership contracts. Its implemented interface and
+admission, disable/tombstones and deferred physical cleanup. The Linux ARM64
+Files preview consumes it through production Settings with captured-byte trust.
+This foundation itself owns neither extension execution nor catalog/network
+acquisition or a public SDK. Application network/terminal ownership is unchanged. Its implemented interface and
 limits are governed by the [foundation contract](extension-installation-foundation.md)
 and [ADR 0038](adr/0038-pin-immutable-installed-packages.md).
 
@@ -1653,11 +1654,13 @@ changing the separately owned web-content host.
 
 The [runtime contract](extension-backend-runtime.md) and
 [ADR 0040](adr/0040-run-backends-in-owned-node-children.md) govern its internal
-interfaces, limits and qualification boundary. Application startup still has no
-activation caller; no installer/catalog network route, public SDK, Files, action
-or tab capability is added. Core network and terminal ownership remain unchanged;
-trusted children retain ordinary Node capabilities. Packaging, user activation,
-web-content composition and application-quit integration remain later consumers.
+interfaces, limits and qualification boundary. The [Files development preview](files-development-preview.md)
+connects Settings local installation, shared namespaced actions, independently
+pinned application views and bounded normal Quit retirement on Linux ARM64.
+Startup never activates installed code; explicit invocation does. There is no
+catalog/network acquisition, public SDK or extension shortcut configuration.
+Trusted children retain ordinary Node capabilities. Production/native/visual and
+main-death qualification remain explicit obligations, not consequences of wiring.
 
 ## Release contract
 

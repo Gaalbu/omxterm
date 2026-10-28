@@ -111,6 +111,7 @@ export interface TerminalIpcController {
   applyConfiguration(configuration: TerminalRendererConfiguration): void;
   applyFullScreen(fullScreen: boolean): void;
   hasBusySelectedSession(): boolean;
+  reportedWorkingDirectory?(sessionId: TerminalSessionId): string | undefined;
   claimContextMenuTarget(target: TerminalContextMenuTarget): boolean;
   hasBusyFocusedSession(): boolean;
   hasBusySession(): boolean;

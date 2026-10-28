@@ -86,7 +86,7 @@ async function setup() {
   });
   return { manager, runtime, views, createViews, opens, call };
 }
-it("leaves installed-unused dormant, captures targets, and shares only a window's live view group", async () => {
+it("leaves installed-unused dormant and gives each invocation its own captured target and view pin", async () => {
   const setupResult = await setup();
   const { manager, runtime, views, createViews, opens } = setupResult;
   expect((await manager.snapshot())[0]?.local).toBe("dormant");
@@ -100,14 +100,16 @@ it("leaves installed-unused dormant, captures targets, and shares only a window'
   expect(views[0]?.target.terminalDirectory).toBe(root);
   expect(views[0]?.pin.generation).toBe(1);
   await manager.open(manifest.id, target);
-  expect(createViews).toHaveBeenCalledTimes(1);
+  expect(createViews).toHaveBeenCalledTimes(2);
+  expect(views[1]?.target.terminalDirectory).toBe("/changed");
+  expect(views[0]?.target.terminalDirectory).toBe(root);
   expect(opens).toHaveBeenCalledTimes(2);
   await manager.open(manifest.id, {
     owner: {},
     signal: new AbortController().signal,
     terminalDirectory: null,
   });
-  expect(views).toHaveLength(2);
+  expect(views).toHaveLength(3);
   expect(views[0]?.pin).not.toBe(views[1]?.pin);
   lifetime.abort();
   expect(runtime.retire).not.toHaveBeenCalled();

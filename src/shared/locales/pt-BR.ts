@@ -210,6 +210,7 @@ export const brazilianPortugueseMessages: Readonly<
   "settings.page.terminal": "Terminal",
   "settings.page.window": "Novas Janelas",
   "settings.page.file": "Arquivo de Configuração",
+  "settings.page.extensions": "Extensões",
   "settings.language": "Idioma",
   "settings.english": "English (United States)",
   "settings.portuguese": "Português (Brasil)",

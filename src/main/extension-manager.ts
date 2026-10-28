@@ -60,8 +60,18 @@ export function createExtensionManager(options: Options) {
   const state = new Map<string, LocalState>();
   const busy = new Set<string>();
   const opening = new Map<Promise<void>, string>();
+  let pendingCleanup: boolean | undefined;
   let disposed = false;
   let disposal: Promise<boolean> | undefined;
+  async function collect() {
+    try {
+      const cleanup = await options.packages.collect();
+      pendingCleanup = cleanup.more || cleanup.pending.length > 0;
+    } catch (error) {
+      pendingCleanup = true;
+      throw error;
+    }
+  }
   const revision = (id: string) => revisions.get(id) ?? 0;
   const alive = (id: string, captured: number, target: ExtensionTarget) =>
     !disposed &&
@@ -103,17 +113,9 @@ export function createExtensionManager(options: Options) {
       )
         throw new PackageError("unavailable");
       if (!alive(id, captured, target)) throw new PackageError("unavailable");
-      const existing = [...groups].find(
-        (group) =>
-          group.id === id &&
-          group.target.owner === target.owner &&
-          !group.abort.signal.aborted,
-      );
-      if (existing) {
-        await pin.release();
-        pin = undefined;
-        await existing.views.open();
-      } else {
+      // Each invocation has its own captured context and independent view pin.
+      // Sharing the backend must not make a new tab inherit an older pane's cwd.
+      {
         const abort = new AbortController();
         let group: Group;
         const lost = () => {
@@ -202,9 +204,10 @@ export function createExtensionManager(options: Options) {
           ? "dormant"
           : "unknown",
       );
-      await options.packages.collect();
+      await collect();
       return published;
     } catch {
+      pendingCleanup = true;
       state.set(id, "unknown");
       throw new PackageError("outcome-unknown");
     } finally {
@@ -212,6 +215,8 @@ export function createExtensionManager(options: Options) {
     }
   }
   return {
+    pendingCleanup: () => pendingCleanup,
+    collect,
     async snapshot() {
       const installations = await options.packages.snapshot();
       return installations.map((entry) => ({
@@ -246,7 +251,8 @@ export function createExtensionManager(options: Options) {
       return manage(id, () => options.packages.uninstall(id, generation));
     },
     open(id: string, target: ExtensionTarget): Promise<void> {
-      if (opening.size >= 32) return Promise.reject(new PackageError("busy"));
+      if (opening.size + groups.size >= 32)
+        return Promise.reject(new PackageError("busy"));
       // Capture context before activation; never consult selected pane later.
       const captured = { ...target };
       const work = start(id, captured);
