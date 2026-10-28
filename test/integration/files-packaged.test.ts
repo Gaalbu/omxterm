@@ -250,6 +250,26 @@ it.skipIf(
         profileRoot: root,
       });
       const child = owner.child;
+      assert.ok(child.pid && child.pid > 0);
+      const launchStat = await readFile(`/proc/${child.pid}/stat`, "utf8");
+      const launchFields = launchStat
+        .slice(launchStat.lastIndexOf(")") + 2)
+        .split(" ");
+      await writeFile(
+        path.join(evidence, "launch.json"),
+        JSON.stringify(
+          {
+            pid: child.pid,
+            parent: Number(launchFields[1]),
+            group: Number(launchFields[2]),
+            start: launchFields[19],
+            executable,
+            root,
+          },
+          null,
+          2,
+        ),
+      );
       let exited = false;
       child.once("exit", () => {
         exited = true;
