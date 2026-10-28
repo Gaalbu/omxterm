@@ -21,6 +21,7 @@ import {
   encode,
   exact,
   MESSAGE_BYTES,
+  type Value,
 } from "../../src/extension-runtime/protocol.js";
 
 describe("extension runtime error and cancellation contracts", () => {
@@ -196,6 +197,45 @@ describe("extension runtime error and cancellation contracts", () => {
     },
   );
 
+  it.each([0, 1])(
+    "keeps a healthy epoch alive across boundary calls (%s)",
+    async (index) => {
+      const f = await active();
+      const invalid = observe(f.backend.call(nestedValue(17)));
+      expect(await invalid).toMatchObject({ code: "protocol" });
+      expect(f.openVersion).toHaveBeenCalledTimes(1);
+      for (const value of [boundaryValues[index]!, null]) {
+        const result = observe(f.backend.call(value));
+        await flush();
+        const sent = f.child.sent.at(-1)!;
+        expect(sent.kind).toBe("call");
+        expect(sent.value).toEqual(value);
+        const reply = decode(
+          encode({
+            ...envelope,
+            epoch: f.backend.epoch,
+            sequence: 1,
+            kind: "result",
+            request: sent.request,
+            ok: true,
+            value,
+          }),
+        );
+        f.child.reply("result", {
+          request: reply.request,
+          ok: true,
+          value: reply.value,
+        });
+        expect(await result).toEqual(value);
+      }
+      expect(f.child.kinds()).not.toContain("stop");
+      const retirement = f.backend.retire();
+      f.child.exit(0, null);
+      f.child.close();
+      expect(await retirement).toMatchObject({ settled: true });
+    },
+  );
+
   it("reports late import cleanup failure before the retirement deadline", async () => {
     const f = fixture();
     const checked = deferred<boolean>();
@@ -248,8 +288,40 @@ describe("extension runtime error and cancellation contracts", () => {
   });
 });
 
+function nestedValue(depth: number): Value {
+  let value: Value = null;
+  for (let i = 0; i < depth; i++) value = [value];
+  return value;
+}
+const boundaryValues = [nestedValue(16), "x".repeat(174590)];
+
 const envelope = { epoch: "a".repeat(36), sequence: 1, kind: "call" };
 describe("extension runtime protocol bounds", () => {
+  it.each(boundaryValues)(
+    "round-trips accepted request/result boundary %#",
+    (value) => {
+      expect(boundedValue(value)).toBe(true);
+      for (const kind of ["call", "result"]) {
+        const message = {
+          ...envelope,
+          kind,
+          request: Number.MAX_SAFE_INTEGER,
+          ok: true,
+          value,
+        };
+        expect(decode(encode(message))).toEqual(message);
+      }
+    },
+  );
+
+  it("rejects the first unsupported payload depth in both directions", () => {
+    const value = nestedValue(17);
+    expect(boundedValue(value)).toBe(false);
+    for (const kind of ["call", "result"])
+      expect(() => encode({ ...envelope, kind, request: 1, value })).toThrow(
+        "protocol",
+      );
+  });
   it("rejects nonenumerable serialization substitution without invoking it", () => {
     const hook = vi.fn(() => "x".repeat(MESSAGE_BYTES * 2));
     const value = Object.defineProperty({}, "toJSON", { value: hook });

@@ -36,7 +36,11 @@ export class RuntimeError extends Error {
 }
 /** Capture data once under a conservative serialized budget, without user hooks. */
 export function captureValue(value: unknown): Value {
-  let budget = MESSAGE_BYTES - 1024;
+  return capture(value, false);
+}
+function capture(value: unknown, envelope: boolean): Value {
+  // Reserve envelope space separately; payload depth starts at its own root.
+  let budget = envelope ? MESSAGE_BYTES : MESSAGE_BYTES - 1024;
   function visit(item: unknown, depth: number): Value {
     budget -= 8;
     if (budget < 0 || depth > 16) throw new RuntimeError("protocol");
@@ -71,9 +75,16 @@ export function captureValue(value: unknown): Value {
       const descriptor = Object.getOwnPropertyDescriptor(item, key)!;
       if (!("value" in descriptor) || !descriptor.enumerable)
         throw new RuntimeError("protocol");
-      captured[key] = visit(descriptor.value, depth + 1);
+      captured[key] = captureProperty(descriptor.value, key, depth);
     }
     return captured;
+  }
+  function captureProperty(item: unknown, key: string, depth: number): Value {
+    if (!envelope || depth !== 0 || key !== "value")
+      return visit(item, depth + 1);
+    budget -= MESSAGE_BYTES - 1024;
+    if (budget < 0) throw new RuntimeError("protocol");
+    return captureValue(item);
   }
   function captureArray(
     item: unknown[],
@@ -135,7 +146,7 @@ export function decode(raw: unknown): Message {
   return message;
 }
 export function encode(message: Message): string {
-  const result = JSON.stringify(captureValue(message));
+  const result = JSON.stringify(capture(message, true));
   if (Buffer.byteLength(result) > MESSAGE_BYTES)
     throw new RuntimeError("protocol");
   return result;

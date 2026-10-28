@@ -6,6 +6,7 @@ import { pathToFileURL } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
 import { runtimeCases } from "./extension-runtime-cases.js";
 import { packageArchive } from "./extension-package-archive.js";
+import type { Value } from "../../src/extension-runtime/protocol.js";
 import type * as RuntimeModule from "../../src/extension-runtime/electron-runtime.js";
 import type * as StoreModule from "../../src/installed-packages/installed-packages.js";
 
@@ -67,6 +68,7 @@ export function activate({signal}) {
         setTimeout(() => { while (true) {} }, 50);
         return 'armed';
       }
+      if (Array.isArray(value) || typeof value === 'string') return value;
       appendFileSync(${JSON.stringify(operations)}, 'once\\n');
       return {value, debug:process.execArgv, nodeMode:process.env.ELECTRON_RUN_AS_NODE, internal:Object.keys(process.env).filter(k=>/^(OMXTERM_|NODE_OPTIONS)/i.test(k)), aborted:signal.aborted};
     },
@@ -112,6 +114,14 @@ export function activate({signal}) {
       aborted: false,
     });
     assert.equal(await readFile(operations, "utf8"), "once\n");
+    let boundary: Value = null;
+    for (let i = 0; i < 16; i++) boundary = [boundary];
+    await assert.rejects(backend.call([boundary]), { message: "protocol" });
+    for (const value of [boundary, "x".repeat(174590)])
+      assert.deepEqual(await backend.call(value), value);
+    console.log(
+      JSON.stringify({ case: "payload-boundary-round-trips", passed: true }),
+    );
     const cooperative = await backend.retire();
     assert.equal(cooperative.settled, true);
     assert.equal(cooperative.streamsClosed, true);
