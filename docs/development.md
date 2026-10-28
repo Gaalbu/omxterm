@@ -263,6 +263,19 @@ While iterating on a specific subsystem, you can run targeted test files before 
 | Unix native resize failure                     | `npx vitest run test/integration/terminal-resize-race.test.ts test/unit/terminal-resize-failure.test.ts`                                                                                      |
 | Linux foreground Busy decision                 | `npx vitest run test/unit/linux-foreground.test.ts test/unit/postinstall.test.ts test/integration/linux-foreground.test.ts`                                                                   |
 
+The integrated host's concurrent-font phase joins the actual exit callbacks of
+its four newly started sessions after removing their DOM tabs, then rejects any
+exit of a previously live peer. Aggregate exit equality is not a completion
+oracle: a peer exit can numerically replace a missing target callback. Counts
+remain in the failure snapshot alongside missing-target and exited-peer indices.
+The unchanged wait deadline and independent fixture settlement still apply;
+DOM removal and a kill request do not prove native exit. Headless controlled
+callback-order checks run with
+`npm test -- test/unit/restty-host-concurrent-cleanup.test.ts`.
+These reproduce the aggregate oracle's false acceptance, not the cause of the
+historical Fedora timeout in [#722](https://github.com/luizomf/omxterm/issues/722).
+A prior instrumented native pass did not attribute or clear that failure.
+
 The hover `early-capture` negative control qualifies the rejection of an undrawn
 hover generation: exact modified/`cue-not-drawn` phase, stale draw provenance,
 the same actually held callback through capture, explicit release, and clean

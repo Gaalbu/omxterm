@@ -63,6 +63,10 @@ export async function exerciseConcurrentResttyTabs(options: {
 }) {
   const initialSessions = options.sessionStarts();
   const initialExits = options.ptyExits();
+  const targetSessionIndices = Array.from(
+    { length: 4 },
+    (_, index) => initialSessions + index,
+  );
   const livePriorSessionIndices = Array.from(
     { length: initialSessions },
     (_, index) => index,
@@ -121,9 +125,12 @@ export async function exerciseConcurrentResttyTabs(options: {
   }
   try {
     await options.waitFor(
-      () => options.ptyExits() === initialExits + 4,
+      // A prior peer exit must not stand in for a missing target callback.
+      () => targetSessionIndices.every((index) => options.sessionExited(index)),
       "concurrent fixture PTY cleanup",
     );
+    if (livePriorSessionIndices.some((index) => options.sessionExited(index)))
+      throw new Error("Concurrent fixture unexpectedly exited a prior session");
   } catch (cause) {
     // Capture callback state before fixture completion requests further closes.
     // These synthetic indices are not OS-process liveness or cause evidence.
@@ -131,10 +138,9 @@ export async function exerciseConcurrentResttyTabs(options: {
       initialExits,
       expectedExits: initialExits + 4,
       actualExits: options.ptyExits(),
-      pendingSessionIndices: Array.from(
-        { length: 4 },
-        (_, index) => initialSessions + index,
-      ).filter((index) => !options.sessionExited(index)),
+      pendingSessionIndices: targetSessionIndices.filter(
+        (index) => !options.sessionExited(index),
+      ),
       newlyExitedPriorSessionIndices: livePriorSessionIndices.filter((index) =>
         options.sessionExited(index),
       ),

@@ -64,9 +64,34 @@ it("still waits for actual exit after all four DOM tabs retire", async () => {
   expect(result.release).toHaveBeenCalledOnce();
 });
 
+it("accepts all four target exits with the prior peer retained", async () => {
+  const result = await exercise([5, 6, 7, 8]);
+  expect(result.cleanupPredicates).toEqual([true]);
+  expect(result.outcome).toMatchObject({ requestedTabs: 4, readyTabs: 4 });
+});
+
+it("rejects a prior peer exit directly after joining all target exits", async () => {
+  const result = await exercise([3, 5, 6, 7, 8]);
+  expect(result.cleanupPredicates).toEqual([true]);
+  expect(result.outcome).toBeInstanceOf(Error);
+  expect((result.outcome as Error).cause).not.toBe(result.timeout);
+  expect((result.outcome as Error).message).toContain(
+    "Concurrent fixture unexpectedly exited a prior session",
+  );
+  expect((result.outcome as Error).message).toContain(
+    JSON.stringify({
+      initialExits: 4,
+      expectedExits: 8,
+      actualExits: 9,
+      pendingSessionIndices: [],
+      newlyExitedPriorSessionIndices: [3],
+    }),
+  );
+});
+
 it.each([
   { exits: [6, 7, 8], total: 7, pending: [5], peers: [] },
-  { exits: [3, 5, 6, 7, 8], total: 9, pending: [], peers: [3] },
+  { exits: [3, 6, 7, 8], total: 8, pending: [5], peers: [3] },
 ])(
   "retains failure-time identity evidence for exit total $total",
   async ({ exits, total, pending, peers }) => {
