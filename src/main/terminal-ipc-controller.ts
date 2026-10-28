@@ -709,6 +709,11 @@ function createTerminalIpcController(
     ...createTerminalTitleRequests(routedSession, options, reject),
     tabsEmpty: emptyTabsNotification(options, reject, () => disposed),
     hasBusySelectedSession: selection.hasBusySelectedSession,
+    reportedWorkingDirectory(sessionId) {
+      return routedSession(sessionId)
+        ? workingDirectories.reported(sessionId)
+        : undefined;
+    },
     claimContextMenuTarget: contextMenu.claim,
     hasBusyFocusedSession: selection.hasBusyFocusedSession,
     hasBusySession,

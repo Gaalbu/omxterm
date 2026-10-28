@@ -17,7 +17,8 @@ afterEach(() => {
   vi.restoreAllMocks();
   document.body.replaceChildren();
 });
-function harness() {
+function harness(canFocus = () => true) {
+  const extensionRequest = vi.fn(async () => ({ ok: true }));
   let open!: (descriptor: HostedContentDescriptor) => void;
   let retire!: (id: string) => void;
   let fail!: () => void;
@@ -40,6 +41,8 @@ function harness() {
   const notifyEmpty = vi.fn();
   const h = createTabsHarness({
     tabsOptions: {
+      canFocus,
+      extensions: { request: extensionRequest },
       notifyEmpty,
       hostedContent: bridge,
       settings: {
@@ -55,6 +58,7 @@ function harness() {
   owners.push(h.tabs);
   return {
     ...h,
+    extensionRequest,
     notifyEmpty,
     bridge,
     open: (id = "view-a") => open({ id, title: id }),
@@ -66,6 +70,29 @@ const settle = async () => {
   for (let i = 0; i < 8; i++) await Promise.resolve();
 };
 
+it("denies modal action admission and keeps late hosted publication behind the same owner", async () => {
+  let blocked = false;
+  const h = harness(() => !blocked);
+  await h.tabs.ready;
+  const owner = h.tabs.captureActionTarget();
+  blocked = true;
+  h.tabs.handleCommand({
+    action: "open-extension",
+    token: "00000000-0000-0000-0000-000000000001",
+  });
+  expect(h.extensionRequest).toHaveBeenCalledWith(
+    expect.objectContaining({ operation: "open", accepted: false }),
+  );
+  h.open("late");
+  await settle();
+  expect(selectedStates(h.strip)).toEqual(["1:true", "late:false"]);
+  expect(owner.isCurrent()).toBe(true);
+  expect(h.tabs.isTerminalSelected()).toBe(true); // Selection was not stolen.
+  blocked = false;
+  h.tabs.handleCommand({ action: "next" });
+  await settle();
+  expect(selectedStates(h.strip)).toEqual(["1:false", "late:true"]);
+});
 it("opens only on main descriptors in the ordered list, with no PTY or clipboard forwarding", async () => {
   const h = harness();
   await h.tabs.ready;

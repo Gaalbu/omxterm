@@ -1,6 +1,6 @@
 # ADR 0039: Own packaged web content by activation epoch
 
-Status: Accepted internal module; end-user activation and main-death qualification remain gated.
+Status: Accepted internal module, consumed by the Linux ARM64 Files development preview; surviving-browser main-death file-read exclusion remains unqualified.
 
 ## Context
 
@@ -13,11 +13,15 @@ from browser lifetime ([ADR 0038](0038-pin-immutable-installed-packages.md)).
 
 A lazy `Extension View Host` owns one nonpersistent session/origin and at most
 eight `WebContentsView` instances for one epoch/window. It uses Node-off,
-context-isolated content and an app-owned visibility-only preload. This is an
+context-isolated content and an app-owned visibility/own-backend-request preload. This is an
 internal adapter, not an extension SDK, security sandbox or user activation path.
 Core tab ordering includes hosted slots alongside terminal and retained Settings
 content. Main issues view identities; only the owning terminal main frame can
-present/close them. Monotonic layout revisions, owner lifetime and main-approved
+present/close them. The window router maps each issued identity to its epoch and
+acknowledges hiding every other epoch before presenting a new selection. Child
+requests authenticate the actual child main frame and live view; bounded JSON
+routes only to its captured backend callback, with cancellation on destruction.
+Neither caller-provided IDs nor terminal renderer requests can select a backend. Monotonic layout revisions, owner lifetime and main-approved
 content bounds prevent stale presentation and keep host chrome outside the view.
 CSS geometry is converted using actual page zoom, not terminal font zoom.
 
@@ -58,25 +62,35 @@ keep their core-owned tab and recovery notice; they do not publish an empty
 window. The owner-bound IPC route continues acknowledging safe null presentations
 after settled retirement, but never admits old view identities. No session-destroy
 API or arbitrary-descendant containment is
-invented. Renderer loss conservatively retires all views in that epoch; actual
+invented. Renderer loss conservatively retires all views in that epoch. Native hiding still
+runs, but visibility IPC is not sent to a lost renderer or a closing view: its
+WebContents may remain alive after its frame is disposed. Actual
 renderer IDs are observed, and sharing the core renderer refuses continued use.
 There is no per-view process-isolation promise.
 
 ## Gates and consequences
 
-The module has no installer/catalog/backend/Files activation UI. Its consumers
-are internal composition and test harnesses using the same host/reader/tab seam.
+The host module itself does not own installation, catalogs or backend activation.
+The separately installed [Files development preview](../files-development-preview.md)
+composes production Settings, shared actions, backends and this host/reader/tab seam.
+Its phase-specific product evidence is separate from host-module qualification;
+there is no public SDK or catalog acquisition.
 The installed-package adapter and ordinary browser retirement must be qualified
 separately. Main death may leave already delivered bytes in browser memory;
 materialized Responses alone do not prove that a surviving Chromium process has
 no later disk route. Until a bounded actual-death discriminator establishes that
 property, **main-death file-read exclusion remains unqualified** and cannot be
 claimed as package cleanup safety after main death. No reboot, quarantine or
-extra supervisor compensates for this missing evidence.
+extra supervisor compensates for this missing evidence. A bounded actual-main-SIGKILL
+observation saw the hosted renderer exit and an independent backend pin retain A
+through uninstall/collection until that backend's kernel exit. Collection then
+completed; the original orphan's exit code was unknown. This neither establishes a
+surviving renderer's later/fresh A or B read exclusion nor guarantees renderer
+termination on other platforms or configurations.
 
 Retained native views have material memory cost; create substantial views lazily,
 not one native view per widget. Hidden views retain drafts only within their
-epoch. A future activation layer must supply trusted admission, the main-approved
+epoch. Activation consumers must supply trusted admission, the main-approved
 slot and existing core command routing; this module is not successful no-op
 extension support. Theme/language adaptation beyond the owning core tab chrome
 is not a public web-content capability in this internal slice.

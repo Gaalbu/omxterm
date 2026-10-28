@@ -1,4 +1,5 @@
 import path from "node:path";
+import { createFilesServices } from "./files-services.js";
 import { pathToFileURL } from "node:url";
 import {
   InstalledPackages,
@@ -112,8 +113,12 @@ async function activate(): Promise<void> {
     if (owner.signal.aborted) return;
     const entryActivate = exports.activate as (context: {
       signal: AbortSignal;
+      files: ReturnType<typeof createFilesServices>;
     }) => unknown;
-    const result: unknown = await entryActivate({ signal: owner.signal });
+    const result: unknown = await entryActivate({
+      signal: owner.signal,
+      files: createFilesServices(),
+    });
     if (
       !result ||
       typeof result !== "object" ||

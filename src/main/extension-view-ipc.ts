@@ -17,13 +17,12 @@ import {
 
 type Host = ReturnType<typeof createExtensionViewHost>;
 type Route = {
-  contents: WebContents;
-  host: Host | undefined;
-  retiring: boolean;
-  issued: Set<string>;
+  hosts: Set<Host>;
+  retiring: Set<Host>;
+  issued: Map<string, Host>;
+  revision: number;
 };
 const routers = new WeakMap<IpcMain, Map<WebContents, Route>>();
-const presentationRevisions = new WeakMap<WebContents, number>();
 
 export function sendExtensionAwareClipboard(
   ipcMain: IpcMain,
@@ -31,19 +30,83 @@ export function sendExtensionAwareClipboard(
   action: TerminalClipboardAction,
   target?: TerminalContextMenuTarget,
 ): void {
-  if (
-    !target &&
-    routers
-      .get(ipcMain)
-      ?.get(owner)
-      ?.host?.clipboard(action === "select-all" ? "selectAll" : action)
-  )
-    return;
+  if (!target) {
+    const hosts = routers.get(ipcMain)?.get(owner)?.hosts;
+    if (hosts)
+      for (const host of hosts)
+        if (host.clipboard(action === "select-all" ? "selectAll" : action))
+          return;
+  }
   owner.send(terminalIpc.clipboardAction, target ? { action, target } : action);
 }
 
-// Multiple actual windows share one pair of handlers; callers cannot choose a
-// window or host. The trusted owner is registered by main, never by a child.
+function registryFor(ipcMain: IpcMain) {
+  let routes = routers.get(ipcMain);
+  if (routes) return routes;
+  routes = new Map<WebContents, Route>();
+  const registry = routes;
+  const routeFor = (event: IpcMainInvokeEvent) => {
+    const route = registry.get(event.sender);
+    if (
+      !route ||
+      event.sender.isDestroyed() ||
+      event.senderFrame !== event.sender.mainFrame
+    )
+      throw new Error("Rejected hosted owner");
+    return route;
+  };
+  ipcMain.handle(
+    extensionViewIpc.present,
+    async (event, ...args: unknown[]) => {
+      const route = routeFor(event);
+      if (args.length !== 1 || !isHostedContentPresentation(args[0]))
+        throw new TypeError("Invalid hosted presentation");
+      const presentation = args[0];
+      const selected =
+        presentation.id === null
+          ? undefined
+          : route.issued.get(presentation.id);
+      if (
+        presentation.id !== null &&
+        (!selected || !selected.owns(presentation.id))
+      )
+        throw new Error("Unknown hosted content");
+      if (presentation.revision <= route.revision) return false;
+      route.revision = presentation.revision;
+      // One window revision orders ALL epochs. Never show a target until every
+      // other native epoch has acknowledged hiding (including its retirement).
+      const hidden = await Promise.all(
+        [...route.hosts]
+          .filter((host) => host !== selected)
+          .map(async (host) => {
+            if (route.retiring.has(host))
+              return (await host.retire()).status === "settled";
+            return host.present({ ...presentation, id: null, focus: false });
+          }),
+      );
+      if (
+        route.revision !== presentation.revision ||
+        hidden.some((value) => !value)
+      )
+        return false;
+      return selected ? selected.present(presentation) : true;
+    },
+  );
+  ipcMain.handle(extensionViewIpc.close, async (event, ...args: unknown[]) => {
+    const route = routeFor(event);
+    if (args.length !== 1 || !isHostedContentId(args[0]))
+      throw new TypeError("Invalid hosted close");
+    const id = args[0];
+    const host = route.issued.get(id);
+    if (!host?.owns(id)) throw new Error("Unknown hosted content");
+    await host.close(id);
+  });
+  routers.set(ipcMain, routes);
+  return routes;
+}
+
+// Multiple epochs/windows share the actual-sender router. Payload identities
+// only select IDs already issued to that window; they never choose an owner.
 export function startExtensionViewHost(
   options: ExtensionViewHostOptions & { ipcMain: IpcMain },
 ) {
@@ -54,101 +117,54 @@ export function startExtensionViewHost(
     contents.isDestroyed()
   )
     throw new Error("Invalid hosted owner setup");
-  let routes = routers.get(options.ipcMain);
-  if (routes?.get(contents)?.host)
-    throw new Error("Hosted owner already registered");
-  if (!routes) {
-    routes = new Map();
-    const registry = routes;
-    const routeFor = (event: IpcMainInvokeEvent) => {
-      const route = registry.get(event.sender);
-      if (
-        !route ||
-        event.sender.isDestroyed() ||
-        event.senderFrame !== event.sender.mainFrame
-      )
-        throw new Error("Rejected hosted owner");
-      return route;
+  const registry = registryFor(options.ipcMain);
+  let route = registry.get(contents);
+  if (!route) {
+    route = {
+      hosts: new Set(),
+      retiring: new Set(),
+      issued: new Map(),
+      revision: 0,
     };
-    options.ipcMain.handle(
-      extensionViewIpc.present,
-      (event, ...args: unknown[]) => {
-        const route = routeFor(event);
-        if (args.length !== 1 || !isHostedContentPresentation(args[0]))
-          throw new TypeError("Invalid hosted presentation");
-        const presentation = args[0];
-        if (
-          presentation.id !== null &&
-          (!route.issued.has(presentation.id) ||
-            !route.host?.owns(presentation.id))
-        )
-          throw new Error("Unknown hosted content");
-        if (
-          presentation.revision <=
-          (presentationRevisions.get(event.sender) ?? 0)
-        )
-          return false;
-        presentationRevisions.set(event.sender, presentation.revision);
-        if (presentation.id === null && route.retiring)
-          return route.host
-            ? route.host
-                .retire()
-                .then((outcome) => outcome.status === "settled")
-            : true;
-        return route.host?.present(presentation) ?? false;
-      },
-    );
-    options.ipcMain.handle(
-      extensionViewIpc.close,
-      async (event, ...args: unknown[]) => {
-        const route = routeFor(event);
-        if (args.length !== 1 || !isHostedContentId(args[0]))
-          throw new TypeError("Invalid hosted close");
-        const id = args[0];
-        if (!route.issued.has(id) || !route.host?.owns(id))
-          throw new Error("Unknown hosted content");
-        await route.host.close(id);
-      },
-    );
-    routers.set(options.ipcMain, routes);
-  }
-  const registry = routes;
-  const issued = new Set<string>();
-  const host = createExtensionViewHost({
-    ...options,
-    onRetired(id) {
-      if (issued.delete(id) && !contents.isDestroyed())
-        contents.send(extensionViewIpc.retired, id);
-      options.onRetired?.(id);
-    },
-    onState(state, outcome) {
-      const route = registry.get(contents);
-      if (route?.host === host) {
-        if (state === "retiring") route.retiring = true;
-        if (state === "settled") route.host = undefined;
-        if (state === "failed" && !contents.isDestroyed())
-          contents.send(extensionViewIpc.failure, true);
-      }
-      options.onState?.(state, outcome);
-    },
-  });
-  if (!registry.has(contents))
+    registry.set(contents, route);
     contents.once("destroyed", () => {
       registry.delete(contents);
-      presentationRevisions.delete(contents);
       if (!registry.size) {
         options.ipcMain.removeHandler(extensionViewIpc.present);
         options.ipcMain.removeHandler(extensionViewIpc.close);
         routers.delete(options.ipcMain);
       }
     });
-  registry.set(contents, { contents, host, issued, retiring: false });
+  }
+  const ownerRoute = route;
+  const host = createExtensionViewHost({
+    ...options,
+    onRetired(id) {
+      if (ownerRoute.issued.get(id) === host) {
+        ownerRoute.issued.delete(id);
+        if (!contents.isDestroyed())
+          contents.send(extensionViewIpc.retired, id);
+      }
+      options.onRetired?.(id);
+    },
+    onState(state, outcome) {
+      if (state === "retiring") ownerRoute.retiring.add(host);
+      if (state === "settled") {
+        ownerRoute.hosts.delete(host);
+        ownerRoute.retiring.delete(host);
+      }
+      if (state === "failed" && !contents.isDestroyed())
+        contents.send(extensionViewIpc.failure, true);
+      options.onState?.(state, outcome);
+    },
+  });
+  ownerRoute.hosts.add(host);
   return {
     async open(input: { entryResource: string; title: string }) {
       const descriptor = await host.open(input);
       if (!host.owns(descriptor.id) || contents.isDestroyed())
         throw new Error("Hosted owner retired");
-      issued.add(descriptor.id);
+      ownerRoute.issued.set(descriptor.id, host);
       try {
         contents.send(extensionViewIpc.open, descriptor);
       } catch {

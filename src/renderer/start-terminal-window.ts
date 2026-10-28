@@ -40,6 +40,7 @@ export function startTerminalWindow(bridge: Window["omxterm"]): void {
           ? { palette: bridge.terminal.palette }
           : {}),
         settings: bridge.settings,
+        ...(bridge.extensions ? { extensions: bridge.extensions } : {}),
         ...(bridge.terminal.hostedContent
           ? { hostedContent: bridge.terminal.hostedContent }
           : {}),

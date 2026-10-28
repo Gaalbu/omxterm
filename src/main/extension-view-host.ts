@@ -1,5 +1,6 @@
 /* eslint-disable max-lines -- Keep one epoch's admission, presentation and bounded retirement transitions together. */
 import { randomUUID } from "node:crypto";
+import { captureValue, type Value } from "../extension-runtime/protocol.js";
 import { isAbsolute } from "node:path";
 import {
   WebContentsView,
@@ -60,6 +61,7 @@ export interface ExtensionViewHostOptions {
   onState?(state: ExtensionViewState, outcome?: ExtensionViewOutcome): void;
   onRendererProcess?(id: string, pid: number): void;
   onKeybind?(event: Event, input: Input, owner: BrowserWindow): void;
+  onRequest?(value: Value, signal: AbortSignal): Promise<Value>;
   // Host/native-test seam only. Not exposed to either renderer.
   runtime?: ExtensionViewRuntime;
 }
@@ -76,11 +78,13 @@ type Entry = {
   contents: WebContents;
   destroyed: Promise<void>;
   closing: boolean;
+  rendererGone: boolean;
   notified: boolean;
   visible: boolean;
   pid: number;
   entryUrl: string;
   loading: boolean;
+  abort: AbortController;
 };
 function bounded<T>(promise: Promise<T>, ms: number): Promise<T> {
   return new Promise((resolve, reject) => {
@@ -152,7 +156,9 @@ class NativeExtensionViewHost {
   #visibility(entry: Entry, visible: boolean) {
     entry.visible = visible;
     entry.view.setVisible(visible);
-    if (!entry.contents.isDestroyed())
+    // WebContents can outlive its disposed frame after renderer loss. Native
+    // hiding still applies, but no presentation IPC belongs to a lost/closing view.
+    if (!entry.rendererGone && !entry.closing && !entry.contents.isDestroyed())
       entry.contents.send(extensionViewIpc.visibility, visible);
   }
   #hideAll = (keep?: Entry) => {
@@ -175,6 +181,7 @@ class NativeExtensionViewHost {
   #destroy(entry: Entry) {
     if (entry.closing) return;
     entry.closing = true;
+    entry.abort.abort();
     if (this.#selected === entry.descriptor.id) this.#selected = null;
     try {
       if (!entry.contents.isDestroyed()) this.#visibility(entry, false);
@@ -336,12 +343,46 @@ class NativeExtensionViewHost {
     const contents = entry.contents;
     entry.view.setVisible(false);
     contents.setWindowOpenHandler(() => ({ action: "deny" }));
+    if (this.options.onRequest) {
+      let pending = 0;
+      contents.ipc.handle(
+        "extension-view:request",
+        async (event, ...args: unknown[]) => {
+          if (
+            !this.#live() ||
+            entry.closing ||
+            contents.isDestroyed() ||
+            event.sender !== contents ||
+            event.senderFrame !== contents.mainFrame ||
+            args.length !== 1 ||
+            pending >= 32
+          )
+            throw new Error("Request unavailable");
+          const value = captureValue(args[0]);
+          pending++;
+          try {
+            const result = await this.options.onRequest!(
+              value,
+              entry.abort.signal,
+            );
+            if (!this.#live() || entry.closing || entry.abort.signal.aborted)
+              throw new Error("Outcome unknown");
+            return captureValue(result);
+          } finally {
+            pending--;
+          }
+        },
+      );
+    }
     const prevent = (event: Event) => event.preventDefault();
     contents.on("will-navigate", prevent);
     contents.on("will-frame-navigate", prevent);
     contents.on("will-redirect", prevent);
     contents.on("will-attach-webview", prevent);
-    contents.on("render-process-gone", this.#ownerLost);
+    contents.on("render-process-gone", () => {
+      entry.rendererGone = true;
+      this.#ownerLost();
+    });
     contents.on("dom-ready", () => this.#trackProcess(entry));
     contents.on("did-finish-load", () => {
       this.#trackProcess(entry);
@@ -397,11 +438,13 @@ class NativeExtensionViewHost {
           destroyed = resolve;
         }),
         closing: false,
+        rendererGone: false,
         notified: false,
         visible: false,
         pid: 0,
         entryUrl: `${this.#origin}/${input.entryResource}`,
         loading: true,
+        abort: new AbortController(),
       };
       const current = entry;
       this.#views.set(current.descriptor.id, current);

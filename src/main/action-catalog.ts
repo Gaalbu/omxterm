@@ -55,7 +55,8 @@ export type CoreActionId =
   | "alwaysOnTop"
   | "devTools";
 export interface CoreAction {
-  readonly id: CoreActionId;
+  readonly id: string;
+  readonly extension?: boolean;
   readonly label: string;
   readonly accelerator: string | null;
   // These existing guarded callbacks own availability, target selection and
@@ -63,7 +64,9 @@ export interface CoreAction {
   readonly invoke: () => void;
   readonly palette: boolean;
 }
-export type CoreActionCatalog = Readonly<Record<CoreActionId, CoreAction>>;
+export type CoreActionCatalog = Readonly<
+  Record<CoreActionId, CoreAction> & Record<string, CoreAction>
+>;
 type SelectTabAction = TerminalActionName & `selectTab${number}`;
 
 // The only behavior table. Menu layout references IDs; palette and key delivery
@@ -73,6 +76,7 @@ export function createCoreActionCatalog(
   actions: TerminalApplicationMenuActions,
   keybinds: TerminalKeybinds,
   t: Translator["t"] = translatorFor(DEFAULT_LANGUAGE).t,
+  extensions: readonly CoreAction[] = [],
 ): CoreActionCatalog {
   const action = (label: string, invoke: () => void, palette = true) => ({
     label,
@@ -177,8 +181,22 @@ export function createCoreActionCatalog(
       }),
     ) as Record<SelectTabAction, ReturnType<typeof action>>),
   } satisfies Record<CoreActionId, ReturnType<typeof action>>;
-  return Object.freeze(
-    Object.fromEntries(
+  const contributed = Object.fromEntries(
+    extensions
+      .filter(
+        (entry) =>
+          entry.extension &&
+          entry.id.includes(".") &&
+          !Object.hasOwn(definitions, entry.id),
+      )
+      .map((entry) => [
+        entry.id,
+        Object.freeze({ ...entry, accelerator: null }),
+      ]),
+  );
+  return Object.freeze({
+    ...contributed,
+    ...(Object.fromEntries(
       Object.entries(definitions).map(([id, definition]) => [
         id,
         Object.freeze({
@@ -189,8 +207,8 @@ export function createCoreActionCatalog(
             : null,
         }),
       ]),
-    ) as Record<CoreActionId, CoreAction>,
-  );
+    ) as Record<CoreActionId, CoreAction>),
+  });
 }
 export function coreActionInvocations(
   catalog: CoreActionCatalog,

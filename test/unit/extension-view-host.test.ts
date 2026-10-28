@@ -47,6 +47,7 @@ let sequence = 0;
 class Contents extends EventEmitter {
   id = ++sequence;
   mainFrame = {};
+  ipc = { handle: vi.fn() };
   dead = false;
   focused = false;
   pid = this.id + 100;
@@ -200,6 +201,41 @@ const present = (
 });
 
 describe("native extension host through its production resource interface", () => {
+  it("authenticates own-view requests, bounds payloads and rejects replies after retirement", async () => {
+    const f = await fixture(false);
+    const held = deferred<null>();
+    const invoke = vi.fn(
+      (_value: unknown, _signal: AbortSignal) => held.promise,
+    );
+    const host = createExtensionViewHost({ ...f.options, onRequest: invoke });
+    cleanups.push(() => host.retire());
+    await host.open(opening);
+    const contents = f.views[0]!.webContents;
+    const [channel, handler] = contents.ipc.handle.mock.calls[0]! as [
+      string,
+      (event: unknown, ...args: unknown[]) => Promise<unknown>,
+    ];
+    expect(channel).toBe("extension-view:request");
+    await expect(
+      handler(
+        { sender: f.owner.webContents, senderFrame: contents.mainFrame },
+        null,
+      ),
+    ).rejects.toThrow("unavailable");
+    await expect(
+      handler({ sender: contents, senderFrame: {} }, null),
+    ).rejects.toThrow("unavailable");
+    const sender = { sender: contents, senderFrame: contents.mainFrame };
+    await expect(handler(sender, Array(257).fill(null))).rejects.toThrow();
+    expect(invoke).not.toHaveBeenCalled();
+    const pending = handler(sender, { operation: "home" });
+    const rejected = expect(pending).rejects.toThrow("unknown");
+    await host.retire();
+    expect(invoke.mock.calls[0]![1].aborted).toBe(true);
+    held.resolve(null);
+    await rejected;
+    await expect(handler(sender, null)).rejects.toThrow("unavailable");
+  });
   it("is lazy, owns hidden views, uses unique ephemeral sessions and secure preferences", async () => {
     const f = await fixture();
     expect(f.native.fromPartition).not.toHaveBeenCalled();
@@ -432,13 +468,16 @@ describe("epoch lifetime and failure settlement", () => {
     const f = await fixture();
     await f.host.open(opening);
     await f.host.open(opening);
-    f.views[0]!.webContents.emit(
-      "render-process-gone",
-      {},
-      { reason: "crashed" },
-    );
+    const crashed = f.views[0]!.webContents;
+    crashed.send.mockClear();
+    crashed.send.mockImplementation(() => {
+      throw new Error("Render frame disposed while WebContents remains alive");
+    });
+    crashed.emit("render-process-gone", {}, { reason: "crashed" });
     expect(await f.host.retire()).toEqual({ status: "settled" });
     expect(f.views.every((view) => view.webContents.dead)).toBe(true);
+    expect(crashed.send).not.toHaveBeenCalled();
+    expect(f.views[0]!.setVisible).toHaveBeenCalledWith(false);
     expect(f.retired).toHaveBeenCalledTimes(2);
     expect(f.owner.webContents.dead).toBe(false);
     expect(f.resourceOwner.release).toHaveBeenCalledTimes(1);
@@ -694,7 +733,28 @@ it("IPC composition authenticates actual terminal main frame and rejects cross-o
   expect(
     await invoke(extensionViewIpc.present, event(a), present(fresh.id, 5)),
   ).toBe(true);
+  const d = await fixture(false);
+  const concurrent = startExtensionViewHost({
+    ...d.options,
+    owner: a.options.owner,
+    ipcMain: ipc,
+  });
+  cleanups.push(() => concurrent.retire());
+  const otherEpoch = await concurrent.open(opening);
+  expect(
+    await invoke(extensionViewIpc.present, event(a), present(otherEpoch.id, 6)),
+  ).toBe(true);
+  expect(c.views[0]!.setVisible).toHaveBeenLastCalledWith(false);
+  expect(d.views[0]!.setVisible).toHaveBeenLastCalledWith(true);
+  expect(
+    await invoke(extensionViewIpc.present, event(a), present(fresh.id, 5)),
+  ).toBe(false);
   await next.retire();
+  expect(
+    await invoke(extensionViewIpc.present, event(a), present(null, 7)),
+  ).toBe(true);
+  expect(d.views[0]!.setVisible).toHaveBeenLastCalledWith(false);
+  await concurrent.retire();
   expect(handlers.size).toBe(2); // Safe hide ACKs survive epoch retirement.
   a.owner.webContents.emit("destroyed");
   b.owner.webContents.emit("destroyed");

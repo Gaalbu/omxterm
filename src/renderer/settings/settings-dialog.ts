@@ -24,6 +24,7 @@ import { settingsMessageText } from "../../shared/settings-messages";
 import { describeSettingsResult } from "./settings-results";
 export { describeSettingsResult } from "./settings-results";
 import { renderShortcuts } from "./settings-shortcuts";
+import { renderExtensions } from "./settings-extensions";
 import type { SettingsKeybindChange } from "../../shared/settings-keybinds";
 
 // Retained graphical editor and save-on-change controls adapted from ruscher/omxterm PR #622 at
@@ -415,6 +416,13 @@ function buildSettingsView(
       labels,
     });
     addPage("shortcuts", "settings.page.shortcuts", shortcuts.element);
+    const extensions = document.defaultView?.omxterm?.extensions;
+    if (extensions)
+      addPage(
+        "extensions",
+        "settings.page.extensions",
+        renderExtensions(document, extensions, live, labels),
+      );
     addPage(
       "config-file",
       "settings.page.file",

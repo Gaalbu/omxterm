@@ -2,6 +2,7 @@ import { build } from "esbuild";
 import { cp, rm } from "node:fs/promises";
 import path from "node:path";
 import { buildMacOSWindowBlur } from "./scripts/build-macos-window-blur.mjs";
+import { buildExtensionRuntime } from "./scripts/build-extension-runtime.mjs";
 
 const projectRoot = path.resolve(import.meta.dirname);
 const outputRoot = path.join(projectRoot, "dist");
@@ -14,6 +15,9 @@ if (path.dirname(outputRoot) !== projectRoot) {
 
 await rm(outputRoot, { recursive: true, force: true });
 await Promise.all([
+  ...(process.platform === "linux" && process.arch === "arm64"
+    ? [buildExtensionRuntime(path.join(outputRoot, "extension-runtime"))]
+    : []),
   buildMacOSWindowBlur(path.join(outputRoot, "main")),
   build({
     entryPoints: ["src/main/index.ts"],
@@ -25,7 +29,7 @@ await Promise.all([
     // The main process imports
     // text-shaper directly, so bundling it prevents packaged startup from
     // resolving a development checkout's ancestor node_modules by accident.
-    external: ["electron", "node-pty", "yaml"],
+    external: ["electron", "node-pty", "yaml", "yauzl", "semver"],
     outfile: "dist/main/index.js",
     sourcemap: true,
   }),

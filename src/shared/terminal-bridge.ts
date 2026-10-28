@@ -1,4 +1,5 @@
 import type { SettingsBridge } from "./settings";
+import type { ExtensionsBridge } from "./extensions";
 import type { SettingsTabSelection } from "./terminal-panes";
 import type { AboutBridge } from "./about";
 import type {
@@ -85,6 +86,7 @@ declare global {
       readonly terminal: TerminalBridge;
       readonly about: AboutBridge;
       readonly settings: SettingsBridge;
+      readonly extensions?: ExtensionsBridge;
     };
   }
 }

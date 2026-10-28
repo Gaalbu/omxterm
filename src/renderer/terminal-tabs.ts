@@ -62,6 +62,7 @@ export interface TerminalTabsOptions {
   readonly hostedContent?: HostedContentBridge;
   readonly onGraphicalSelected?: () => void;
   readonly settings?: SettingsBridge;
+  readonly extensions?: import("../shared/extensions").ExtensionsBridge;
   readonly onSettingsSelected?: () => void;
   readonly language?: RendererLanguage;
   // A split pane passes its source session to inherit a reported directory.
@@ -126,12 +127,11 @@ export function createTerminalTabs(
     ...options,
     canFocus: () => contentReady && canFocus?.() !== false,
   };
-  const document = elements.container.ownerDocument;
   const language = options.language ?? englishLanguage;
   const tabs: ApplicationTab[] = [];
   const terminalTabs = () =>
     tabs.filter((tab): tab is TerminalTab => tab.kind === "terminal");
-  const keyboard = retainDismissalGesture(document);
+  const keyboard = retainDismissalGesture(elements.container.ownerDocument);
   let tabBarEnabled = options.showTabBar ?? true;
   let selectedIndex = -1;
   const configuration = createTerminalTabConfiguration(
@@ -258,7 +258,7 @@ export function createTerminalTabs(
   };
 
   const mountPane = createPaneMount({
-    document,
+    document: elements.container.ownerDocument,
     options,
     surfaceOptions: configuration.current,
     zoomSteps: configuration.zoomSteps,
@@ -305,29 +305,30 @@ export function createTerminalTabs(
     await mountPane(pane);
   };
 
+  const tabOwner = {
+    canFocus,
+    available: () => !disposed && !closing,
+    selected: selectedApplicationTab,
+    select,
+    close: closeTab,
+    remove: removeTab,
+    render: renderStrip,
+  };
   const { hosted, settingsActions } = createGraphicalTabs(
     tabs,
     elements.container,
     options,
     language,
     keyboard,
-    {
-      available: () => !disposed && !closing,
-      selected: selectedApplicationTab,
-      select,
-      close: closeTab,
-      remove: removeTab,
-    },
+    tabOwner,
   );
   const commands = createApplicationTabCommands(tabs, {
-    available: () => !disposed && !closing,
-    selected: selectedApplicationTab,
-    select,
+    ...tabOwner,
     create: createTab,
-    close: closeTab,
     closeSession: (id) =>
       panes.closePane(findPaneBySession(terminalTabs(), id)),
     pane: panes.handleCommand,
+    extensions: options.extensions,
   });
   return {
     ready: createTab(),

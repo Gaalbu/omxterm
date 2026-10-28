@@ -5,6 +5,7 @@ import path from "node:path";
 import { crc32 } from "node:zlib";
 import { satisfies, valid, validRange } from "semver";
 import { fromBufferPromise, type Entry, type ZipFile } from "yauzl";
+import { isExtensionResource } from "../shared/extensions.js";
 
 export class PackageError extends Error {
   cleanupFailed = false;
@@ -30,6 +31,7 @@ export type PackageManifest = {
   name: string;
   engines: { omxterm: string; api: string };
   backend: string;
+  view?: { entry: string; action: string; title: string };
 };
 export type PackageRuntime = { appVersion: string; apiVersion: string };
 export const PACKAGE_LIMITS = {
@@ -80,7 +82,15 @@ export function packagePath(name: string): string {
 export function parseManifest(value: unknown): PackageManifest {
   if (
     !isRecord(value) ||
-    !keys(value, ["format", "id", "version", "name", "engines", "backend"]) ||
+    !keys(value, [
+      "format",
+      "id",
+      "version",
+      "name",
+      "engines",
+      "backend",
+      ...("view" in value ? ["view"] : []),
+    ]) ||
     value.format !== 1 ||
     !validId(value.id) ||
     typeof value.version !== "string" ||
@@ -102,7 +112,25 @@ export function parseManifest(value: unknown): PackageManifest {
   )
     throw new PackageError("invalid-package");
   packagePath(value.backend);
+  if ("view" in value) validateView(value.view, value.id);
   return value as PackageManifest;
+}
+function validateView(view: unknown, id: string): void {
+  if (
+    !isRecord(view) ||
+    !keys(view, ["entry", "action", "title"]) ||
+    !isExtensionResource(view.entry) ||
+    !view.entry.endsWith(".html") ||
+    !validId(view.action) ||
+    !view.action.startsWith(`${id}.`) ||
+    view.action.slice(id.length + 1).includes(".") ||
+    typeof view.title !== "string" ||
+    !view.title.trim() ||
+    view.title.length > 128 ||
+    /[\x00-\x1f\x7f]/.test(view.title)
+  )
+    throw new PackageError("invalid-package");
+  packagePath(view.entry);
 }
 export function checkCompatibility(
   manifest: PackageManifest,
@@ -156,6 +184,11 @@ type ArchiveNames = Map<
   string,
   { name: string; directory: boolean; explicit: boolean }
 >;
+function requireRegularEntry(names: ArchiveNames, name: string): void {
+  const entry = names.get(archiveKey(name));
+  if (!entry || entry.directory || entry.name !== name)
+    throw new PackageError("invalid-package");
+}
 function archiveKey(name: string): string {
   // Conservative Unicode caseless identity: catches final sigma, sharp-s and
   // compatibility aliases without promising filesystem-specific normalization.
@@ -246,15 +279,22 @@ export async function syncDirectory(directory: string): Promise<void> {
 }
 
 export async function extractPackage(
-  archive: string,
+  archive: string | Buffer,
   destination: string,
   runtime: PackageRuntime,
 ): Promise<{ digest: string; manifest: PackageManifest }> {
-  if (path.extname(archive).toLowerCase() !== ".omxext")
+  if (
+    typeof archive === "string" &&
+    path.extname(archive).toLowerCase() !== ".omxext"
+  )
     throw new PackageError("invalid-package");
-  // One bounded immutable snapshot supplies both digest and extraction. A caller
-  // changing the source after selection cannot publish bytes under the wrong hash.
-  const bytes = await readBoundedFile(archive, PACKAGE_LIMITS.archiveBytes);
+  if (Buffer.isBuffer(archive) && archive.length > PACKAGE_LIMITS.archiveBytes)
+    throw new PackageError("invalid-package");
+  // Capture before the first await. The management service can retain approved
+  // bytes rather than reopen a mutable chooser path after the trust dialog.
+  const bytes = Buffer.isBuffer(archive)
+    ? Buffer.from(archive)
+    : await readBoundedFile(archive, PACKAGE_LIMITS.archiveBytes);
   const digest = createHash("sha256").update(bytes).digest("hex");
   const zip = await fromBufferPromise(bytes, { strictFileNames: true }).catch(
     () => {
@@ -303,12 +343,8 @@ export async function extractPackage(
       ),
     );
     checkCompatibility(manifest, runtime);
-    if (
-      !names.has(archiveKey(manifest.backend)) ||
-      names.get(archiveKey(manifest.backend))?.directory ||
-      names.get(archiveKey(manifest.backend))?.name !== manifest.backend
-    )
-      throw new PackageError("invalid-package");
+    requireRegularEntry(names, manifest.backend);
+    if (manifest.view) requireRegularEntry(names, manifest.view.entry);
     for (const item of [...names.values()]
       .filter((item) => item.directory)
       .sort((a, b) => b.name.length - a.name.length))

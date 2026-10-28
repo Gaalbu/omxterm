@@ -1,9 +1,27 @@
-import type { BrowserWindow } from "electron";
+import type { BrowserWindow, Event, Input } from "electron";
+import { hasNativeAltGr } from "./keyboard-modifiers";
+import { coreActionForKeyboardInput } from "./action-catalog";
 import type { TrustedWebContents } from "./terminal-ipc-types";
 import { coreActionKeybinds, type CoreActionCatalog } from "./action-catalog";
 import type { startCommandPalette } from "./command-palette";
 import type { KeybindCapture } from "./keybind-capture";
 import { deliverKeybindsFromKeyEvents } from "./keybind-delivery";
+
+export function deliverExtensionKeybind(
+  catalog: CoreActionCatalog,
+  event: Event,
+  input: Input,
+) {
+  if (input.type !== "keyDown" && input.type !== "rawKeyDown") return;
+  const action = coreActionForKeyboardInput(
+    catalog,
+    { ...input, altGr: hasNativeAltGr(input) },
+    process.platform,
+  );
+  if (!action) return;
+  event.preventDefault();
+  action.invoke();
+}
 
 export function createWindowActionSender(
   palette: () => ReturnType<typeof startCommandPalette> | undefined,

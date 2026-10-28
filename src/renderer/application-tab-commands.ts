@@ -2,6 +2,7 @@ import type {
   TerminalSessionId,
   TerminalTabCommand,
 } from "../shared/terminal-contract";
+import type { ExtensionsBridge } from "../shared/extensions";
 import type { TerminalPaneCommand } from "../shared/terminal-panes";
 
 // Command state belongs to the application-tab lifetime, including the captured
@@ -16,6 +17,8 @@ export function createApplicationTabCommands<Tab>(
     readonly close: (tab: Tab | undefined) => void;
     readonly closeSession: (id: TerminalSessionId) => void;
     readonly pane: (command: TerminalPaneCommand) => void;
+    readonly extensions?: ExtensionsBridge | undefined;
+    readonly canFocus?: (() => boolean) | undefined;
   },
 ) {
   let pendingClose: Tab | undefined;
@@ -23,6 +26,15 @@ export function createApplicationTabCommands<Tab>(
     handle(command: TerminalTabCommand) {
       if (!options.available()) return;
       switch (command.action) {
+        case "open-extension":
+          void options.extensions
+            ?.request({
+              operation: "open",
+              token: command.token,
+              accepted: options.canFocus?.() !== false,
+            })
+            .catch(() => {});
+          return;
         case "new":
           void options.create().catch(() => {});
           return;

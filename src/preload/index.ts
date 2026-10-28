@@ -3,6 +3,11 @@ import { createHostedContentBridge } from "./extension-view-bridge";
 import { createPaletteTransport } from "./command-palette-bridge";
 import { createAboutBridge } from "./about-bridge";
 import { createSettingsBridge } from "./settings-bridge";
+import {
+  extensionsIpc,
+  isExtensionsRequest,
+  type ExtensionsBridge,
+} from "../shared/extensions";
 import type { TerminalBridge } from "../shared/terminal-bridge";
 import {
   isWindowChromeCommand,
@@ -390,5 +395,12 @@ contextBridge.exposeInMainWorld(
     terminal: Object.freeze(terminal),
     about: Object.freeze(createAboutBridge(actionTransport)),
     settings: Object.freeze(createSettingsBridge(actionTransport)),
+    extensions: Object.freeze<ExtensionsBridge>({
+      request(request) {
+        if (!isExtensionsRequest(request))
+          return Promise.reject(new TypeError("Invalid extensions request"));
+        return ipcRenderer.invoke(extensionsIpc, request);
+      },
+    }),
   }),
 );

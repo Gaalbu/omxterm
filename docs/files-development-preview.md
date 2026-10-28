@@ -1,0 +1,148 @@
+# Files development preview implementation
+
+Development preview for [#723](https://github.com/luizomf/omxterm/issues/723).
+Linux ARM64 source builds wire the production Settings install route and shared
+Files action. This is not yet a qualified distribution or a stable extension SDK.
+
+## Concrete consumer
+
+`extensions/files` is separately built, not imported into application main or the
+terminal renderer. Maintainers run `node scripts/build-files-extension.mjs` to
+produce `dist/extensions/files-0.1.0.omxext`. This build needs Python 3's ZIP
+writer and the locked esbuild tool; users receive the precompiled archive and do
+not run Python/npm or compilation to install it. An existing destination is not
+overwritten. The archive includes its MIT license. Existing #622 attribution and
+third-party notices elsewhere in the application remain unchanged.
+
+The backend lists directories using `opendir` and sequential `lstat`, with a
+5,000-entry visit limit and explicit truncation. Replies contain at most100 rows,
+with at most eight active backend invocations; snapshots/cursors are ephemeral,
+not filesystem watchers. At most eight completed snapshots and eight deletion
+confirmations are retained. At capacity, a new request expires the oldest retained
+token rather than allowing abandoned views to reserve capacity forever. In-flight
+reads still count toward the limit and are never evicted. Expired cursors require
+an explicit refresh; expired confirmations require fresh confirmation and can never
+be rebound to a new entry. No timers, polling or automatic mutation retry are added.
+Links are labeled as links. Home and explicit absolute
+local paths are supported. Exclusive file creation and nonrecursive folder
+creation never overwrite an existing entry. Rename/move uses the host-provided
+async no-replace primitive, not a check-then-rename or copy/delete fallback.
+
+Permanent deletion requires a separately issued, one-shot confirmation token
+bound to the captured entry path/device/inode. This is protection against ordinary
+UI retargeting, not a hostile same-user filesystem race sandbox. Symlink entries
+are removed/moved without following their targets. Recursive deletion may fail
+after partial effects and is then outcome-unknown. Linux trash invokes the OS
+`/usr/bin/gio trash -- <literal-path>` facility asynchronously with no shell, an
+eight-second timeout and bounded output; unavailable or failed trash never falls
+back to permanent deletion. Dispatched desktop-command failure is conservatively
+unknown. No failed or uncertain mutation is retried automatically.
+
+## Owned composition modules
+
+`createExtensionManager` owns consent/store/runtime/view composition. It reopens
+an independent UI pin for the exact backend generation/digest, then revalidates
+before creating views. Invocation context is copied before asynchronous
+activation. Issued actions retain the installation generation/digest and local
+revocation revision; runtime acquisition checks that exact selection before spawning
+or importing code. Retained old actions never acquire a replacement installation.
+Management revokes local callbacks and pending admissions, publishes
+through the existing short store transaction and joins known views/backend;
+status distinguishes installed metadata from local dormant/starting/active/
+stopping/failed/unknown and other-instance uncertainty. Disposal latches admission
+and reports actual known settlement rather than treating a kill request as exit.
+Local backend state is read from its actual owned lifetime, including exit and stream
+settlement. A request-local refusal does not change an active backend to unknown;
+view/management cleanup uncertainty is still reported separately.
+`startApplicationExtensions` connects the production startup, Settings, shared
+action catalog and Quit. Startup opens infrastructure but never imports installed
+code. Settings → Extensions offers local selection, explicit native trust,
+Refresh, enable/disable and uninstall. Selecting another archive for the same ID
+is an explicit replacement/reinstall with the observed generation. Its captured
+bytes, identity, version and digest are shown before approval; third-party authors
+remain responsible for trusted code, including its filesystem/program/network
+access. Core-owned Settings controls/statuses and native trust/error dialogs use the
+configured en-US/pt-BR language; retained controls relabel without replaying requests
+or changing their captured generation. This does not add an extension localization
+SDK. Missing runtime/store infrastructure leaves terminals usable.
+
+Files appears in the shared palette, File menu and terminal context menu with no
+default or configurable shortcut. Terminal-popup actions must claim the same live,
+one-shot popup/window target as core actions. All explicit openings pass through
+core renderer modal admission before activation. An already-admitted opening that
+finishes during a modal appends a background tab without stealing the modal's selected
+owner or restoration generation. Each invocation owns its copied terminal
+context and independent view pin, even within one window; backends remain shared.
+Use terminal directory reports captured local OSC7 provenance, never later
+selection or process inspection. No local report means an explicit unavailable
+result, with Home and explicit paths still usable. Views reserve a 34-DIP
+core-owned recovery strip, further intersected with the real renderer slot.
+
+Management shows registry generations and tombstones separately from local state,
+other-instance uncertainty and Pending Cleanup. Normal Quit revokes admission,
+joins known extension retirement for at most 15 seconds and records an unsettled
+outcome without vetoing Quit. Native PTY exit joining remains independent.
+
+The view router now multiplexes epochs by actual owner WebContents, with issued
+ID-to-host mappings and one monotonic presentation revision per window. A new
+selection must acknowledge hiding every other epoch. The child preload exposes
+bounded own-view requests; main validates the actual sender/main frame and live
+view, captures bounded JSON and binds cancellation to view destruction. A payload
+cannot choose a backend/window/epoch. The terminal renderer has no Files request
+route. Late replies after retirement cannot regain view authority.
+
+## Build and evidence boundary
+
+Normal Linux ARM64 application builds include the bootstrap, independent native
+lease addon and Files no-replace addon. The tiny Node-API8 worker-pool adapter
+uses Linux `renameat2(RENAME_NOREPLACE)`, at most32 pending calls and fixed error
+categories. Destination conflicts, permissions, unsupported filesystems and
+cross-device moves fail explicitly. Other platforms are not enabled by this
+preview and have no overwrite fallback. Explicit runtime builds remain available.
+No fuse or Electron version change is required.
+
+`test/fixtures/files-move-native.mjs <absolute-addon>` must run under the bundled
+Electron executable with `ELECTRON_RUN_AS_NODE=1`, as an ordinary Linux ARM64
+user, inside an assigned disposable environment. It checks actual file/directory/
+symlink moves, destination races, permissions and cross-device refusal. Source
+inspection and controlled adapter tests are not native qualification.
+
+The opt-in `test/integration/files-production.test.ts` runs the already-built
+production entry point when `OMXTERM_FILES_PRODUCTION_SOURCE` names its exact
+source directory on an assigned Linux ARM64 guest. Build the app and separate
+archive first. `OMXTERM_FILES_PRODUCTION_EVIDENCE` optionally captures fixture-only
+screenshots and the native supervisor receipt. Native chooser/consent answers are
+fixture-controlled, not physical-dialog-widget qualification; terminal input is
+synthetic Chromium input. Native input-lane admission is verified separately.
+Qualification is phase-specific, not one final replay of every workflow:
+
+- A production vertical passed local Settings trust, shared actions, two views sharing
+  a backend, create/folder/no-clobber move/trash/confirmed deletion, backend loss without
+  replay, disable/uninstall, retained draft, same-PTY continuity and joined Quit.
+  The composed native window was inspected; selected hosted Copy/Paste and About
+  were exercised separately.
+- After author corrections, native checks passed dormant installation, modal refusal,
+  and actual hosted-renderer crash retirement while the same core remained responsive
+  and its backend remained active. No per-view renderer-process isolation is promised.
+- A separate headless Electron module qualification used the real manager/store,
+  runtime, Files archive, native leases and children: Disable joined actual backend
+  exit/close before Enable; Enable stayed dormant; explicit opening acquired a fresh
+  generation/backend and independent view pin. Both children settled cooperatively.
+  View presentation was controlled in this case: it is not a graphical recovery pass.
+  Headless renderer/main/store checks separately cover management admission and stale
+  generations. A resolved DOM click is not proof that a disabled control sent a request.
+
+Failed composite recovery attempts remain failures; their historical Disable
+admission, an earlier directory-list failure and an uncorrelated negative backend
+reply remain unexplained. Correcting private fixture readiness and an invalid
+optional-argument assertion does not retroactively turn those attempts into passes.
+
+An actual main-process SIGKILL observation delivered and began reading pinned A;
+its hosted renderer exited. An independent backend pin retained A through uninstall
+and collection attempts until that backend's kernel exit, after which A was collected.
+The original orphan's exit code was not observed. This is bounded lifetime evidence,
+not proof of universal browser termination or later/fresh A or B read exclusion in a
+surviving renderer. **Surviving-browser main-death file-read exclusion remains
+unqualified.** Normal retirement or all-browser exit cannot establish that property.
+These Linux ARM64 observations do not qualify other platforms, a display/locale
+matrix, signed distribution or a stable SDK.

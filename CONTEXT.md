@@ -33,7 +33,9 @@ Application Tabs, with exactly one selected. It starts with a Terminal Tab.
 
 **Application Tab** — A terminal, graphical Settings or internal hosted-content entry in one window's
 single ordered tab collection. Reordering and literal/next/previous navigation
-include all kinds; hosted activation is not user-accessible. Removing the last Application Tab follows the window-close
+include all kinds. Separately installed Files preview activation is available through
+its explicit shared action, within the documented preview qualification limits.
+Removing the last Application Tab follows the window-close
 lifecycle, including pending failure acknowledgement.
 
 **Terminal Tab** — An Application Tab owning one or more Terminal Panes,
@@ -271,6 +273,13 @@ management need not stop.
 **Operational Event** — Safe structured metadata about OMXTerm lifecycle,
 validation, IPC, PTY control or failures. Local logs exclude Terminal Payload,
 clipboard, configuration and environment contents, commands and titles.
+
+**Files Development Preview** — Separately installed, precompiled Linux ARM64
+extension consumed through Settings captured-byte trust and shared namespaced
+actions. Its application owner composes independent backend/view version pins,
+per-invocation terminal context, local management and bounded Quit retirement.
+No startup code activation, default/configurable shortcut or stable SDK is implied;
+see [the preview contract](docs/files-development-preview.md) for qualification limits.
 
 **Extension View Host** — Internal owner of lazy native web-content views in a
 nonpersistent epoch. It retains a captured package reader/pin, materializes bounded
