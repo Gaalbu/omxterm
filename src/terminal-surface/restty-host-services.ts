@@ -69,10 +69,12 @@ export function resttyHostServices(
   delivery: SemanticInputDelivery,
   options: TerminalSurfaceOptions,
   revealInput: () => void,
+  isLive: () => boolean = () => true,
 ): PatchedResttyServices {
   return {
     ptyTransport: transport,
     beforeInput: ({ text, source }) => {
+      if (!isLive()) return null;
       if (source !== "paste") {
         if (source === "key" && text.length > 0) revealInput();
         return text;
@@ -81,7 +83,7 @@ export function resttyHostServices(
       return null;
     },
     onOsc: (command: number, payload: string) => {
-      if (command !== 52 || !options.clipboard) return;
+      if (!isLive() || command !== 52 || !options.clipboard) return;
       const text = decodeOsc52Write(payload);
       if (text === undefined) return;
       void options.clipboard

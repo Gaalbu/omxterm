@@ -137,6 +137,7 @@ export const brazilianPortugueseMessages: Readonly<
   "chrome.closeWindow": "Fechar Janela",
 
   "terminal.surface": "Superfície do terminal",
+  "terminal.sshExit": "SSH encerrou (código {code}).",
   "terminal.tabs": "Abas do terminal",
   "terminal.userFileErrors": "Erros nos arquivos do usuário",
   "terminal.surfaceFailure": "Falha na superfície do terminal",

@@ -40,7 +40,9 @@ export interface TerminalBridge {
   start(
     surfaceId?: string,
     workingDirectoryOf?: TerminalSessionId,
+    launchToken?: string,
   ): Promise<TerminalSessionId>;
+  sshPane?(token: string, accepted: boolean | null): void;
   input(sessionId: TerminalSessionId, data: string): void;
   resize(sessionId: TerminalSessionId, size: TerminalSize): void;
   close(sessionId: TerminalSessionId, reason?: "rendering-failure"): void;

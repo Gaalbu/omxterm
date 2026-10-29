@@ -232,6 +232,17 @@ continuations remain refused; see the [terminal contract](docs/spec.md#terminal-
 
 ## Extensions
 
+**SSH Connect** — A separately installed Linux ARM64 preview application page
+with an incomplete bounded OpenSSH alias index and distinct quick-connect field.
+Its declared `terminal.openSsh.v1` capability transfers a typed target to core,
+which owns literal system-ssh launch, PTY, Busy/close/Quit and retained nonzero
+exit output independently of extension lifetime. It is not an SSH broker,
+credential vault or reconnect service. See [the guide](docs/ssh-connect.md).
+
+**Ended-readable Surface** — Terminal rendering/font resources retained after
+an ordinary nonzero SSH Connect exit for local copy/search/refit until pane
+removal. It owns no live native session or input authority and is not Busy.
+
 These terms cover the internal modules, Linux ARM64 Files development preview
 and broader product direction; they do not define a stable extension SDK.
 

@@ -68,6 +68,21 @@ export function createTabSelection<State>(options: {
   };
 }
 
+export function terminalSessionLaunch(
+  payload: unknown,
+  reject: () => void,
+  consume?: (token: string) => import("./ssh-terminal-launch").SshLaunch,
+) {
+  const launch = terminalSessionStart(payload, reject);
+  const ssh =
+    launch.launchToken === undefined
+      ? undefined
+      : consume?.(launch.launchToken);
+  if (launch.launchToken !== undefined && !ssh)
+    throw new Error("Unavailable SSH pane");
+  return { ...launch, ssh };
+}
+
 // A legacy start names only a Surface identity; a pane start may also name
 // the session whose reported directory it inherits.
 export function terminalSessionStart(

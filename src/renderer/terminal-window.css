@@ -31,6 +31,25 @@ body {
   );
 }
 
+.terminal-exit-notice {
+  position: absolute;
+  z-index: 5;
+  right: 12px;
+  bottom: 12px;
+  max-width: calc(100% - 24px);
+  padding: 8px 12px;
+  color: var(--terminal-foreground, #eee);
+  background: var(--terminal-background, #111);
+  border: 1px solid currentColor;
+  font: 13px/1.5 sans-serif;
+}
+.terminal-exit-notice button {
+  color: inherit;
+  background: transparent;
+  border: 1px solid currentColor;
+  cursor: pointer;
+}
+
 #terminal-window-content {
   display: flex;
   flex: 1 1 auto;

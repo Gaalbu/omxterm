@@ -12,7 +12,6 @@ import {
 import { terminalIpc } from "../shared/terminal-ipc";
 import { createTerminalContextMenuTarget } from "./terminal-context-menu";
 import {
-  LocalTerminalSessionStartError,
   type LocalTerminalSession,
   type TerminalSessionLaunchKind,
 } from "./local-terminal-session";
@@ -41,12 +40,16 @@ export type {
   TrustedWebContents,
 } from "./terminal-ipc-types";
 import type { OperationalEventLog } from "./operational-events";
-import { terminalExitOutcome } from "./terminal-session-failure";
+import {
+  retainedSshExit,
+  terminalExitOutcome,
+  throwSessionStartError,
+} from "./terminal-session-failure";
 import { isTerminalRendererConfiguration } from "../shared/user-configuration";
 import { createWorkingDirectoryTracker } from "./terminal-working-directories";
 import {
   createTabSelection,
-  terminalSessionStart,
+  terminalSessionLaunch,
 } from "./terminal-tab-selection";
 import type { TerminalFontData } from "../shared/terminal-font-data";
 import type { LocalImageData } from "../shared/local-image";
@@ -461,9 +464,12 @@ function createTerminalIpcController(
 
   const start = (payload?: unknown): TerminalSessionId => {
     if (disposed) throw new Error("Terminal IPC controller is disposed");
-    const launch = terminalSessionStart(payload, () =>
-      reject("ipc", "invalid-payload"),
+    const launch = terminalSessionLaunch(
+      payload,
+      () => reject("ipc", "invalid-payload"),
+      options.consumeSshLaunch,
     );
+    const { ssh } = launch;
     if (launch.surfaceId !== undefined) surfaceFonts.start(launch.surfaceId);
     const workingDirectory = workingDirectories.inherited(
       launch.workingDirectoryOf,
@@ -490,7 +496,7 @@ function createTerminalIpcController(
               else ownerLostBeforeRegistration = true;
               return;
             }
-            workingDirectories.observe(sessionId, data);
+            if (!ssh) workingDirectories.observe(sessionId, data);
             const outputEnd = outputFlow.record(data);
             if (outputEnd === undefined) {
               closeSession(sessionId);
@@ -523,6 +529,7 @@ function createTerminalIpcController(
                 options.webContents.send(terminalIpc.exit, {
                   sessionId,
                   ...exit,
+                  ...retainedSshExit(exit, !!ssh, state?.closed === true),
                 });
               }
               options.onSessionExit(exit, context);
@@ -542,7 +549,8 @@ function createTerminalIpcController(
             }
           },
         },
-        workingDirectory,
+        ssh ? undefined : workingDirectory,
+        ssh,
       );
     } catch (cause) {
       if (windowId !== undefined)
@@ -553,18 +561,10 @@ function createTerminalIpcController(
           code: null,
           durationMs: elapsedMilliseconds(startedAt),
         });
-      const launchKind =
-        cause instanceof LocalTerminalSessionStartError
-          ? cause.launchKind
-          : "default-shell";
-      options.onSessionStartError({
-        launchKind,
-        liveSessions: countLiveSessions(sessions),
-      });
-      throw new Error(
-        launchKind === "explicit-command"
-          ? "The requested command could not be started"
-          : "The Default Shell could not be started",
+      throwSessionStartError(
+        cause,
+        countLiveSessions(sessions),
+        options.onSessionStartError,
       );
     }
 

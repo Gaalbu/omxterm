@@ -30,7 +30,10 @@ type ActivatedBackend = {
 // Linux ARM64 preview primitive; unsupported platforms refuse explicitly.
 ```
 
-`activate` receives the real epoch-lifetime cancellation signal; individual invocations receive their own real signal. Deactivation is best effort and receives a grace-bounded signal. The concrete Files no-replace operation runs in the backend's worker-pool addon, with no overwrite fallback. There are no dummy action/tab/terminal methods, automatic registrations, or stable discovery promises. The module owns its channels, timers and pending calls; future capability registrations need their own concrete consumer and retirement contract.
+`activate` receives the real epoch-lifetime cancellation signal; individual invocations receive their own real signal. Deactivation is best effort and receives a grace-bounded signal. The concrete Files no-replace operation runs in the backend's worker-pool addon, with no overwrite fallback. The separate [SSH Connect](ssh-connect.md) consumer uses a declared, own-view
+main capability (`terminal.openSsh.v1`), not a backend-owned PTY. Its package
+requires host0.24.0-dev.0; API0.1.x and existing Files manifests remain compatible.
+There are no dummy action/tab/terminal methods, automatic registrations, or stable discovery promises. The module owns its channels, timers and pending calls; future capability registrations need their own concrete consumer and retirement contract.
 
 ## Bootstrap and immutable-version handoff
 

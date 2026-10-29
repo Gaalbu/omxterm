@@ -117,6 +117,54 @@ it("leaves installed-unused dormant and gives each invocation its own captured t
   expect(runtime.retire).not.toHaveBeenCalled();
   expect(await manager.dispose()).toBe(true);
 });
+it.each(["cross-instance", "local", "source", "request", "backend"])(
+  "separates store admission from local transfer: %s",
+  async (change) => {
+    const { manager, views, backend } = await setup();
+    const source = new AbortController();
+    const request = new AbortController();
+    await manager.open(manifest.id, {
+      owner: {},
+      signal: source.signal,
+      terminalDirectory: null,
+    });
+    const input = views[0]!;
+    const revalidate = input.pin.revalidate.bind(input.pin);
+    let release!: () => void;
+    let admitted!: () => void;
+    const entered = new Promise<void>((resolve) => {
+      admitted = resolve;
+    });
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    vi.spyOn(input.pin, "revalidate").mockImplementation(async () => {
+      const accepted = await revalidate();
+      admitted();
+      await gate;
+      return accepted;
+    });
+    const commit = vi.fn();
+    const result = input.admit(request.signal, commit).then(
+      () => "accepted",
+      () => "refused",
+    );
+    await entered;
+    if (change === "cross-instance")
+      await packages.setEnabled(manifest.id, 1, false);
+    if (change === "local") await manager.setEnabled(manifest.id, 1, false);
+    if (change === "source") source.abort();
+    if (change === "request") request.abort();
+    if (change === "backend") backend.state = () => "failed";
+    release();
+    expect(await result).toBe(
+      change === "cross-instance" ? "accepted" : "refused",
+    );
+    expect(commit).toHaveBeenCalledTimes(change === "cross-instance" ? 1 : 0);
+    await manager.dispose();
+  },
+);
+
 it("disable revokes calls and independently retires all local views and the backend", async () => {
   const { manager, views, runtime, call } = await setup();
   await manager.open(manifest.id, {

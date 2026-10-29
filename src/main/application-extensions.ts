@@ -64,11 +64,14 @@ function applicationViews(
     target,
     signal: epochSignal,
     call,
+    admit,
     retired,
   }: Parameters<Parameters<typeof createExtensionManager>[0]["createViews"]>[0],
 ) {
   const window = target.owner as BrowserWindow;
   const view = pin.manifest.view!;
+  const viewOwner = {};
+  let viewId: string | undefined;
   const host = startExtensionViewHost({
     ipcMain,
     owner: window,
@@ -102,6 +105,30 @@ function applicationViews(
                   "No local terminal directory was reported at invocation. Use Home or enter a path.",
               },
         );
+      if (value && typeof value === "object" && !Array.isArray(value)) {
+        if (
+          value.operation === "host.capabilities" &&
+          Object.keys(value).length === 1
+        )
+          return Promise.resolve({
+            capabilities: pin.manifest.capabilities ?? [],
+          });
+        if (value.operation === "terminal.openSsh.v1") {
+          if (
+            !pin.manifest.capabilities?.includes("terminal.openSsh.v1") ||
+            Object.keys(value).sort().join() !== "operation,target" ||
+            !viewId
+          )
+            return Promise.reject(new PackageError("unavailable"));
+          return options.ssh.open(
+            window,
+            viewOwner,
+            viewId,
+            value.target,
+            (commit) => admit(signal, commit),
+          );
+        }
+      }
       return call(value, signal);
     },
     onState(state) {
@@ -110,7 +137,9 @@ function applicationViews(
   });
   return {
     open: async () => {
-      await host.open({ entryResource: view.entry, title: view.title });
+      viewId = (
+        await host.open({ entryResource: view.entry, title: view.title })
+      ).id;
     },
     retire: host.retire,
   };
@@ -156,10 +185,14 @@ async function applicationManager(
   });
 }
 
-// Startup creates infrastructure, never activates installed code. Unsupported
-// platforms retain Settings with an explicit preview-unavailable result.
-export async function startApplicationExtensions(options: {
+type ApplicationExtensionsOptions = {
   applicationRoot: string;
+  ssh: Pick<
+    ReturnType<
+      typeof import("./ssh-terminal-launch").createSshTerminalLaunch<BrowserWindow>
+    >,
+    "open"
+  >;
   isTrustedSender(event: IpcEvent): boolean;
   changed(): void;
   translator(): Translator;
@@ -167,7 +200,13 @@ export async function startApplicationExtensions(options: {
   keybind: NonNullable<
     Parameters<typeof startExtensionViewHost>[0]["onKeybind"]
   >;
-}) {
+};
+
+// Startup creates infrastructure, never activates installed code. Unsupported
+// platforms retain Settings with an explicit preview-unavailable result.
+export async function startApplicationExtensions(
+  options: ApplicationExtensionsOptions,
+) {
   const windows = new Map<
     BrowserWindow,
     (sessionId?: string) => ExtensionTarget

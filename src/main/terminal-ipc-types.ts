@@ -69,7 +69,11 @@ export interface TerminalIpcControllerOptions {
   readonly createSession: (
     callbacks: SessionCallbacks,
     workingDirectory?: string,
+    ssh?: import("./ssh-terminal-launch").SshLaunch,
   ) => LocalTerminalSession;
+  readonly consumeSshLaunch?: (
+    token: string,
+  ) => import("./ssh-terminal-launch").SshLaunch;
   readonly onSessionStartError: (
     context: TerminalSessionStartErrorContext,
   ) => void;

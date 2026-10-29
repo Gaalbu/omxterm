@@ -48,11 +48,15 @@ export function startTerminalWindow(bridge: Window["omxterm"]): void {
         mount: mountResttyTerminalSurface,
         loadFontData: bridge.terminal.fontData,
         surfaceFailureBanner: surfaceFailure,
-        createAdapter: (configurationId, workingDirectoryOf) =>
+        ...(bridge.terminal.sshPane
+          ? { sshPane: bridge.terminal.sshPane }
+          : {}),
+        createAdapter: (configurationId, workingDirectoryOf, launchToken) =>
           createElectronTerminalAdapter(
             bridge.terminal,
             configurationId,
             workingDirectoryOf,
+            launchToken,
           ),
         subscribeToFontZoom: bridge.terminal.onFontZoom,
         subscribeToConfigurationUpdates: bridge.terminal.onConfigurationUpdate,

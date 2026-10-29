@@ -31,6 +31,7 @@ export type PackageManifest = {
   name: string;
   engines: { omxterm: string; api: string };
   backend: string;
+  capabilities?: ["terminal.openSsh.v1"];
   view?: { entry: string; action: string; title: string };
 };
 export type PackageRuntime = { appVersion: string; apiVersion: string };
@@ -90,6 +91,7 @@ export function parseManifest(value: unknown): PackageManifest {
       "engines",
       "backend",
       ...("view" in value ? ["view"] : []),
+      ...("capabilities" in value ? ["capabilities"] : []),
     ]) ||
     value.format !== 1 ||
     !validId(value.id) ||
@@ -111,10 +113,21 @@ export function parseManifest(value: unknown): PackageManifest {
     typeof value.backend !== "string"
   )
     throw new PackageError("invalid-package");
+  validateCapabilities(value);
   packagePath(value.backend);
   if ("view" in value) validateView(value.view, value.id);
   return value as PackageManifest;
 }
+function validateCapabilities(value: Record<string, unknown>): void {
+  if (
+    "capabilities" in value &&
+    (!Array.isArray(value.capabilities) ||
+      value.capabilities.length !== 1 ||
+      value.capabilities[0] !== "terminal.openSsh.v1")
+  )
+    throw new PackageError("invalid-package");
+}
+
 function validateView(view: unknown, id: string): void {
   if (
     !isRecord(view) ||

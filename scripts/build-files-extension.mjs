@@ -21,8 +21,17 @@ const sha256 = (bytes) => createHash("sha256").update(bytes).digest("hex");
 // Maintainer build only. A transported git archive supplies its original commit
 // explicitly; that assertion is recorded, not represented as a local Git check.
 export async function buildFilesExtension(output, suppliedCommit) {
+  return buildExtension("files", output, suppliedCommit);
+}
+
+export async function buildExtension(name, output, suppliedCommit) {
+  if (name !== "files" && name !== "ssh")
+    throw new Error("Unknown extension source");
   const manifest = JSON.parse(
-    await readFile(path.join(root, "extensions/files/extension.json"), "utf8"),
+    await readFile(
+      path.join(root, `extensions/${name}/extension.json`),
+      "utf8",
+    ),
   );
   const commit =
     suppliedCommit ??
@@ -42,14 +51,14 @@ export async function buildFilesExtension(output, suppliedCommit) {
     throw new Error("Commit source changes before building a release artifact");
   const destination = path.resolve(
     output ??
-      path.join(root, `dist/extensions/files-${manifest.version}.omxext`),
+      path.join(root, `dist/extensions/${name}-${manifest.version}.omxext`),
   );
-  const stage = await mkdtemp(path.join(os.tmpdir(), "omxterm-files-build-"));
+  const stage = await mkdtemp(path.join(os.tmpdir(), `omxterm-${name}-build-`));
   const published = [];
   try {
     await build({
       absWorkingDir: root,
-      entryPoints: ["extensions/files/backend.ts"],
+      entryPoints: [`extensions/${name}/backend.ts`],
       bundle: true,
       platform: "node",
       format: "esm",
@@ -57,18 +66,23 @@ export async function buildFilesExtension(output, suppliedCommit) {
     });
     await build({
       absWorkingDir: root,
-      entryPoints: ["extensions/files/view.ts"],
+      entryPoints: [`extensions/${name}/view.ts`],
       bundle: true,
       platform: "browser",
       format: "iife",
       outfile: path.join(stage, "view.js"),
     });
-    for (const name of ["index.html", "files.css"])
+    for (const resource of ["index.html", `${name}.css`])
       await cp(
-        path.join(root, "extensions/files", name),
-        path.join(stage, name),
+        path.join(root, "extensions", name, resource),
+        path.join(stage, resource),
       );
     await cp(path.join(root, "LICENSE"), path.join(stage, "LICENSE"));
+    if (name === "ssh")
+      await cp(
+        path.join(root, "extensions/ssh/NOTICE"),
+        path.join(stage, "NOTICE"),
+      );
     await writeFile(
       path.join(stage, "extension.json"),
       JSON.stringify(manifest),
@@ -84,7 +98,7 @@ export async function buildFilesExtension(output, suppliedCommit) {
         `import pathlib,sys,zipfile
 source=pathlib.Path(sys.argv[1])
 with zipfile.ZipFile(sys.argv[2], 'x', compression=zipfile.ZIP_DEFLATED) as archive:
- for name in ['extension.json','backend.mjs','index.html','files.css','view.js','LICENSE']:
+ for name in ['extension.json','backend.mjs','index.html','${name}.css','view.js','LICENSE'${name === "ssh" ? ",'NOTICE'" : ""}]:
   entry=zipfile.ZipInfo(name, (2026,1,1,0,0,0))
   entry.external_attr=0o100600 << 16
   entry.compress_type=zipfile.ZIP_DEFLATED

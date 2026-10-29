@@ -50,6 +50,9 @@ source/test boundaries and known limitations.
 | 0039 | [Own packaged web content by activation epoch](0039-own-packaged-web-content-by-epoch.md)                                      |
 | 0040 | [Run extension backends in owned bundled-Node children](0040-run-backends-in-owned-node-children.md)                           |
 
+[ADR0041: Transfer explicit SSH launches to core](0041-transfer-ssh-launches-to-core.md)
+adds the optional Linux ARM64 SSH Connect capability and ended-readable Surface.
+
 ## Related boundaries
 
 - Tabs/chrome/close/native completion: 0016, 0017, 0027, 0028, 0032, 0033.

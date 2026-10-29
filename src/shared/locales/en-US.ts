@@ -126,6 +126,7 @@ export const englishMessages = {
   "chrome.closeWindow": "Close Window",
 
   "terminal.surface": "Terminal Surface",
+  "terminal.sshExit": "SSH exited (code {code}).",
   "terminal.tabs": "Terminal Tabs",
   "terminal.userFileErrors": "User File Errors",
   "terminal.surfaceFailure": "Terminal Surface Failure",

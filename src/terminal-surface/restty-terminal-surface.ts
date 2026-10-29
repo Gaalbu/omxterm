@@ -1,4 +1,4 @@
-import type { PtyCallbacks, PtyTransport } from "restty";
+import { surfaceTransport } from "./surface-transport";
 import {
   PatchedRestty,
   type PatchedResttyPane,
@@ -133,11 +133,10 @@ export async function mountResttyTerminalSurface(
   options: TerminalSurfaceOptions = {},
 ): Promise<TerminalSurface> {
   let disposed = false;
+  let ended = false;
   const isCancelled = () => options.abortSignal?.aborted === true;
   const isInactive = () => disposed || isCancelled();
   let ready = false;
-  let transportConnected = false;
-  let ptyCallbacks: PtyCallbacks | undefined;
   let settledSize: TerminalSize | undefined;
   let removeRuntimeListener: (() => void) | undefined;
   let visibleLinkController: ResttyVisibleLinkController | undefined;
@@ -162,7 +161,7 @@ export async function mountResttyTerminalSurface(
   const delivery = resttyDelivery(
     adapter,
     options,
-    () => !isInactive() && ready,
+    () => !isInactive() && !ended && ready,
     () => pane?.runtime.terminal.isBracketedPasteEnabled() ?? false,
     revealInput,
   );
@@ -235,34 +234,15 @@ export async function mountResttyTerminalSurface(
     }
   };
 
-  const transport: PtyTransport = {
-    connect({ callbacks }) {
-      if (isInactive()) return;
-      ptyCallbacks = callbacks;
-      transportConnected = true;
-      callbacks.onConnect?.();
-    },
-    disconnect() {
-      if (!transportConnected) return;
-      transportConnected = false;
-      const callbacks = ptyCallbacks;
-      ptyCallbacks = undefined;
-      callbacks?.onDisconnect?.();
-    },
-    sendInput(data) {
-      if (!isInactive() && ready) adapter.write(data);
-      return !isInactive() && ready;
-    },
-    resize(cols, rows, meta) {
+  const { transport, output } = surfaceTransport(
+    adapter,
+    () => !isInactive() && !ended,
+    () => ready,
+    (size, meta) => {
       geometry.record(meta);
-      const size = { cols, rows };
       settledSize = size;
-      if (!isInactive() && ready) adapter.resize(size);
-      return !isInactive() && ready;
     },
-    isConnected: () => transportConnected && !isInactive(),
-    destroy: () => undefined,
-  };
+  );
 
   try {
     if (isInactive()) return createDisposedSurface();
@@ -281,7 +261,13 @@ export async function mountResttyTerminalSurface(
       root: container,
       surface: resttySurfaceConfig(terminalTheme, options.focus),
       terminal: { ...terminal, isSurfaceVisible },
-      services: resttyHostServices(transport, delivery, options, revealInput),
+      services: resttyHostServices(
+        transport,
+        delivery,
+        options,
+        revealInput,
+        () => !ended && !isInactive(),
+      ),
     });
     pane = restty.getActivePane() ?? undefined;
     if (!pane) throw new Error("Restty did not create its terminal pane");
@@ -292,8 +278,9 @@ export async function mountResttyTerminalSurface(
       if (event.type === "term-size") {
         visibleLinkController?.invalidate();
         settledSize = { cols: event.cols, rows: event.rows };
-      } else if (event.type === "title") options.onTitleRequest?.(event.title);
-      else if (event.type === "bell") options.onBell?.();
+      } else if (!ended && event.type === "title")
+        options.onTitleRequest?.(event.title);
+      else if (!ended && event.type === "bell") options.onBell?.();
     });
     await pane.runtime.lifecycle.init();
     if (isInactive()) return createDisposedSurface();
@@ -333,18 +320,24 @@ export async function mountResttyTerminalSurface(
     ready = true;
     await adapter.start({
       onOutput(data) {
-        if (!isInactive()) {
+        if (!isInactive() && !ended) {
           visibleLinkController?.invalidate();
-          ptyCallbacks?.onData?.(data);
+          output(data);
           // Hidden ingestion still retires renderer copies, including pending
           // image decodes, even when the document's RAF is throttled.
           if (!isSurfaceVisible()) pane?.runtime.render.refresh();
         }
       },
-      onExit: () => dispose(),
+      onExit: (exit) => {
+        ended = true;
+        delivery.dispose();
+        if (!exit.retained) dispose();
+        // Keep Restty and font resources for local selection/search/refit.
+        // No disconnect callback: Restty may clear its display on disconnect.
+      },
     });
     if (isInactive()) return createDisposedSurface();
-    if (settledSize) adapter.resize(settledSize);
+    if (settledSize) transport.resize(settledSize.cols, settledSize.rows);
     pane.runtime.render.refresh();
 
     return {

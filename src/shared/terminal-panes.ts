@@ -56,6 +56,7 @@ export interface TerminalTabSelection {
 // path (ADR 0006).
 export interface TerminalSessionStart {
   readonly surfaceId?: string;
+  readonly launchToken?: string;
   readonly workingDirectoryOf?: TerminalSessionId;
 }
 
@@ -127,7 +128,16 @@ export function isTerminalSessionStart(
   const record = value as Record<string, unknown>;
   return (
     keys.length > 0 &&
-    keys.every((key) => key === "surfaceId" || key === "workingDirectoryOf") &&
+    keys.every(
+      (key) =>
+        key === "surfaceId" ||
+        key === "workingDirectoryOf" ||
+        key === "launchToken",
+    ) &&
+    (record.launchToken === undefined ||
+      (typeof record.launchToken === "string" &&
+        /^[0-9a-f-]{36}$/.test(record.launchToken) &&
+        record.workingDirectoryOf === undefined)) &&
     (record.surfaceId === undefined || isSurfaceIdentity(record.surfaceId)) &&
     (record.workingDirectoryOf === undefined ||
       isTerminalSessionId(record.workingDirectoryOf))

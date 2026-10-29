@@ -4,8 +4,9 @@ Status: Accepted internal module, consumed by the Linux ARM64 Files development 
 
 ## Context
 
-Optional web content must not run in the terminal renderer or acquire terminal
-filesystem/PTY capabilities. Native child views paint above DOM, so ordinary
+Optional web content must not run in the terminal renderer or acquire raw
+terminal filesystem/PTY capabilities. ADR0041 adds one explicitly declared typed
+SSH launch request to core, not arbitrary executable or native-session authority. Native child views paint above DOM, so ordinary
 CSS stacking cannot provide modal exclusion. Installation ownership is separate
 from browser lifetime ([ADR 0038](0038-pin-immutable-installed-packages.md)).
 

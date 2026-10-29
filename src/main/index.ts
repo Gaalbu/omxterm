@@ -9,7 +9,6 @@ import {
 } from "electron";
 import * as nodePty from "node-pty";
 import { existsSync } from "node:fs";
-import { userInfo } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { terminalIpc } from "../shared/terminal-ipc";
@@ -24,6 +23,7 @@ import { startCommandPalette } from "./command-palette";
 import { terminalMenuActions } from "./terminal-menu-actions";
 import { extensionInvocationTarget } from "./extension-invocation-target";
 import { startApplicationExtensions } from "./application-extensions";
+import { registerSshTerminalLaunch } from "./ssh-terminal-ipc";
 import { terminalContextMenuTemplate } from "./terminal-context-menu";
 import * as applicationAbout from "./application-about";
 import { startApplicationSettings } from "./application-settings";
@@ -34,10 +34,8 @@ import {
 } from "./window-action-delivery";
 import { createKeybindCapture } from "./keybind-capture";
 import { createDefaultShellResolver, defaultShellName } from "./default-shell";
-import {
-  MalformedLaunchRequestError,
-  startupLaunchRequest,
-} from "./launch-request";
+import { MalformedLaunchRequestError } from "./launch-request";
+import { prepareStartup } from "./application-startup";
 import { registerTerminalShutdown } from "./terminal-shutdown";
 import { applyLinuxDisplayBackendDefault } from "./linux-display-backend";
 import { applyChromiumSandboxPolicy } from "./chromium-sandbox-policy";
@@ -63,7 +61,6 @@ import {
 import { registerWindowChrome } from "./window-chrome";
 import * as nativeMenu from "./native-application-menu";
 import { createNativeTerminalWindowTitleController } from "./terminal-window-attention";
-import { installedFontFamilyMetrics } from "./installed-font-family";
 import { fontIpcRouter } from "./terminal-font-data";
 import { loadTerminalSnippets } from "./snippets";
 import {
@@ -125,9 +122,13 @@ let operationalEvents: OperationalEventLog | undefined;
 let disposeTerminalSessions = () => {};
 let extensions:
   Awaited<ReturnType<typeof startApplicationExtensions>> | undefined;
+let sshLaunch: ReturnType<typeof registerSshTerminalLaunch>;
 const shutdown = registerTerminalShutdown(app, {
   application: () => terminalApplication,
-  disposeSessions: () => disposeTerminalSessions(),
+  disposeSessions: () => {
+    sshLaunch?.dispose();
+    disposeTerminalSessions();
+  },
   disposeExtensions: () => extensions?.dispose() ?? Promise.resolve(true),
   onExtensionCleanupUnknown: () =>
     process.stderr.write("Extension cleanup did not settle before Quit.\n"),
@@ -146,7 +147,10 @@ app
   .whenReady()
   .then(async () => {
     const { account, consumeLaunchRequest, configurationLoadOptions } =
-      prepareStartup();
+      prepareStartup(
+        developmentApplicationIconPath,
+        packagedApplicationIconPath,
+      );
     operationalEvents = createOperationalEventLog({
       environment: process.env,
       homeDirectory: account.homedir,
@@ -173,12 +177,17 @@ app
         operationalEvents!.write({ name: "application.started" });
         const terminalIpcRouter = fontIpcRouter(ipcMain, operationalEvents!);
         disposeTerminalSessions = () => terminalIpcRouter.dispose();
+        sshLaunch = registerSshTerminalLaunch(
+          terminalIpcRouter.isTrustedSender,
+          () => terminalApplication?.isQuitting() === true,
+        );
         let rebuildMenu = () => {};
         let actionCatalog: CoreActionCatalog;
         extensions = await startApplicationExtensions({
           translator: () => currentTranslator(),
           sendAction,
           applicationRoot,
+          ssh: sshLaunch,
           isTrustedSender: terminalIpcRouter.isTrustedSender,
           changed: () => rebuildMenu(),
           keybind: (event, input) =>
@@ -272,6 +281,7 @@ app
               app.dock,
             );
             window.once("closed", () => titleController.dispose());
+            sshLaunch.register(window);
             const invocationTarget = extensionInvocationTarget(window);
             const controller = terminalIpcRouter.registerController({
               windowId: lifecycle.windowId,
@@ -285,10 +295,12 @@ app
                 active.configuration,
               ),
               webContents: window.webContents,
-              createSession(callbacks, workingDirectory) {
+              consumeSshLaunch: (token) => sshLaunch.consume(window, token),
+              createSession(callbacks, workingDirectory, ssh) {
                 return shutdown.createSession(nodePty.spawn, {
                   shell: resolveCurrentDefaultShell(),
-                  launchRequest: consumeLaunch(),
+                  launchRequest: ssh?.request ?? consumeLaunch(),
+                  ...(ssh ? { fallbackTitle: ssh.title } : {}),
                   platform: process.platform,
                   homeDirectory: account.homedir,
                   ...(workingDirectory ? { workingDirectory } : {}),
@@ -492,25 +504,3 @@ app
     nativeDialogs.applicationFailure(failure);
     app.quit();
   });
-
-function prepareStartup() {
-  applicationAbout.configureApplicationAbout(
-    app,
-    app.isPackaged
-      ? packagedApplicationIconPath
-      : developmentApplicationIconPath,
-  );
-  const launch = startupLaunchRequest(process.argv, app.isPackaged);
-  if (!app.isPackaged) app.dock?.setIcon(developmentApplicationIconPath);
-  const account = userInfo();
-  return {
-    account,
-    consumeLaunchRequest: launch,
-    configurationLoadOptions: {
-      environment: process.env,
-      homeDirectory: account.homedir,
-      platform: process.platform,
-      getInstalledFontFamilyMetrics: installedFontFamilyMetrics,
-    },
-  };
-}

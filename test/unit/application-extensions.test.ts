@@ -241,6 +241,7 @@ beforeEach(async () => {
     });
     starting = startApplicationExtensions({
       applicationRoot: adapters.root,
+      ssh: { open: vi.fn() },
       translator: () => translatorFor(language),
       sendAction: adapters.sendOpen,
       isTrustedSender: (event) => event.sender === contents,

@@ -18,6 +18,12 @@ export interface FilesBuildReceipt {
   };
 }
 
+export function buildExtension(
+  name: "files" | "ssh",
+  output?: string,
+  suppliedCommit?: string,
+): Promise<FilesBuildReceipt>;
+
 export function buildFilesExtension(
   output?: string,
   suppliedCommit?: string,

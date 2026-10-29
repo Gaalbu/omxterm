@@ -39,9 +39,37 @@ type Options = {
     target: ExtensionTarget;
     signal: AbortSignal;
     call(value: Value, signal: AbortSignal): Promise<Value>;
+    admit(signal: AbortSignal, commit: () => void): Promise<void>;
     retired(): void;
   }): ManagedViews;
 };
+function viewRequests(
+  pin: OpenVersion,
+  backend: Backend,
+  epoch: AbortSignal,
+  alive: () => boolean,
+) {
+  const live = () => !epoch.aborted && alive();
+  return {
+    admit: coreAdmission(pin, () => live() && backend.state() === "active"),
+    call: async (value: Value, signal: AbortSignal) => {
+      if (!live()) throw new PackageError("unavailable");
+      return backend.call(value, AbortSignal.any([signal, epoch]));
+    },
+  };
+}
+
+function coreAdmission(pin: OpenVersion, live: () => boolean) {
+  return async (signal: AbortSignal, commit: () => void) => {
+    if (signal.aborted || !live() || !(await pin.revalidate()))
+      throw new PackageError("unavailable");
+    // Store admission is point-in-time across instances. Local revocation
+    // still wins until this synchronous core transfer.
+    if (signal.aborted || !live()) throw new PackageError("unavailable");
+    commit();
+  };
+}
+
 function boundedSettlement(work: Promise<unknown>[]): Promise<boolean> {
   return new Promise((resolve) => {
     const timer = setTimeout(() => resolve(false), 15_000);
@@ -138,16 +166,15 @@ export function createExtensionManager(options: Options) {
         };
         const views = options.createViews({
           pin,
+          ...viewRequests(
+            pin,
+            backend,
+            AbortSignal.any([abort.signal, target.signal]),
+            () => alive(id, captured, target),
+          ),
           target,
           signal: abort.signal,
-          call: async (value, signal) => {
-            if (abort.signal.aborted || !alive(id, captured, target))
-              throw new PackageError("unavailable");
-            return backend.call(
-              value,
-              AbortSignal.any([signal, abort.signal, target.signal]),
-            );
-          },
+
           retired: () => {
             abort.abort();
             groups.delete(group);

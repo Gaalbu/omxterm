@@ -68,7 +68,9 @@ interface TerminalWindowPageOptions extends TerminalWindowActionSubscriptions {
   readonly createAdapter: (
     fontConfigurationId?: string,
     workingDirectoryOf?: TerminalSessionId,
+    launchToken?: string,
   ) => ElectronTerminalAdapter;
+  readonly sshPane?: (token: string, accepted: boolean | null) => void;
   readonly configuration?: TerminalRendererConfiguration;
   readonly chrome?: WindowChromeBridge;
   readonly page?: Pick<
@@ -195,8 +197,13 @@ export function mountTerminalWindowPage(
       ...hostedTabOptions(options.hostedContent, () =>
         auxiliaryPanel?.deactivate(),
       ),
-      createAdapter: (workingDirectoryOf) =>
-        options.createAdapter(fontConfigurationId, workingDirectoryOf),
+      createAdapter: (workingDirectoryOf, launchToken) =>
+        options.createAdapter(
+          fontConfigurationId,
+          workingDirectoryOf,
+          launchToken,
+        ),
+      sshPane: options.sshPane,
       canFocus: () => !disposed && !previewActive(),
       canAutoFocus: (unchangedFocus) =>
         !previewActive() && (unchangedFocus || !auxiliaryPanel?.ownsFocus()),

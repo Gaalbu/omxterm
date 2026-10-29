@@ -55,6 +55,7 @@ export interface ApplicationVersionProvider {
 export interface LocalTerminalSessionOptions {
   readonly shell: string;
   readonly launchRequest?: LaunchRequest;
+  readonly fallbackTitle?: string;
   readonly platform: NodeJS.Platform | string;
   readonly homeDirectory: string;
   // A split pane's inherited local directory; otherwise the home directory.
@@ -181,9 +182,10 @@ export function createLocalTerminalSession(
   return {
     launchKind: explicitCommand ? "explicit-command" : "default-shell",
     fallbackTitle:
-      options.platform === "win32"
+      options.fallbackTitle ??
+      (options.platform === "win32"
         ? path.win32.basename(options.shell)
-        : path.posix.basename(options.shell),
+        : path.posix.basename(options.shell)),
     write(data) {
       if (!closed && !exited && isBoundedTerminalPayload(data)) pty.write(data);
     },

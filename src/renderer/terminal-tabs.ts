@@ -29,9 +29,13 @@ import { snippetTarget, type SnippetTarget } from "./snippet-target";
 import { englishLanguage, type RendererLanguage } from "./renderer-language";
 import { createPaneOperations } from "./terminal-pane-operations";
 import { createPaneMount } from "./terminal-pane-mount";
+import {
+  terminalPaneEnded,
+  terminalTabCreator,
+  relabelEndedPane,
+} from "./terminal-tab-lifetime";
 import { createPaneContextMenu } from "./terminal-pane-context-menu";
 import {
-  appendTab,
   disposePane,
   findPaneBySession,
   endPane,
@@ -67,6 +71,8 @@ export interface TerminalTabsOptions {
   readonly language?: RendererLanguage;
   // A split pane passes its source session to inherit a reported directory.
   readonly createAdapter: CreatePaneAdapter;
+  readonly sshPane?:
+    ((token: string, accepted: boolean | null) => void) | undefined;
   readonly mount: MountTerminalSurface;
   readonly surfaceOptions: TerminalSurfaceOptions;
   readonly showTabBar?: boolean;
@@ -248,13 +254,10 @@ export function createTerminalTabs(
 
   const onSessionEnd = (
     pane: TerminalPane,
-    exit: { signal: number; startupFailed?: true },
+    exit: import("../shared/terminal-contract").TerminalExit,
   ) => {
     if (disposed || pane.removed) return;
-    // An ordinary end removes the pane; an unexpected signal keeps the dead
-    // pane visible until main acknowledges the failure and orders removal.
-    if (exit.signal === 0 && !exit.startupFailed) panes.removePane(pane);
-    else notifyFocus(pane.tab);
+    terminalPaneEnded(pane, exit, panes, keyboard, notifyFocus, language.t);
   };
 
   const mountPane = createPaneMount({
@@ -296,14 +299,13 @@ export function createTerminalTabs(
 
   const removeLanguage = bindTabLabels(language, terminalTabs, renderStrip);
 
-  const createTab = async (): Promise<void> => {
-    const pane = appendTab(elements.container, options.createAdapter);
-    tabs.push(pane.tab);
-    panes.renderTab(pane.tab);
-    panes.trackFocus(pane);
-    select(tabs.length - 1, tabs.length === 1);
-    await mountPane(pane);
-  };
+  const createTab = terminalTabCreator(elements.container, tabs, options, {
+    selected: selectedApplicationTab,
+    select,
+    render: renderStrip,
+    panes,
+    mount: mountPane,
+  });
 
   const tabOwner = {
     canFocus,
@@ -325,6 +327,8 @@ export function createTerminalTabs(
   const commands = createApplicationTabCommands(tabs, {
     ...tabOwner,
     create: createTab,
+    openSsh: (command) => void createTab(command).catch(() => {}),
+    refuseSsh: (token) => options.sshPane?.(token, false),
     closeSession: (id) =>
       panes.closePane(findPaneBySession(terminalTabs(), id)),
     pane: panes.handleCommand,
@@ -440,8 +444,10 @@ function bindTabLabels(
 ) {
   return language.bind((t) => {
     for (const tab of terminalTabs()) {
-      for (const pane of tabPanes(tab))
+      for (const pane of tabPanes(tab)) {
         pane.container.setAttribute("aria-label", t("terminal.surface"));
+        relabelEndedPane(pane, t);
+      }
       for (const divider of tab.container.querySelectorAll(
         ".terminal-pane-divider",
       ))

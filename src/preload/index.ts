@@ -176,7 +176,15 @@ const terminal: TerminalBridge = {
       throw new TypeError("Invalid Surface identity");
     ipcRenderer.send(terminalIpc.releaseSurface, surfaceId);
   },
-  async start(surfaceId, workingDirectoryOf) {
+  sshPane(token, accepted) {
+    if (
+      !/^[0-9a-f-]{36}$/.test(token) ||
+      (accepted !== null && typeof accepted !== "boolean")
+    )
+      throw new TypeError("Invalid SSH pane response");
+    ipcRenderer.send("terminal:ssh-pane", { token, accepted });
+  },
+  async start(surfaceId, workingDirectoryOf, launchToken) {
     if (surfaceId !== undefined && !isSurfaceIdentity(surfaceId))
       throw new TypeError("Invalid Surface identity");
     if (
@@ -184,14 +192,24 @@ const terminal: TerminalBridge = {
       !isTerminalSessionId(workingDirectoryOf)
     )
       throw new TypeError("Invalid Live Terminal Session identifier");
-    const sessionId: unknown = await (workingDirectoryOf !== undefined
+    if (
+      launchToken !== undefined &&
+      (!/^[0-9a-f-]{36}$/.test(launchToken) || workingDirectoryOf !== undefined)
+    )
+      throw new TypeError("Invalid SSH launch token");
+    const sessionId: unknown = await (launchToken !== undefined
       ? ipcRenderer.invoke(terminalIpc.start, {
           ...(surfaceId === undefined ? {} : { surfaceId }),
-          workingDirectoryOf,
+          launchToken,
         })
-      : surfaceId === undefined
-        ? ipcRenderer.invoke(terminalIpc.start)
-        : ipcRenderer.invoke(terminalIpc.start, surfaceId));
+      : workingDirectoryOf !== undefined
+        ? ipcRenderer.invoke(terminalIpc.start, {
+            ...(surfaceId === undefined ? {} : { surfaceId }),
+            workingDirectoryOf,
+          })
+        : surfaceId === undefined
+          ? ipcRenderer.invoke(terminalIpc.start)
+          : ipcRenderer.invoke(terminalIpc.start, surfaceId));
     if (!isTerminalSessionId(sessionId))
       throw new TypeError("Invalid Live Terminal Session identifier");
     return sessionId;
@@ -279,6 +297,7 @@ const terminal: TerminalBridge = {
           exitCode: payload.exitCode,
           signal: payload.signal,
           ...(payload.startupFailed ? { startupFailed: true } : {}),
+          ...(payload.retained ? { retained: true } : {}),
         });
     };
     ipcRenderer.on(terminalIpc.exit, handler);

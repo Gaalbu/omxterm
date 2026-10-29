@@ -22,9 +22,11 @@ export function createElectronTerminalAdapter(
   bridge: TerminalBridge,
   fontConfigurationId?: string,
   workingDirectoryOf?: TerminalSessionId,
+  launchToken?: string,
 ): ElectronTerminalAdapter {
   let closed = false;
   let started = false;
+  let ended = false;
   let surfaceId: string | undefined;
   const retention =
     fontConfigurationId === undefined
@@ -66,7 +68,7 @@ export function createElectronTerminalAdapter(
         data: string,
         end: number,
       ) => {
-        if (closed || source !== sessionId) return;
+        if (closed || ended || source !== sessionId) return;
         handlers.onOutput(data);
         bridge.acknowledgeOutput(source, end);
       };
@@ -74,7 +76,12 @@ export function createElectronTerminalAdapter(
         source: TerminalSessionId,
         exit: Parameters<TerminalSessionHandlers["onExit"]>[0],
       ) => {
-        if (!closed && source === sessionId) handlers.onExit(exit);
+        if (!closed && !ended && source === sessionId) {
+          ended = true;
+          removeOutputListener?.();
+          removeExitListener?.();
+          handlers.onExit(exit);
+        }
       };
       removeOutputListener = bridge.onOutput((source, data, end) => {
         if (sessionId === undefined) {
@@ -95,11 +102,13 @@ export function createElectronTerminalAdapter(
       });
       const owner = retention ? await retention : undefined;
       if (closed) throw new Error("Terminal Adapter was closed before start");
-      const startedSessionId = await (workingDirectoryOf !== undefined
-        ? bridge.start(owner, workingDirectoryOf)
-        : owner === undefined
-          ? bridge.start()
-          : bridge.start(owner));
+      const startedSessionId = await (launchToken !== undefined
+        ? bridge.start(owner, undefined, launchToken)
+        : workingDirectoryOf !== undefined
+          ? bridge.start(owner, workingDirectoryOf)
+          : owner === undefined
+            ? bridge.start()
+            : bridge.start(owner));
       const closedBeforeStart = closed;
       sessionId = startedSessionId;
       for (const event of pendingEvents) {
@@ -113,17 +122,24 @@ export function createElectronTerminalAdapter(
       if (closedBeforeStart) bridge.close(startedSessionId, closeReason);
     },
     write(data: string) {
-      if (!closed && sessionId !== undefined && isBoundedTerminalPayload(data))
+      if (
+        !closed &&
+        !ended &&
+        sessionId !== undefined &&
+        isBoundedTerminalPayload(data)
+      )
         bridge.input(sessionId, data);
     },
     resize(size: TerminalSize) {
-      if (!closed && sessionId !== undefined && isTerminalSize(size))
+      if (!closed && !ended && sessionId !== undefined && isTerminalSize(size))
         bridge.resize(sessionId, size);
     },
     close(reason) {
       if (closed) return;
       closed = true;
       closeReason = reason;
+      if (launchToken !== undefined && sessionId === undefined)
+        bridge.sshPane?.(launchToken, null);
       if (surfaceId !== undefined) bridge.releaseSurface(surfaceId);
       removeOutputListener?.();
       removeExitListener?.();

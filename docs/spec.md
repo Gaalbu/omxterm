@@ -85,7 +85,11 @@ OMXTerm:
 
 AI assistance, broadcast input, saved or reconnectable sessions, shell integration,
 profiles, a theme picker or catalog, automatic configuration reload, automatic
-updates, and remote terminal features are outside the current product contract.
+updates, and remote terminal features beyond the optional
+[Linux ARM64 SSH Connect preview](ssh-connect.md) are outside the current product
+contract. SSH Connect is separately installed: its incomplete read-only alias
+index and distinct quick-connect page request a typed, main-owned literal
+system-ssh launch, without brokering authentication or adding reconnect.
 
 Restty 0.3.0 and its pinned Ghostty core provide the sole Terminal Surface in
 ordinary development and every packaged application. OMXTerm has no renderer
@@ -166,7 +170,10 @@ succeeds ([ADR 0025](adr/0025-use-restty-as-the-terminal-surface.md)).
   and never logs or persists the directory. An empty or local host name emitted
   by a remote shell is indistinguishable from a local report; program output can
   also emit it. Either can only select an existing local directory, never execute
-  shell text. Ordinary exit removes only that pane
+  shell text. Known SSH Connect sessions are excluded from local OSC7 tracking
+  regardless of hostname; their splits/new tabs use the Default Shell at home.
+  This exclusion does not detect ssh typed manually inside a normal shell.
+  Ordinary exit removes only that pane
   and gives its space and focus to the nearest sibling; an unexpected signal
   keeps the pane until its failure dialog is acknowledged; the last pane closes
   its tab. Close Pane confirms only a Busy focused pane, Close Tab counts every
@@ -291,6 +298,14 @@ succeeds ([ADR 0025](adr/0025-use-restty-as-the-terminal-surface.md)).
   closure is committed by the renderer's tab owner, not inferred from a zero
   native-PTY count. Queued New Tab commands cannot revive an emptied owner;
   explicit window closure and Quit still cancel pending initialization.
+- SSH Connect's core-transferred terminals are independent of extension lifetime.
+  Exit0 closes normally; an ordinary nonzero exit retains readable/copyable/searchable
+  output and an explicit exit-code notice/Close. The ended Surface keeps rendering
+  and fonts for local refit/zoom until removal, but no native input, resize or
+  protocol replies, including exit replay before start resolves. Native records
+  still retire on actual exit, and ended content is not Busy. Startup/signal
+  acknowledgement and authorized removal retain precedence. See
+  [the capability/admission contract](ssh-connect.md#capability-and-admission).
 - Native executable-start failure is distinct from a successfully executed
   program returning nonzero. Unix reports exec failure through a private native
   status channel. Windows' pinned dependency explicitly marks its asynchronous

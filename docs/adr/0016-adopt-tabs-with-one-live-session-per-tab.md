@@ -84,7 +84,9 @@ make shells report it (ADR 0013). A
 remote shell that reports no host name, or this machine's name, is
 indistinguishable from a local one, and program output can also emit the
 sequence; either can only choose an existing local start directory, never run
-anything. A Launch Request applies only to the first tab's first pane.
+anything. Known SSH Connect launches are excluded before OSC7 tracking; their
+splits/new tabs use home and the Default Shell (ADR0041). This does not identify
+manually typed ssh. A Launch Request applies only to the first tab's first pane.
 
 ## Window presentation
 
@@ -113,6 +115,12 @@ Internal tab drag data is excluded from file-path insertion at the document drop
 boundary. Moving tabs across windows is not implemented.
 
 ## Session ownership and lifecycle
+
+SSH Connect ordinary nonzero exits retain an ended-readable Surface until pane
+removal, with an exit-code notice and Close (ADR0041). Transport authority ends,
+but Restty/fonts remain for local copy/search/refit, including fast exit during
+start. The native record retires normally and the ended pane is not Busy.
+Exit0, startup/signal acknowledgement and authorized removal keep their rules.
 
 Every session has exactly one pane lifetime owner. Ordinary shell exit closes
 its pane, and its nearest sibling takes the space and focus; removing a tab's
