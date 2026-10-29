@@ -353,6 +353,13 @@ it.each(recipes)(
           expect(option.loader).toEqual({ ".ttf": "binary" });
       }
       if (recipe.name === "production-shutdown") {
+        expect(options[0]?.external).toEqual([
+          "electron",
+          "node-pty",
+          "yaml",
+          "yauzl",
+          "semver",
+        ]);
         expect(options.map(({ format }) => format)).toEqual([
           "esm",
           "esm",
