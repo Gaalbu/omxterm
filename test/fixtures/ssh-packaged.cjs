@@ -357,7 +357,8 @@ async function run(options) {
     await click(core, "Uninstall");
     await until(() => panelContains("uninstalled"), "SSH uninstalled");
     await closeSettings();
-    await js("document.querySelector('#tab-strip [role=tab]').click()");
+    // Closing Settings restores the sole terminal. Single-tab windows have no
+    // tab-strip buttons; verify restored focus and the original PTY instead.
     await until(
       () => js("!!document.activeElement?.closest('.terminal-surface')"),
       "original terminal focus",
