@@ -115,6 +115,8 @@ it.skipIf(!enabled)(
       ])
         await mkdir(path.join(root, name), { recursive: true });
       await symlink("/usr/bin/xprop", path.join(root, "bin/xprop"));
+      // GTK's installed image loader needs this OS helper even with an isolated PATH.
+      await symlink("/usr/bin/bwrap", path.join(root, "bin/bwrap"));
       await symlink("/bin/sh", path.join(root, "bin/sh"));
       await cp(
         "test/fixtures/ssh-packaged-client.py",
@@ -258,10 +260,7 @@ it.skipIf(!enabled)(
         try {
           await json(
             "observer-failure.json",
-            await client.evaluate(
-              "globalThis.__omxtermPackagedState ?? {}",
-              3000,
-            ),
+            await client.evaluate(`${observer}.diagnose()`, 3000),
           );
         } catch (error) {
           failures.push(error);
@@ -270,7 +269,8 @@ it.skipIf(!enabled)(
     } finally {
       if (client && observer) {
         try {
-          await client.evaluate(`${observer}.cleanup(); true`, 5000);
+          // Keep controlled dialog responses until native shutdown has joined.
+          await client.evaluate(`${observer}.abort(); true`, 5000);
         } catch (error) {
           failures.push(error);
         }

@@ -215,6 +215,31 @@ it("keeps two views' Refresh results and search state independent", async () => 
     frames.forEach((frame) => frame.remove());
   }
 });
+it("does not invalidate initial discovery when the host republishes the initial hidden state", async () => {
+  let visible!: (value: boolean) => void;
+  let finish!: (reply: Awaited<ReturnType<SshBridge["request"]>>) => void;
+  const page = mountSshPage(document, {
+    request: async (value) =>
+      (value as { operation: string }).operation === "host.capabilities"
+        ? { capabilities: ["terminal.openSsh.v1"] }
+        : new Promise((resolve) => {
+            finish = resolve;
+          }),
+    onVisibility(listener) {
+      visible = listener;
+      listener(false);
+      return () => {};
+    },
+  });
+  dispose = page.dispose;
+  await Promise.resolve();
+  visible(false); // Actual host did-finish-load publication, before first selection.
+  visible(true);
+  finish({ ok: true, aliases: ["alpha"] });
+  await page.ready;
+  expect(document.querySelector('[data-alias="alpha"]')).not.toBeNull();
+  expect(document.body.textContent).not.toContain("result was invalidated");
+});
 it("serializes Refresh and ignores a result invalidated by hiding", async () => {
   const { request, visibility } = await setup();
   let finish!: (value: Awaited<ReturnType<SshBridge["request"]>>) => void;

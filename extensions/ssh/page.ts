@@ -300,6 +300,7 @@ export function mountSshPage(document: Document, bridge: SshBridge) {
   );
   window.addEventListener("blur", cancelGesture, { signal: lifetime.signal });
   const unsubscribe = bridge.onVisibility((next) => {
+    if (next === visible) return;
     visible = next;
     if (!next) {
       cancelGesture();

@@ -19,6 +19,26 @@ let requestQuit;
 function cleanup() {
   restore();
 }
+async function diagnose() {
+  const views = await Promise.all(
+    webContents
+      .getAllWebContents()
+      .filter((view) => !view.isDestroyed())
+      .map(async (view) => ({
+        url: view.getURL(),
+        state: await view
+          .executeJavaScript(
+            "({text:document.body?.innerText, ready:document.readyState, bridge:typeof window.omxHostedContent, visible:document.visibilityState})",
+          )
+          .catch((error) => String(error)),
+      })),
+  );
+  return { ...globalThis.__omxtermPackagedState, views };
+}
+function abort() {
+  app.once("will-quit", cleanup);
+  app.quit();
+}
 function inspect(options) {
   assert.equal(app.isPackaged, true);
   assert.equal(app.getVersion(), options.version);
@@ -606,6 +626,8 @@ module.exports = {
   inspect,
   run,
   cleanup,
+  diagnose,
+  abort,
   quit: () => {
     assert.ok(requestQuit);
     requestQuit();
