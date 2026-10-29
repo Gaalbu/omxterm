@@ -7,6 +7,7 @@ import path from "node:path";
 import { runInNewContext } from "node:vm";
 import { buildFixture } from "./initialization-cancellation-build";
 import { terminalIpc } from "../../src/shared/terminal-ipc";
+import { layoutIpc } from "../../src/shared/terminal-layout";
 import { terminalRendererConfiguration } from "../../src/main/active-user-configuration";
 import { DEFAULT_USER_CONFIGURATION } from "../../src/main/user-configuration";
 import type { TerminalTabCommand } from "../../src/shared/terminal-contract";
@@ -120,6 +121,9 @@ export async function initializationReadinessScene(
                   },
                   0,
                 );
+              // Ordinary windows have no transferred restoration plan. Match
+              // the common main router without replacing the actual preload.
+              if (channel === layoutIpc.initial) return null;
               if (channel === terminalIpc.start) return `s${++starts}`;
               throw new Error(`Unexpected preload request: ${channel}`);
             },

@@ -309,7 +309,9 @@ it.each(["current", "old-post-read"] as const)(
       expect(main).toContain("__OMXTERM_FONT_READ_RELOAD_A_SUPERSEDED__");
       expect(renderer).toContain("record.fontName = lease.fonts[0]?.name");
       expect(renderer).toContain('record.status = "mounted"');
-      expect(renderer).toContain("sessionIds[index] = adapter.sessionId()");
+      expect(renderer).toMatch(
+        /sessionIds\[index\d*\] = adapter\.sessionId\(\)/u,
+      );
       expect(main).toContain("nativeSessionIndexes.get");
       expect(main).toContain("Four distinct actual Surface start receipts");
       expect(main).toContain("Font read/reload scenario timed out waiting for");

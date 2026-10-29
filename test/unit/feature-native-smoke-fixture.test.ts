@@ -92,12 +92,15 @@ it("builds the maintained feature smoke and real shared renderer without launchi
     await Promise.resolve();
     expect(settled).toBe(false);
     const rejected = expect(ready).rejects.toThrow("unavailable");
-    expect(addEventListener).toHaveBeenCalledExactlyOnceWith(
+    expect(addEventListener).toHaveBeenCalledWith(
       "pagehide",
       expect.any(Function),
       { once: true },
     );
-    (addEventListener.mock.calls[0]![1] as () => void)();
+    // Dispatch retirement to all owners, including pending layout startup.
+    for (const [type, listener] of addEventListener.mock.calls) {
+      if (type === "pagehide") (listener as () => void)();
+    }
     await rejected;
     expect(settled).toBe(false);
   } finally {
