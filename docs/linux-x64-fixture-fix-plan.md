@@ -45,3 +45,18 @@ nine host-readiness cases (31 total). Lint, typecheck and targeted formatting
 passed. The isolated host-readiness pass does not explain or clear the earlier
 esbuild Go-runtime crash. Appearance, display-size and native-input prerequisites
 remain under investigation.
+
+## Acknowledged release identity
+
+The mouse-up predicate now accepts a release only when that pointer id is the
+acknowledged down and move. It no longer treats the latest `down` as the
+gesture being released. The emitted receipt still restores the saved down and
+move, so a later unpressed move cannot replace them, and it cannot pair those
+saved fields with a different pointer's up. Native autoscroll assertions are
+unchanged.
+
+A headless emitted-caller probe delivered pointer 2 down and up at the release
+point after the acknowledged gesture. Before this correction the oracle
+accepted `down=1`, `move=1`, `up=2`. Afterward that case fails mouse-up as
+stimulus-unavailable. The same-pointer unpressed-move case still passes. The
+integration oracle also requires the emitted up id to match the emitted down.

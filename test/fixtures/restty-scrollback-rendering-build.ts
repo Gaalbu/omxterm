@@ -310,7 +310,7 @@ app.whenReady().then(async () => {
   } finally {
     window.webContents.sendInputEvent({ type: "mouseUp", x: autoscroll.x, y: autoscroll.endY, button: "left", clickCount: 1 });
   }
-  await inputPhase('mouse-up', value => value.up?.trusted && value.up.canvas && value.up.buttons === 0 && value.up.id === value.down.id && value.up.x === autoscroll.x && value.up.y === autoscroll.endY && !value.up.dragging);
+  await inputPhase('mouse-up', value => value.up?.trusted && value.up.canvas && value.up.buttons === 0 && value.up.id === acknowledgedDrag.down.id && value.up.id === acknowledgedDrag.move.id && value.up.x === autoscroll.x && value.up.y === autoscroll.endY && !value.up.dragging);
   const nativeDrag = { ...inputObservation, down: acknowledgedDrag.down, move: acknowledgedDrag.move };
   const autoscrolledTop = await window.webContents.executeJavaScript("document.querySelector('.restty-native-scroll-host').scrollTop", true);
   window.setSize(700, 440);
