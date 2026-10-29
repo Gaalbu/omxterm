@@ -343,6 +343,17 @@ async function run(options) {
       "disable retirement",
     );
     assert.deepEqual(children[1].exit, { code: 0, signal: null });
+    // Child closure precedes collection/snapshot completion. Wait for the
+    // management response and enabled control, not merely native retirement.
+    await until(
+      () =>
+        js(`(() => {
+        const row = [...document.querySelectorAll('.extensions-panel section')].find(s => s.querySelector('h3')?.textContent === 'SSH Connect · 0.1.0');
+        const uninstall = [...(row?.querySelectorAll('button') ?? [])].find(b => b.textContent === 'Uninstall');
+        return !!row?.textContent.includes('generation 3') && row.textContent.includes('disabled') && !!uninstall && !uninstall.disabled;
+      })()`),
+      "completed Disable snapshot and enabled Uninstall",
+    );
     await click(core, "Uninstall");
     await until(() => panelContains("uninstalled"), "SSH uninstalled");
     await closeSettings();
