@@ -19,7 +19,7 @@ export interface SshBridge {
 
 export function mountSshPage(document: Document, bridge: SshBridge) {
   const window = document.defaultView!;
-  const lifetime = new AbortController();
+  const lifetime = new window.AbortController();
   const title = document.createElement("div");
   const heading = document.createElement("h1");
   heading.textContent = "SSH Connect";

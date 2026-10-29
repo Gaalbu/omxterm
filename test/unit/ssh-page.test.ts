@@ -163,6 +163,58 @@ it("bounds pointer submission and reports lost replies without automatic replay"
   );
   expect(launches(request)).toHaveLength(1);
 });
+it("keeps two views' Refresh results and search state independent", async () => {
+  const frames = [
+    document.createElement("iframe"),
+    document.createElement("iframe"),
+  ];
+  frames.forEach((frame) => document.body.append(frame));
+  const pending: Array<
+    (reply: Awaited<ReturnType<SshBridge["request"]>>) => void
+  > = [];
+  const pages = frames.map((frame) =>
+    mountSshPage(frame.contentDocument!, {
+      request: async (value) =>
+        (value as { operation: string }).operation === "host.capabilities"
+          ? { capabilities: ["terminal.openSsh.v1"] }
+          : new Promise((resolve) => {
+              pending.push(resolve);
+            }),
+      onVisibility(listener) {
+        listener(true);
+        return () => {};
+      },
+    }),
+  );
+  try {
+    await Promise.resolve();
+    expect(pending).toHaveLength(2);
+    const search = frames[0]!.contentDocument!.querySelector<HTMLInputElement>(
+      'input[type="search"]',
+    )!;
+    search.value = "alpha";
+    search.dispatchEvent(new Event("input"));
+    pending[1]!({ ok: true, aliases: ["beta"] });
+    await pages[1]!.ready;
+    expect(
+      frames[1]!.contentDocument!.querySelector('[data-alias="beta"]'),
+    ).not.toBeNull();
+    expect(
+      frames[0]!.contentDocument!.querySelector("[data-alias]"),
+    ).toBeNull();
+    pending[0]!({ ok: true, aliases: ["alpha", "beta"] });
+    await pages[0]!.ready;
+    expect(
+      frames[0]!.contentDocument!.querySelector('[data-alias="alpha"]'),
+    ).not.toBeNull();
+    expect(
+      frames[0]!.contentDocument!.querySelector('[data-alias="beta"]'),
+    ).toBeNull();
+  } finally {
+    pages.forEach((page) => page.dispose());
+    frames.forEach((frame) => frame.remove());
+  }
+});
 it("serializes Refresh and ignores a result invalidated by hiding", async () => {
   const { request, visibility } = await setup();
   let finish!: (value: Awaited<ReturnType<SshBridge["request"]>>) => void;

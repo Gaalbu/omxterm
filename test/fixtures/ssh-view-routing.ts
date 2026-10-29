@@ -1,0 +1,93 @@
+import { writeFile } from "node:fs/promises";
+import type { IpcEvent } from "../../src/main/terminal-ipc-types";
+import type { ExtensionsResult } from "../../src/shared/extensions";
+export type Handler = (
+  event: IpcEvent,
+  ...args: unknown[]
+) => Promise<ExtensionsResult>;
+import { expect, vi } from "vitest";
+import type { BrowserWindow } from "electron";
+import type { startApplicationExtensions } from "../../src/main/application-extensions";
+import type { ExtensionViewHostOptions } from "../../src/main/extension-view-host";
+import { packageArchive } from "./extension-package-archive";
+export const manifest = {
+  format: 1,
+  id: "example.files",
+  name: "Files",
+  version: "1.0.0",
+  engines: { omxterm: ">=0.23.0-0", api: "0.1.x" },
+  backend: "backend.mjs",
+  view: { entry: "index.html", action: "example.files.open", title: "Files" },
+};
+export function bytes(version = "1.0.0") {
+  return packageArchive([
+    { name: "extension.json", data: JSON.stringify({ ...manifest, version }) },
+    { name: "backend.mjs", data: "" },
+    { name: "index.html", data: "<h1>Files</h1>" },
+  ]);
+}
+export async function exerciseSshRouting(
+  declared: boolean,
+  context: {
+    archive: string;
+    window: BrowserWindow;
+    service: Awaited<ReturnType<typeof startApplicationExtensions>>;
+    request(value: unknown): Promise<unknown>;
+    hosts: {
+      open: ReturnType<typeof vi.fn>;
+      options: ExtensionViewHostOptions;
+    }[];
+    sshOpen: ReturnType<
+      typeof vi.fn<
+        Parameters<typeof startApplicationExtensions>[0]["ssh"]["open"]
+      >
+    >;
+  },
+) {
+  const { archive, window, service, request, hosts, sshOpen } = context;
+  await writeFile(
+    archive,
+    packageArchive([
+      {
+        name: "extension.json",
+        data: JSON.stringify({
+          ...manifest,
+          ...(declared ? { capabilities: ["terminal.openSsh.v1"] } : {}),
+        }),
+      },
+      { name: "backend.mjs", data: "" },
+      { name: "index.html", data: "<h1>SSH</h1>" },
+    ]),
+  );
+  await request({ operation: "install" });
+  service.contextMenu(window, "s1", () => true)[0]!.click();
+  await vi.waitFor(() => expect(hosts[0]?.open).toHaveBeenCalled());
+  const viewRequest = hosts[0]!.options.onRequest!;
+  const signal = new AbortController().signal;
+  expect(await viewRequest({ operation: "host.capabilities" }, signal)).toEqual(
+    { capabilities: declared ? ["terminal.openSsh.v1"] : [] },
+  );
+  const committed = vi.fn();
+  sshOpen.mockImplementation(async (_owner, _view, _source, _target, admit) => {
+    await admit(committed);
+    return { ok: true, status: "accepted" };
+  });
+  const launching = viewRequest(
+    { operation: "terminal.openSsh.v1", target: { host: "alias" } },
+    signal,
+  );
+  if (declared) {
+    expect(await launching).toEqual({ ok: true, status: "accepted" });
+    expect(sshOpen).toHaveBeenCalledWith(
+      window,
+      expect.any(Object),
+      "hosted-view",
+      { host: "alias" },
+      expect.any(Function),
+    );
+    expect(committed).toHaveBeenCalledOnce();
+  } else {
+    await expect(launching).rejects.toThrow("unavailable");
+    expect(sshOpen).not.toHaveBeenCalled();
+  }
+}

@@ -16,17 +16,15 @@ import {
   InstalledPackages,
   PackageError,
 } from "../../src/installed-packages/installed-packages";
-import { packageArchive } from "../fixtures/extension-package-archive";
 import {
-  extensionsIpc,
-  type ExtensionsResult,
-} from "../../src/shared/extensions";
+  bytes,
+  manifest,
+  exerciseSshRouting,
+} from "../fixtures/ssh-view-routing";
+import { extensionsIpc } from "../../src/shared/extensions";
 import type { IpcEvent } from "../../src/main/terminal-ipc-types";
 import type { ExtensionViewHostOptions } from "../../src/main/extension-view-host";
-type Handler = (
-  event: IpcEvent,
-  ...args: unknown[]
-) => Promise<ExtensionsResult>;
+import type { Handler } from "../fixtures/ssh-view-routing";
 type Host = {
   options: ExtensionViewHostOptions;
   open: ReturnType<typeof vi.fn>;
@@ -34,7 +32,6 @@ type Host = {
 };
 import { startApplicationExtensions } from "../../src/main/application-extensions";
 import { createTerminalContextMenuTarget } from "../../src/main/terminal-context-menu";
-
 const adapters = vi.hoisted(() => ({
   root: "",
   selected: undefined as unknown,
@@ -56,6 +53,8 @@ const adapters = vi.hoisted(() => ({
     >(),
   download: vi.fn<(url: string, signal: AbortSignal) => Promise<Buffer>>(),
   activate: vi.fn(),
+  sshOpen:
+    vi.fn<Parameters<typeof startApplicationExtensions>[0]["ssh"]["open"]>(),
   sendOpen:
     vi.fn<Parameters<typeof startApplicationExtensions>[0]["sendAction"]>(),
   retire: vi.fn(),
@@ -100,7 +99,7 @@ vi.mock("../../src/main/extension-view-ipc", () => ({
   startExtensionViewHost: (options: ExtensionViewHostOptions) => {
     const host = {
       options,
-      open: vi.fn(async () => {}),
+      open: vi.fn(async () => ({ id: "hosted-view", title: "Files" })),
       retire: vi.fn(async () => {
         await options.resources.release();
         options.onState?.("settled");
@@ -117,22 +116,6 @@ let service: Awaited<ReturnType<typeof startApplicationExtensions>>;
 let window: BrowserWindow;
 let archive: string;
 let language: SupportedLanguage = "en-US";
-const manifest = {
-  format: 1,
-  id: "example.files",
-  name: "Files",
-  version: "1.0.0",
-  engines: { omxterm: ">=0.23.0-0", api: "0.1.x" },
-  backend: "backend.mjs",
-  view: { entry: "index.html", action: "example.files.open", title: "Files" },
-};
-function bytes(version = "1.0.0") {
-  return packageArchive([
-    { name: "extension.json", data: JSON.stringify({ ...manifest, version }) },
-    { name: "backend.mjs", data: "" },
-    { name: "index.html", data: "<h1>Files</h1>" },
-  ]);
-}
 const catalogBytes = () => catalogFixture(manifest, bytes());
 it("catalog selection composes exact-byte trust, remains captured over refresh and stays dormant", async () => {
   const token = "a".repeat(36);
@@ -241,7 +224,7 @@ beforeEach(async () => {
     });
     starting = startApplicationExtensions({
       applicationRoot: adapters.root,
-      ssh: { open: vi.fn() },
+      ssh: { open: adapters.sshOpen },
       translator: () => translatorFor(language),
       sendAction: adapters.sendOpen,
       isTrustedSender: (event) => event.sender === contents,
@@ -405,6 +388,18 @@ it("Settings installs captured bytes through explicit trust without activating c
     { id: "example.files.open", accelerator: null },
   ]);
 });
+it.each([false, true])(
+  "routes SSH only from its own declared view (declared: %s)",
+  (declared) =>
+    exerciseSshRouting(declared, {
+      archive,
+      window,
+      service,
+      request,
+      hosts: adapters.hosts,
+      sshOpen: adapters.sshOpen,
+    }),
+);
 it("a valid claimed terminal contribution retains its captured directory", async () => {
   await request({ operation: "install" });
   let directory = "/original";
@@ -424,7 +419,6 @@ it("a valid claimed terminal contribution retains its captured directory", async
     ),
   ).toEqual({ ok: true, directory: "/original" });
 });
-
 it.each(["selection", "new-popup", "window"])(
   "rejects a Files popup after %s invalidation",
   async (cause) => {
