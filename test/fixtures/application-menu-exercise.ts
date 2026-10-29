@@ -101,7 +101,8 @@ export async function exerciseApplicationMenu(
     )) as boolean;
   const terminalFocused = async () =>
     (await window.webContents.executeJavaScript(
-      "document.querySelector('.terminal-surface:not([hidden])').contains(document.activeElement)",
+      // Document load can precede asynchronous initial-layout/Surface mounting.
+      "document.querySelector('.terminal-surface:not([hidden])')?.contains(document.activeElement) === true",
     )) as boolean;
   window.focus();
   await waitFor(terminalFocused, "terminal focus before native menu");
