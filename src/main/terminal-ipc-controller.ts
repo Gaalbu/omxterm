@@ -11,6 +11,7 @@ import {
   isTerminalSessionResize,
 } from "../shared/terminal-contract";
 import { terminalIpc } from "../shared/terminal-ipc";
+import { layoutIpc, type InitialLayout } from "../shared/terminal-layout";
 import { createTerminalContextMenuTarget } from "./terminal-context-menu";
 import {
   type LocalTerminalSession,
@@ -87,6 +88,7 @@ import {
 interface RoutedTerminalIpcController
   extends TerminalIpcController, SurfaceFontRequests {
   configuration(payload?: unknown): TerminalRendererConfiguration;
+  initialLayout(payload?: unknown): InitialLayout | null;
   start(payload?: unknown): TerminalSessionId;
   input(payload?: unknown): void;
   resize(payload?: unknown): void;
@@ -279,6 +281,12 @@ export function registerTerminalIpcRouter(
         reason: "untrusted-sender",
       }),
   );
+  ipcMain.handle(layoutIpc.initial, (event, payload) => {
+    const controller = controllerFor(event);
+    if (!controller)
+      throw new Error("Rejected layout IPC from an untrusted sender");
+    return controller.initialLayout(payload);
+  });
   ipcMain.handle(terminalIpc.start, start);
   ipcMain.handle(terminalIpc.configuration, configuration);
   ipcMain.handle(terminalIpc.fontData, fontData);
@@ -340,6 +348,7 @@ export function registerTerminalIpcRouter(
       disposed = true;
       for (const controller of [...controllers.values()]) controller.dispose();
       removeSurfaceFontIpc();
+      ipcMain.removeHandler(layoutIpc.initial);
       ipcMain.removeHandler(terminalIpc.start);
       ipcMain.removeHandler(terminalIpc.configuration);
       ipcMain.removeHandler(terminalIpc.fontData);
@@ -414,6 +423,7 @@ function createTerminalIpcController(
   let fontConfigurationGeneration = 0;
   const sessions = new Map<TerminalSessionId, RoutedSessionState>();
   let nextSessionNumber = 1;
+  let initialLayoutRead = false;
   const windowId = options.windowId;
   const writeWindowEvent = (
     event: Parameters<OperationalEventLog["write"]>[0],
@@ -696,6 +706,14 @@ function createTerminalIpcController(
 
   return {
     configuration,
+    initialLayout(payload) {
+      if (disposed || payload !== undefined || initialLayoutRead)
+        throw new Error("Unavailable initial layout");
+      initialLayoutRead = true;
+      // Ordinary hosts, including bounded native fixture compositions, have an
+      // explicit no-plan contract. A broken restored-plan provider still throws.
+      return options.initialLayout?.() ?? null;
+    },
     ...surfaceFonts.requests,
     applyConfiguration(configuration) {
       if (disposed || options.webContents.isDestroyed()) return;

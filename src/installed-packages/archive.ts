@@ -133,12 +133,13 @@ function validateCapabilities(value: Record<string, unknown>): void {
       new Set(value.capabilities).size !== value.capabilities.length ||
       value.capabilities.some(
         (capability) =>
+          typeof capability !== "string" ||
           ![
             "terminal.openSsh.v1",
             "terminal.captureLayout.v1",
             "terminal.openLayout.v1",
             "state.v1",
-          ].includes(String(capability)),
+          ].includes(capability),
       ))
   )
     throw new PackageError("invalid-package");

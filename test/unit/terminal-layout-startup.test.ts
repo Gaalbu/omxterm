@@ -1,6 +1,12 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { InitialLayout } from "../../src/shared/terminal-layout";
+import { createTerminalLayoutBridge } from "../../src/preload/terminal-layout-bridge";
+import { registerTerminalIpcRouter } from "../../src/main/terminal-ipc-controller";
+import {
+  clipboardOptions,
+  createIpcHarness,
+} from "../fixtures/terminal-ipc-harness";
 const host = vi.hoisted(() =>
   vi.fn(() => ({ ready: Promise.resolve(), dispose: vi.fn() })),
 );
@@ -23,6 +29,62 @@ beforeEach(() => {
     '<nav id="tab-strip"></nav><div id="terminal-tabs"></div><div id="user-file-errors"></div><div id="snippets-sidebar"></div><div id="terminal-surface-failure"></div>';
 });
 afterEach(() => document.body.replaceChildren());
+it.each([false, true])(
+  "composes ordinary router/preload startup without a plan and preserves genuine provider failure (%s)",
+  async (failed) => {
+    const ipc = createIpcHarness();
+    const router = registerTerminalIpcRouter(ipc.ipcMain);
+    const contents = { mainFrame: {}, isDestroyed: () => false, send: vi.fn() };
+    const event = { sender: contents, senderFrame: contents.mainFrame };
+    router.registerController({
+      ...clipboardOptions(),
+      webContents: contents,
+      createSession: vi.fn(),
+      onSessionExit: vi.fn(),
+      onSessionStartError: vi.fn(),
+      ...(failed
+        ? {
+            initialLayout: () => {
+              throw new Error("Lost plan");
+            },
+          }
+        : {}),
+    });
+    const layout = createTerminalLayoutBridge({
+      invoke: async (channel) => {
+        const handler = ipc.handlers.get(channel);
+        if (!handler) throw new Error("Missing handler");
+        return handler(event);
+      },
+      send: vi.fn(),
+      on: vi.fn(),
+      removeListener: vi.fn(),
+    });
+    const terminal = {
+      configuration: async () => ({ userFileErrors: [] }),
+      layout,
+      notifyTabsEmpty: vi.fn(),
+    };
+    startTerminalWindow({ terminal } as unknown as Window["omxterm"]);
+    if (failed) {
+      await vi.waitFor(() =>
+        expect(terminal.notifyTabsEmpty).toHaveBeenCalledWith(
+          "rendering-failure",
+        ),
+      );
+      expect(host).not.toHaveBeenCalled();
+    } else {
+      await vi.waitFor(() => expect(host).toHaveBeenCalledOnce());
+      const calls = host.mock.calls as unknown as [
+        unknown,
+        { initialLayout?: unknown },
+      ][];
+      expect(calls[0]?.[1].initialLayout).toBeUndefined();
+      expect(terminal.notifyTabsEmpty).not.toHaveBeenCalled();
+    }
+    router.dispose();
+  },
+);
 function fixture() {
   let resolve!: (plan: InitialLayout | null) => void;
   const initial = vi.fn(

@@ -62,6 +62,8 @@ describe("flat saved-window layout", () => {
       })),
     };
     expect(isSavedLayout(saved)).toBe(true);
+    for (const platform of [["linux"], ["win32"], null, 1, { name: "linux" }])
+      expect(isSavedLayout({ ...saved, platform })).toBe(false);
     // The actual own-view host passes captured arrays without prototypes.
     expect(isSavedLayout(captureValue(saved))).toBe(true);
     // Own-view bridge uses captureValue for both request and response. Backend

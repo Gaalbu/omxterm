@@ -307,6 +307,7 @@ app
               webContents: window.webContents,
               consumeSshLaunch: (token) => sshLaunch.consume(window, token),
               homeDirectory: account.homedir,
+              initialLayout: () => layouts.initial(window),
               consumeLayoutLaunch: (token) => layouts.consume(window, token),
               createSession(callbacks, workingDirectory, ssh, restored) {
                 return shutdown.createSession(nodePty.spawn, {

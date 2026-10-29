@@ -41,6 +41,22 @@ it("declares window-scoped state and layout capabilities only for the new compat
     checkCompatibility(manifest, { appVersion: "0.25.0", apiVersion: "0.1.0" }),
   ).toThrow("incompatible");
 });
+it("rejects non-string capability declarations rather than coercing them", async () => {
+  const manifest: unknown = JSON.parse(
+    await readFile("extensions/restoration/extension.json", "utf8"),
+  );
+  for (const capabilities of [
+    [["state.v1"]],
+    [["state.v1"], ["state.v1"]],
+    [null],
+    [1],
+    [{ name: "state.v1" }],
+  ])
+    expect(() =>
+      parseManifest({ ...(manifest as object), capabilities }),
+    ).toThrow("invalid-package");
+});
+
 // Maintainer-only esbuild/Python composition, no Electron/native addon/GUI.
 it.skipIf(process.env.OMXTERM_RESTORATION_BUILD !== "1")(
   "builds and validates a licensed separate archive without replacing existing outputs",

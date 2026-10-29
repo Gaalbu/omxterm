@@ -97,12 +97,14 @@ function fontControls(result: Renderer) {
   });
   expect(result.globals.releaseFontInitialization).toBeTypeOf("function");
   expect(
-    result.code.includes("cells[index] = { height:"),
+    /cells\[index\d*\] = \{ height:/u.test(result.code),
     "missing geometry reply interception",
   ).toBe(true);
 }
 function readReloadControls(result: Renderer) {
-  expect(result.code).toContain("sessionIds[index] = adapter.sessionId()");
+  expect(
+    /sessionIds\[index\d*\] = adapter\.sessionId\(\)/u.test(result.code),
+  ).toBe(true);
   expect(result.globals.readReloadEvidence).toEqual({
     hostReady: false,
     mounts: [],
@@ -146,13 +148,15 @@ function tabControls(result: Renderer) {
   expect(result.log).toHaveBeenCalledExactlyOnceWith(
     "__OMXTERM_TAB_REMOVAL_CONTROL__held-renderer-boundary",
   );
-  expect(result.addEventListener).toHaveBeenCalledExactlyOnceWith(
+  expect(result.addEventListener).toHaveBeenCalledWith(
     "pagehide",
     expect.any(Function),
     { once: true },
   );
-  const pagehide = result.addEventListener.mock.calls[0]![1] as () => void;
-  pagehide();
+  // Startup also owns a pagehide listener while initial-layout IPC is pending.
+  // Deliver the actual event to all owners; only the fixture removes its observer.
+  for (const [type, listener] of result.addEventListener.mock.calls)
+    if (type === "pagehide") (listener as () => void)();
   expect(result.remove).toHaveBeenCalledOnce();
   expect(control.state().hostReady).toBe(false);
 }

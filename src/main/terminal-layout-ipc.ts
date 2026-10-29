@@ -47,15 +47,6 @@ export function registerTerminalLayoutIpc(options: {
     owner.tokens.clear();
     owners.delete(owner.window.webContents);
   };
-  options.ipc.handle(layoutIpc.initial, (event, value) => {
-    const owner = ownerFor(event);
-    if (!owner || value !== undefined || owner.initialRead)
-      throw new Error("Unavailable initial layout");
-    owner.initialRead = true;
-    const plan = owner.plan;
-    delete owner.plan;
-    return plan?.initial ?? null;
-  });
   const cancelListener = (event: IpcEvent, token?: unknown) => {
     const owner = ownerFor(event);
     if (owner && typeof token === "string") owner.tokens.delete(token);
@@ -100,6 +91,15 @@ export function registerTerminalLayoutIpc(options: {
   options.ipc.on(layoutIpc.cancel, cancelListener);
   options.ipc.on(layoutIpc.captured, capturedListener);
   return {
+    initial(window: BrowserWindow) {
+      const owner = owners.get(window.webContents);
+      if (!owner || owner.initialRead || options.quitting())
+        throw new Error("Unavailable initial layout");
+      owner.initialRead = true;
+      const plan = owner.plan;
+      delete owner.plan;
+      return plan?.initial ?? null;
+    },
     constructing: () =>
       [...owners.values()].some(
         (owner) => owner.tokens.size > 0 || owner.plan !== undefined,
@@ -167,7 +167,6 @@ export function registerTerminalLayoutIpc(options: {
     },
     dispose() {
       for (const owner of owners.values()) remove(owner);
-      options.ipc.removeHandler(layoutIpc.initial);
       options.ipc.removeListener(layoutIpc.cancel, cancelListener);
       options.ipc.removeListener(layoutIpc.captured, capturedListener);
     },

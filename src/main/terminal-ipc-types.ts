@@ -65,6 +65,8 @@ export interface TerminalIpcControllerOptions {
   readonly webContents: TrustedWebContents;
   readonly initialFullScreen?: boolean;
   readonly homeDirectory?: string;
+  readonly initialLayout?: () =>
+    import("../shared/terminal-layout").InitialLayout | null;
   readonly consumeLayoutLaunch?: (token: string) => string;
   readonly backgroundTransparency?: () => number;
   // workingDirectory is an inherited, already validated local directory.

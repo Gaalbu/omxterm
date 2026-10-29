@@ -148,13 +148,15 @@ export function isSavedLayout(value: unknown): value is SavedLayout {
       "tabs",
     ]) ||
     value.version !== 1 ||
-    !["linux", "darwin", "win32"].includes(String(value.platform)) ||
+    typeof value.platform !== "string" ||
+    !["linux", "darwin", "win32"].includes(value.platform) ||
     typeof value.savedAt !== "string" ||
     !/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/u.test(value.savedAt) ||
     !Number.isFinite(Date.parse(value.savedAt)) ||
     !count(value.omitted)
   )
     return false;
+  const platform = value.platform;
   return (
     windowLayout(
       value,
@@ -162,7 +164,7 @@ export function isSavedLayout(value: unknown): value is SavedLayout {
         (exactLayoutKeys(pane, ["kind"]) && pane.kind === "home") ||
         (exactLayoutKeys(pane, ["kind", "path"]) &&
           (pane.kind === "reported-local" || pane.kind === "launch-local") &&
-          isLayoutPath(pane.path, String(value.platform))),
+          isLayoutPath(pane.path, platform)),
     ) &&
     new TextEncoder().encode(JSON.stringify(value)).length <= LAYOUT_MAX_BYTES
   );

@@ -59,10 +59,8 @@ function setup() {
 it("binds initial plan and single-use/cancellable allocations to the actual window", () => {
   const test = setup();
   expect(test.service.constructing()).toBe(true);
-  expect(test.ipc.handlers.get(layoutIpc.initial)!(test.event)).toMatchObject({
-    selected: 0,
-  });
-  expect(() => test.ipc.handlers.get(layoutIpc.initial)!(test.event)).toThrow();
+  expect(test.service.initial(test.window)).toMatchObject({ selected: 0 });
+  expect(() => test.service.initial(test.window)).toThrow();
   expect(() =>
     test.service.consume({ webContents: {} } as BrowserWindow, token),
   ).toThrow();

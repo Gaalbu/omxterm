@@ -27,6 +27,7 @@ export function startApplicationLayout(options: {
       options.application()!.newWindow({ plan, focus, accepted }),
   });
   return {
+    initial: ipc.initial,
     capture: ipc.capture,
     open: transfer.open,
     register: ipc.register,
