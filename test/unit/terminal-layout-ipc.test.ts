@@ -69,6 +69,31 @@ it("binds initial plan and single-use/cancellable allocations to the actual wind
   expect(test.service.constructing()).toBe(false);
   test.service.dispose();
 });
+it.each(["closed", "destroyed"] as const)(
+  "retires layout ownership after %s without accessing a destroyed native window",
+  async (first) => {
+    const test = setup();
+    const pending = test.service.capture(
+      test.window,
+      new AbortController().signal,
+    );
+    const rejected = expect(pending).rejects.toThrow(
+      "Layout capture unavailable",
+    );
+    const nativeGetter = vi.fn(() => {
+      throw new Error("Object has been destroyed");
+    });
+    Object.defineProperty(test.window, "webContents", { get: nativeGetter });
+    const close = () => test.window.emit("closed");
+    const destroy = () => test.contents.emit("destroyed");
+    expect(first === "closed" ? close : destroy).not.toThrow();
+    await rejected;
+    expect(test.service.constructing()).toBe(false);
+    expect(first === "closed" ? destroy : close).not.toThrow();
+    expect(() => test.service.dispose()).not.toThrow();
+    expect(nativeGetter).not.toHaveBeenCalled();
+  },
+);
 it("captures only matching sender/request and enriches the renderer clone in main", async () => {
   const test = setup();
   const pending = test.service.capture(

@@ -29,7 +29,7 @@ export function registerTerminalLayoutIpc(options: {
     dispose(): void;
   };
   type Owner = {
-    window: BrowserWindow;
+    contents: BrowserWindow["webContents"];
     controller: TerminalIpcController;
     plan?: PreparedLayout;
     initialRead: boolean;
@@ -45,7 +45,9 @@ export function registerTerminalLayoutIpc(options: {
     owner.capture?.reject();
     owner.capture?.dispose();
     owner.tokens.clear();
-    owners.delete(owner.window.webContents);
+    // BrowserWindow's native getter can already throw in closed/destroyed
+    // callbacks. Retire by the stable identity captured during registration.
+    owners.delete(owner.contents);
   };
   const cancelListener = (event: IpcEvent, token?: unknown) => {
     const owner = ownerFor(event);
@@ -110,7 +112,7 @@ export function registerTerminalLayoutIpc(options: {
       plan?: PreparedLayout,
     ) {
       const owner: Owner = {
-        window,
+        contents: window.webContents,
         controller,
         initialRead: false,
         tokens: new Map(plan?.directories),
