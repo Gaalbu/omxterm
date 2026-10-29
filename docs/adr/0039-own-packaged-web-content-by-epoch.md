@@ -26,7 +26,11 @@ Neither caller-provided IDs nor terminal renderer requests can select a backend.
 content bounds prevent stale presentation and keep host chrome outside the view.
 CSS geometry is converted using actual page zoom, not terminal font zoom.
 
-DOM selection and overlay opening await an acknowledged native hide. Overlay
+DOM selection and overlay opening await an acknowledged native hide. When that
+hide removes the selected, natively focused child of an already focused window,
+main returns native focus to the core WebContents before acknowledging. Hiding
+an unfocused child or a background window does not move focus; the renderer still
+owns which DOM terminal/control may receive it. Overlay
 closure can restore only the same still-current content owner. Failed hides
 suppress presentation rather than showing a DOM modal behind live native pixels.
 Pending or failed terminal handoffs also refuse terminal injection, Find,

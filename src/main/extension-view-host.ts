@@ -483,6 +483,13 @@ class NativeExtensionViewHost {
     this.#revision = presentation.revision;
     const entry =
       presentation.id === null ? undefined : this.#views.get(presentation.id);
+    // Hiding a focused native child does not focus the parent WebContents.
+    // Capture ownership before hiding; never activate an unfocused OS window.
+    const returnFocus =
+      presentation.id === null &&
+      this.#selected !== null &&
+      this.#views.get(this.#selected)?.contents.isFocused() === true &&
+      this.options.owner.isFocused();
     // A geometry-only update must not hide/refocus a live field or interrupt IME.
     this.#hideAll(
       entry && this.#selected === presentation.id ? entry : undefined,
@@ -493,6 +500,7 @@ class NativeExtensionViewHost {
     }
     if (presentation.id === null) {
       this.#layoutFocus = null;
+      if (returnFocus) this.options.owner.webContents.focus();
       return true;
     }
     if (

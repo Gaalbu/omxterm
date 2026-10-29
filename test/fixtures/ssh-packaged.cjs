@@ -26,9 +26,10 @@ async function diagnose() {
       .filter((view) => !view.isDestroyed())
       .map(async (view) => ({
         url: view.getURL(),
+        nativeFocused: view.isFocused(),
         state: await view
           .executeJavaScript(
-            "({text:document.body?.innerText, ready:document.readyState, bridge:typeof window.omxHostedContent, visible:document.visibilityState})",
+            "({text:document.body?.innerText, ready:document.readyState, bridge:typeof window.omxHostedContent, visible:document.visibilityState, documentFocused:document.hasFocus(), active:document.activeElement?.outerHTML.slice(0,1000), selected:[...document.querySelectorAll('#tab-strip [aria-selected=true]')].map(e=>e.textContent)})",
           )
           .catch((error) => String(error)),
       })),
@@ -473,10 +474,20 @@ async function run(options) {
   await until(
     () =>
       js(
-        "document.querySelector('#tab-strip [aria-selected=true]')?.textContent.includes('SYNTHETIC-SSH-live') === true && !!document.activeElement?.closest('.terminal-surface')",
+        "document.querySelector('#tab-strip [aria-selected=true]')?.textContent.includes('SYNTHETIC-SSH-live') === true",
       ),
-    "display-only title and foreground transfer",
+    "display-only title on selected SSH tab",
   );
+  save("selected-title.json", { selectedTitle: true });
+  try {
+    await until(
+      () => js("!!document.activeElement?.closest('.terminal-surface')"),
+      "foreground terminal DOM focus",
+    );
+  } catch (originalFailure) {
+    save("focus-before.json", await diagnose());
+    throw originalFailure;
+  }
   assert.equal(
     fs.existsSync(file("ssh-live-input.bin")),
     false,

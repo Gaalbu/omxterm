@@ -34,6 +34,35 @@ import {
   type HostedContentPresentation,
 } from "../../src/shared/extension-view";
 
+it.each([
+  [true, true],
+  [false, true],
+  [true, false],
+])(
+  "returns native focus only from the selected child of a focused owner (%s, %s)",
+  async (windowFocused, childFocused) => {
+    const f = await fixture();
+    const tab = await f.host!.open({
+      entryResource: "index.html",
+      title: "SSH",
+    });
+    await f.host!.present(present(tab.id));
+    f.owner.isFocused.mockReturnValue(windowFocused);
+    f.views[0]!.webContents.focused = childFocused;
+    f.views[0]!.setVisible.mockImplementation((visible: boolean) => {
+      if (!visible) f.views[0]!.webContents.focused = false;
+    });
+    expect(await f.host!.present(present(null, 2))).toBe(true);
+    expect(f.owner.webContents.focus).toHaveBeenCalledTimes(
+      windowFocused && childFocused ? 1 : 0,
+    );
+    await f.host!.present(present(null, 3));
+    expect(f.owner.webContents.focus).toHaveBeenCalledTimes(
+      windowFocused && childFocused ? 1 : 0,
+    );
+  },
+);
+
 function deferred<T = void>() {
   let resolve!: (value: T) => void;
   let reject!: (reason?: unknown) => void;
@@ -112,6 +141,7 @@ async function fixture(createHost = true) {
   };
   const owner = Object.assign(new EventEmitter(), {
     webContents: new Contents(),
+    isFocused: vi.fn(() => true),
     isDestroyed: (): boolean => false,
     getContentSize: () => [800, 600],
     contentView: { addChildView: vi.fn(), removeChildView: vi.fn() },
