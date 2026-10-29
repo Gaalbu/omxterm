@@ -11,6 +11,14 @@ export const RESTORATION_CHECKS = [
   "restored-window-survives-extension-retirement",
 ] as const;
 export const RESTORATION_RESULT = "__RESTORATION_PRODUCTION__";
+// Disable also leaves a dormant local runtime. Require the completed enabled
+// snapshot's usable inverse action before leaving Settings and invoking its menu.
+export const RESTORATION_ENABLED_SNAPSHOT = `(() => {
+  const panel = document.querySelector('.extensions-panel');
+  return !!panel?.textContent.includes('local dormant') &&
+    [...panel.querySelectorAll('button')].some(button =>
+      button.textContent === 'Disable' && !button.disabled);
+})()`;
 export type RestorationReceipt = {
   failed: boolean;
   checks: string[];

@@ -16,6 +16,7 @@ import {
 } from "../../src/shared/terminal-layout";
 import {
   RESTORATION_CHECKS,
+  RESTORATION_ENABLED_SNAPSHOT,
   RESTORATION_RESULT,
   type RestorationReceipt,
 } from "./restoration-native-contract";
@@ -424,10 +425,7 @@ async function run(source: BrowserWindow) {
   await rm(missing, { recursive: true });
   await click(source.webContents, "Enable");
   await until(
-    () =>
-      source.webContents.executeJavaScript(
-        "document.querySelector('.extensions-panel').textContent.includes('local dormant')",
-      ),
+    () => source.webContents.executeJavaScript(RESTORATION_ENABLED_SNAPSHOT),
     "enabled dormant snapshot",
   );
   assert.equal(children.length, 1, "Enable must not activate code");
