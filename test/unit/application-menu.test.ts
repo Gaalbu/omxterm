@@ -64,6 +64,21 @@ function flattenMenuItems(template: MenuTemplate): MenuTemplate {
   return items;
 }
 
+it("uses the runtime application name for Quit independently of the branded dialog title", () => {
+  const actions = menuActions();
+  const items = flattenMenuItems(
+    terminalApplicationMenuTemplate(
+      "omxterm",
+      actions,
+      DEFAULT_TERMINAL_KEYBINDS,
+    ),
+  );
+  expect(items.find((item) => item.label === "Quit omxterm")?.click).toBe(
+    actions.requestQuit,
+  );
+  expect(items.some((item) => item.label === "Quit OMXTerm")).toBe(false);
+});
+
 it("names the actual Portuguese menu path in Settings application-failure guidance", () => {
   const { t } = translatorFor("pt-BR");
   const actions = menuActions();

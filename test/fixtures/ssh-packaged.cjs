@@ -620,7 +620,19 @@ async function run(options) {
     });
     cleanup();
   });
-  requestQuit = () => menu("Quit OMXTerm");
+  requestQuit = () => {
+    // Production builds this label from app.name, not the dialog's brand title.
+    const items = [];
+    const collect = (entries) => {
+      for (const item of entries) {
+        items.push({ label: item.label, enabled: item.enabled });
+        if (item.submenu) collect(item.submenu.items);
+      }
+    };
+    collect(Menu.getApplicationMenu().items);
+    save("quit-menu.json", { appName: app.name, items });
+    menu(`Quit ${app.name}`);
+  };
   return {
     ...state,
     scope:
