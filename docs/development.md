@@ -635,6 +635,17 @@ ARM64 complete native checks (and optional full x64 checks) run `check:portable`
 > npm run package:verify -- --windows-unpacked-only
 > ```
 
+The exact Windows verifier requires installed-payload removal independently of
+registration/shortcut/process cleanup: the custom installation root must be
+absent or a real empty directory. Non-recursive removal preserves unexpected
+residual files/directories as failure evidence; exact owned-cache cleanup and
+later relocated-uninstaller cleanup do not establish payload removal.
+Headless controlled-command regressions exercise the actual transaction with real
+files (including cleared registrations but retained payload):
+`npm test -- test/unit/windows-installer-transaction.test.ts test/unit/windows-installer-verification.test.ts test/unit/windows-verification-options.test.ts`.
+These tests do not execute NSIS or PowerShell, reproduce an installer defect, or
+replace disposable-Windows exact-installer qualification.
+
 For native x64 **build-only** delivery, use `npm run package:linux:x64` or
 `npm run package:win:x64`, then `npm run package:verify -- --inspection-only`.
 This mode never launches a GUI, executes NSIS or installs the Linux helper. It
