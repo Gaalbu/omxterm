@@ -4,12 +4,16 @@ Development preview for [#723](https://github.com/luizomf/omxterm/issues/723) an
 [#728](https://github.com/luizomf/omxterm/issues/728). The separate
 [Linux ARM64 host dev.9](https://github.com/luizomf/omxterm/releases/tag/v0.23.0-dev.9)
 and [Files 0.1.0](https://github.com/luizomf/omxterm/releases/tag/ext-files-v0.1.0)
-prereleases are published with checksums; neither replaces stable Latest.
-Actual public catalog/archive installation passed with the exact extracted
+prereleases are published with checksums. The current stable
+[Linux ARM64 host 0.23.0](https://github.com/luizomf/omxterm/releases/tag/v0.23.0)
+also supports these unchanged Files bytes; the extension/runtime remain a
+Linux ARM64 development preview. Actual public catalog/archive installation
+passed on both qualified hosts with the exact extracted
 AppImage, Files operations/conflicts, reinstall/management, the same live PTY
-and joined Quit. Input and consent were fixture-controlled. FUSE/helper
-installation, other platforms and a stable extension SDK are not qualified
-by this milestone.
+and joined Quit. Input and consent were fixture-controlled. This Files lifecycle
+check uses extraction, not FUSE/helper installation; the stable host's separate
+package checks are recorded in its release notes. Other extension platforms and
+a stable extension SDK remain unqualified.
 
 ## Concrete consumer
 

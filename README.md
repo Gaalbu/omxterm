@@ -72,7 +72,7 @@ agents.
 ## Platforms and downloads
 
 **Latest release:
-[0.22.0 — downloads and release notes](https://github.com/luizomf/omxterm/releases/tag/v0.22.0)**
+[0.23.0 — downloads and release notes](https://github.com/luizomf/omxterm/releases/tag/v0.23.0)**
 
 Prebuilt packages target **Apple Silicon macOS, Linux ARM64 or x64, and Windows 11
 ARM64 or x64**. Both x64 packages have **build-only qualification** from native
@@ -81,12 +81,12 @@ See the release notes for actual platform coverage.
 
 | Platform                                 | Download                                                                                               | Checksum                                                                                                     |
 | ---------------------------------------- | ------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------ |
-| Apple Silicon macOS                      | [DMG](https://github.com/luizomf/omxterm/releases/download/v0.22.0/OMXTerm-0.22.0-arm64.dmg)           | [SHA-256](https://github.com/luizomf/omxterm/releases/download/v0.22.0/OMXTerm-0.22.0-arm64.dmg.sha256)      |
-| Linux ARM64                              | [AppImage](https://github.com/luizomf/omxterm/releases/download/v0.22.0/OMXTerm-0.22.0-arm64.AppImage) | [SHA-256](https://github.com/luizomf/omxterm/releases/download/v0.22.0/OMXTerm-0.22.0-arm64.AppImage.sha256) |
-| Linux x64 (build-only)                   | [AppImage](https://github.com/luizomf/omxterm/releases/download/v0.22.0/OMXTerm-0.22.0-x64.AppImage)   | [SHA-256](https://github.com/luizomf/omxterm/releases/download/v0.22.0/OMXTerm-0.22.0-x64.AppImage.sha256)   |
-| Linux application-menu helper (optional) | [linux_install.sh](https://github.com/luizomf/omxterm/releases/download/v0.22.0/linux_install.sh)      | [SHA-256](https://github.com/luizomf/omxterm/releases/download/v0.22.0/linux_install.sh.sha256)              |
-| Windows ARM64                            | [Installer](https://github.com/luizomf/omxterm/releases/download/v0.22.0/OMXTerm-0.22.0-arm64.exe)     | [SHA-256](https://github.com/luizomf/omxterm/releases/download/v0.22.0/OMXTerm-0.22.0-arm64.exe.sha256)      |
-| Windows x64 (build-only)                 | [Installer](https://github.com/luizomf/omxterm/releases/download/v0.22.0/OMXTerm-0.22.0-x64.exe)       | [SHA-256](https://github.com/luizomf/omxterm/releases/download/v0.22.0/OMXTerm-0.22.0-x64.exe.sha256)        |
+| Apple Silicon macOS                      | [DMG](https://github.com/luizomf/omxterm/releases/download/v0.23.0/OMXTerm-0.23.0-arm64.dmg)           | [SHA-256](https://github.com/luizomf/omxterm/releases/download/v0.23.0/OMXTerm-0.23.0-arm64.dmg.sha256)      |
+| Linux ARM64                              | [AppImage](https://github.com/luizomf/omxterm/releases/download/v0.23.0/OMXTerm-0.23.0-arm64.AppImage) | [SHA-256](https://github.com/luizomf/omxterm/releases/download/v0.23.0/OMXTerm-0.23.0-arm64.AppImage.sha256) |
+| Linux x64 (build-only)                   | [AppImage](https://github.com/luizomf/omxterm/releases/download/v0.23.0/OMXTerm-0.23.0-x64.AppImage)   | [SHA-256](https://github.com/luizomf/omxterm/releases/download/v0.23.0/OMXTerm-0.23.0-x64.AppImage.sha256)   |
+| Linux application-menu helper (optional) | [linux_install.sh](https://github.com/luizomf/omxterm/releases/download/v0.23.0/linux_install.sh)      | [SHA-256](https://github.com/luizomf/omxterm/releases/download/v0.23.0/linux_install.sh.sha256)              |
+| Windows ARM64                            | [Installer](https://github.com/luizomf/omxterm/releases/download/v0.23.0/OMXTerm-0.23.0-arm64.exe)     | [SHA-256](https://github.com/luizomf/omxterm/releases/download/v0.23.0/OMXTerm-0.23.0-arm64.exe.sha256)      |
+| Windows x64 (build-only)                 | [Installer](https://github.com/luizomf/omxterm/releases/download/v0.23.0/OMXTerm-0.23.0-x64.exe)       | [SHA-256](https://github.com/luizomf/omxterm/releases/download/v0.23.0/OMXTerm-0.23.0-x64.exe.sha256)        |
 
 Linux ARM64 requires **glibc 2.42+** and X11/XWayland (for example Fedora 43+,
 Ubuntu 25.10+, or Arch). Linux x64 headless checks ran on Ubuntu 22.04 with
