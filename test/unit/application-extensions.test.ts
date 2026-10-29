@@ -225,6 +225,10 @@ beforeEach(async () => {
     starting = startApplicationExtensions({
       applicationRoot: adapters.root,
       ssh: { open: adapters.sshOpen },
+      layout: {
+        capture: vi.fn(() => Promise.reject(new Error("unavailable"))),
+        open: vi.fn(async () => ({ ok: false, error: "unavailable" })),
+      },
       translator: () => translatorFor(language),
       sendAction: adapters.sendOpen,
       isTrustedSender: (event) => event.sender === contents,

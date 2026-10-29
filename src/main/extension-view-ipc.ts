@@ -173,6 +173,7 @@ export function startExtensionViewHost(
       }
       return descriptor;
     },
+    captureFocusIntent: (id: string) => host.captureFocusIntent(id),
     clipboard: host.clipboard,
     retire: host.retire,
   };

@@ -52,6 +52,8 @@ source/test boundaries and known limitations.
 
 [ADR0041: Transfer explicit SSH launches to core](0041-transfer-ssh-launches-to-core.md)
 adds the optional Linux ARM64 SSH Connect capability and ended-readable Surface.
+[ADR0042: Save layouts without restoring sessions](0042-save-layouts-without-restoring-sessions.md)
+adds explicit optional Saved Layout capture/open and extension-scoped CAS state.
 
 ## Related boundaries
 

@@ -25,7 +25,8 @@ type ActivatedBackend = {
   invoke(value: JsonValue, signal: AbortSignal): JsonValue | Promise<JsonValue>;
   deactivate?(signal: AbortSignal): void | Promise<void>;
 };
-// Backend ESM exports activate({signal, files}), returning ActivatedBackend or a Promise.
+// Backend ESM exports activate({signal, files, state?}), returning ActivatedBackend or a Promise.
+// state is supplied only for a manifest declaring state.v1.
 // files.moveNoReplace(source, destination): Promise<void> is the concrete
 // Linux ARM64 preview primitive; unsupported platforms refuse explicitly.
 ```
@@ -34,6 +35,23 @@ type ActivatedBackend = {
 main capability (`terminal.openSsh.v1`), not a backend-owned PTY. Its package
 requires host0.24.0-dev.0; API0.1.x and existing Files manifests remain compatible.
 There are no dummy action/tab/terminal methods, automatic registrations, or stable discovery promises. The module owns its channels, timers and pending calls; future capability registrations need their own concrete consumer and retirement contract.
+
+## Explicit extension state
+
+A `state.v1` declaration supplies `state.read()` and
+`state.replace(expectedRevision, valueOrNull)` in the backend bootstrap context.
+Both return `{revision, value}`. One bounded document per extension ID lives at
+`<userData>/extension-state/<id>/state.json`, not in immutable package bytes.
+Construction is lazy with no state reads at application startup. Short stable
+native exclusive leases protect read/revision/CAS/atomic flushed replacement;
+null writes a fresh revisioned tombstone, not deletion of revision history.
+Errors distinguish busy, conflict, invalid-state/value and outcome-unknown.
+
+No retry, repair, sweep, migration, arbitrary filename or global event bus is
+provided. State survives installation management. Interrupted temp documents
+can remain; Forget removes only active data. This helper is correctness support
+for trusted code, not a filesystem sandbox. See [Saved Layout](saved-layout.md)
+for the first concrete consumer, privacy and cleanup disclosure.
 
 ## Bootstrap and immutable-version handoff
 

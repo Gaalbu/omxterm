@@ -32,6 +32,14 @@ Choose **View → Pane → Split Right** (`Cmd+D` / `Ctrl+Shift+O`) or **Split D
 
 To protect active work, OMXTerm asks for confirmation before closing a pane, tab or window with a running command. Close Pane only asks about the focused pane; Close Tab asks once for all of the tab's panes. On Windows, confirmation is shown for all live sessions. You can disable this prompt anytime by setting `"confirmClose": false` in `config.json`.
 
+### Save a terminal arrangement
+
+The optional Linux ARM64 [Saved Layout extension](saved-layout.md) explicitly
+saves one window's terminal tabs, splits and available local folders. Open starts
+fresh shells in a new window without closing current work. It does not restore
+output, processes or commands. Installation, conflicts, folder provenance and
+Forget's active-snapshot/remnant limits are described in its guide.
+
 ## Window controls
 
 - **Zoom:** changes the font size in the current window (`Cmd++` / `Cmd+-` on macOS, `Ctrl++` / `Ctrl+-` on Linux/Windows). **Actual Size** (`Cmd+0` / `Ctrl+0`) resets to your configured size.

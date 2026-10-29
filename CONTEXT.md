@@ -232,6 +232,14 @@ continuations remain refused; see the [terminal contract](docs/spec.md#terminal-
 
 ## Extensions
 
+**Saved Layout** — One explicitly saved current-window terminal arrangement:
+terminal order, weighted splits, focused panes and local-folder provenance.
+The separately installed Linux ARM64 preview opens fresh Default Shells in a new
+window, preserving current work. It is not a saved running session, command
+replay or startup restoration. Its revisioned state survives uninstall; Forget
+removes the active snapshot, not possible interrupted-write remnants. See
+[the guide](docs/saved-layout.md).
+
 **SSH Connect** — A separately installed Linux ARM64 preview application page
 with an incomplete bounded OpenSSH alias index and distinct quick-connect field.
 Its declared `terminal.openSsh.v1` capability transfers a typed target to core,

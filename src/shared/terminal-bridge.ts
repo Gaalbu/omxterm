@@ -19,6 +19,7 @@ import type { TerminalSnippetsResponse } from "./terminal-snippets";
 import type { LocalImageActivation, LocalImageData } from "./local-image";
 
 export interface TerminalBridge {
+  readonly layout?: import("./terminal-layout").TerminalLayoutBridge;
   readonly hostedContent?: import("./extension-view").HostedContentBridge;
   readonly palette?: import("./command-palette").CommandPaletteBridge;
   configuration(): Promise<TerminalRendererConfiguration>;
@@ -41,6 +42,7 @@ export interface TerminalBridge {
     surfaceId?: string,
     workingDirectoryOf?: TerminalSessionId,
     launchToken?: string,
+    restoreToken?: string,
   ): Promise<TerminalSessionId>;
   sshPane?(token: string, accepted: boolean | null): void;
   input(sessionId: TerminalSessionId, data: string): void;

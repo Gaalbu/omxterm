@@ -75,8 +75,9 @@ local directory through OSC 7 in its own output, the new pane starts there if
 that directory still exists; otherwise it starts in the home directory, like a
 new tab. Main reads OSC 7 from the PTY output it already relays, accepts only an
 empty, `localhost` or local host name and a local absolute path (a drive path on
-Windows; UNC and device paths are rejected), and never logs, persists or sends
-the directory. CAN/SUB cancellation discards an unfinished report and resumes
+Windows; UNC and device paths are rejected), and never logs the directory.
+Explicit optional Saved Layout capture may send provenance to its trusted
+extension for persistence, never to the terminal renderer (ADR0042). CAN/SUB cancellation discards an unfinished report and resumes
 scanning subsequent output without accepting the cancelled URI. Overflow still
 invalidates an older cwd regardless of chunk boundaries; an in-bound cancellation
 alone leaves the last completed report unchanged. OMXTerm injects nothing to
@@ -240,8 +241,12 @@ minima stay unchanged. Layout tokens/budgets are recorded in the
 
 IPC gains per-session identity beneath each window controller, and selection
 refits the active grid. Tab order and visibility are in-memory presentation;
-restoration, workspaces, broadcast input, pane maximize and moving tabs or
-panes between tabs or windows are outside current scope.
+workspaces, broadcast input, pane maximize and moving tabs or panes between
+tabs or windows are outside current scope. Explicit optional
+[Saved Layout](0042-save-layouts-without-restoring-sessions.md) is the narrow
+exception for saving terminal order/layout/cwd and opening fresh shells in a
+new window. Complete initial pane ownership precedes bounded ordinary mounts;
+no dummy session or repeated split-action simulation is used.
 
 Headless style and host tests cover shared separator paint, retained target sizes,
 per-Surface marker insets, initial/reloaded accent propagation, and both split-axis

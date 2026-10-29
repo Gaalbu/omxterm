@@ -1,6 +1,6 @@
 {
   "name": "omxterm",
-  "version": "0.24.0-dev.0",
+  "version": "0.24.0-dev.1",
   "description": "Open-source personal desktop terminal for ARM64 macOS, Linux, and Windows",
   "desktopName": "omxterm.desktop",
   "author": "Luiz Otávio Miranda",
@@ -19,6 +19,7 @@
     "build": "node build.mjs",
     "build:installed-packages": "node scripts/build-installed-packages.mjs",
     "build:extension-runtime": "node scripts/build-extension-runtime.mjs",
+    "build:restoration-extension": "node scripts/build-restoration-extension.mjs",
     "check:portable": "npm run format:check && npm run lint && npm run typecheck && npm test && npm run build",
     "package:mac": "npm run build && npm run package-built:mac",
     "package:linux": "npm run build && npm run package-built:linux",

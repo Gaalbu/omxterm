@@ -138,6 +138,12 @@ export const brazilianPortugueseMessages: Readonly<
 
   "terminal.surface": "Superfície do terminal",
   "terminal.sshExit": "SSH encerrou (código {code}).",
+  "layout.initializing":
+    "Abrindo layout salvo: {settled}/{total} painéis; {fallbacks} pastas substituídas pela pasta pessoal; {failed} painéis indisponíveis.",
+  "layout.completed":
+    "Layout salvo aberto: {settled}/{total} painéis; {fallbacks} pastas substituídas pela pasta pessoal; {failed} painéis indisponíveis.",
+  "layout.partial":
+    "Layout salvo parcialmente aberto: {settled}/{total} painéis; {fallbacks} pastas substituídas pela pasta pessoal; {failed} painéis indisponíveis.",
   "terminal.tabs": "Abas do terminal",
   "terminal.userFileErrors": "Erros nos arquivos do usuário",
   "terminal.surfaceFailure": "Falha na superfície do terminal",

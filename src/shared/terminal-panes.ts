@@ -57,6 +57,7 @@ export interface TerminalTabSelection {
 export interface TerminalSessionStart {
   readonly surfaceId?: string;
   readonly launchToken?: string;
+  readonly restoreToken?: string;
   readonly workingDirectoryOf?: TerminalSessionId;
 }
 
@@ -132,11 +133,19 @@ export function isTerminalSessionStart(
       (key) =>
         key === "surfaceId" ||
         key === "workingDirectoryOf" ||
-        key === "launchToken",
+        key === "launchToken" ||
+        key === "restoreToken",
     ) &&
     (record.launchToken === undefined ||
       (typeof record.launchToken === "string" &&
         /^[0-9a-f-]{36}$/.test(record.launchToken) &&
+        record.workingDirectoryOf === undefined)) &&
+    (record.restoreToken === undefined ||
+      (typeof record.restoreToken === "string" &&
+        /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/.test(
+          record.restoreToken,
+        ) &&
+        record.launchToken === undefined &&
         record.workingDirectoryOf === undefined)) &&
     (record.surfaceId === undefined || isSurfaceIdentity(record.surfaceId)) &&
     (record.workingDirectoryOf === undefined ||

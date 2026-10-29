@@ -19,7 +19,7 @@ export interface FilesBuildReceipt {
 }
 
 export function buildExtension(
-  name: "files" | "ssh",
+  name: "files" | "ssh" | "restoration",
   output?: string,
   suppliedCommit?: string,
 ): Promise<FilesBuildReceipt>;

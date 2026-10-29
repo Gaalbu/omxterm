@@ -64,12 +64,15 @@ export interface TerminalIpcControllerOptions {
   readonly configuration: TerminalRendererConfiguration;
   readonly webContents: TrustedWebContents;
   readonly initialFullScreen?: boolean;
+  readonly homeDirectory?: string;
+  readonly consumeLayoutLaunch?: (token: string) => string;
   readonly backgroundTransparency?: () => number;
   // workingDirectory is an inherited, already validated local directory.
   readonly createSession: (
     callbacks: SessionCallbacks,
     workingDirectory?: string,
     ssh?: import("./ssh-terminal-launch").SshLaunch,
+    restored?: boolean,
   ) => LocalTerminalSession;
   readonly consumeSshLaunch?: (
     token: string,
@@ -116,6 +119,9 @@ export interface TerminalIpcController {
   applyFullScreen(fullScreen: boolean): void;
   hasBusySelectedSession(): boolean;
   reportedWorkingDirectory?(sessionId: TerminalSessionId): string | undefined;
+  layoutDirectory?(
+    sessionId: TerminalSessionId,
+  ): import("../shared/terminal-layout").LayoutDirectory;
   claimContextMenuTarget(target: TerminalContextMenuTarget): boolean;
   hasBusyFocusedSession(): boolean;
   hasBusySession(): boolean;

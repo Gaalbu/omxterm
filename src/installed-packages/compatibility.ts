@@ -1,6 +1,6 @@
 import { satisfies } from "semver";
 
-/** The unchanged Files preview is explicitly supported by this SSH preview host. */
+/** Deliberate exact-host admission of the unchanged immutable Files preview. */
 export function packageCompatible(
   manifest: {
     id: string;
@@ -10,7 +10,8 @@ export function packageCompatible(
   runtime: { appVersion: string; apiVersion: string },
 ): boolean {
   const unchangedFilesPreview =
-    runtime.appVersion === "0.24.0-dev.0" &&
+    (runtime.appVersion === "0.24.0-dev.0" ||
+      runtime.appVersion === "0.24.0-dev.1") &&
     manifest.id === "omxterm.files" &&
     manifest.version === "0.1.0" &&
     manifest.engines.omxterm === ">=0.23.0-dev.8 <0.24.0" &&

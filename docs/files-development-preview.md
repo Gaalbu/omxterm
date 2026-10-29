@@ -15,6 +15,12 @@ check uses extraction, not FUSE/helper installation; the stable host's separate
 package checks are recorded in its release notes. Other extension platforms and
 a stable extension SDK remain unqualified.
 
+Host0.24.0-dev.1 deliberately extends the exact immutable Files0.1.0 admission
+already present in0.24.0-dev.0; it does not broaden the manifest range or replace
+published archive bytes. The Saved Layout candidate requires a focused
+unchanged-artifact lifecycle check on that exact new host. Prior host results
+above are not a claim that this new candidate has passed native verification.
+
 ## Concrete consumer
 
 `extensions/files` is separately built, not imported into application main or the

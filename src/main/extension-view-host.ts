@@ -128,6 +128,10 @@ class NativeExtensionViewHost {
   #selected: string | null = null;
   #layoutFocus: string | null = null;
   #revision = 0;
+  #focusGeneration = 0;
+  #blur = () => {
+    this.#focusGeneration++;
+  };
   #cleanupFailed = false;
   constructor(private readonly options: ExtensionViewHostOptions) {
     if (!isAbsolute(options.preloadPath))
@@ -140,6 +144,7 @@ class NativeExtensionViewHost {
     options.owner.webContents.on("render-process-gone", this.#ownerLost);
     options.owner.webContents.on("did-start-navigation", this.#ownerNavigation);
     options.owner.on("resize", this.#hideForLayout);
+    options.owner.on("blur", this.#blur);
     options.owner.webContents.on("zoom-changed", this.#hideForLayout);
   }
   #live() {
@@ -283,6 +288,7 @@ class NativeExtensionViewHost {
         this.#ownerNavigation,
       );
       this.options.owner.removeListener("resize", this.#hideForLayout);
+      this.options.owner.removeListener("blur", this.#blur);
       this.#ownerContents.removeListener("zoom-changed", this.#hideForLayout);
       this.#changeState(outcome.status, outcome);
       return outcome;
@@ -574,6 +580,23 @@ class NativeExtensionViewHost {
     entry.contents[action]();
     return true;
   };
+  captureFocusIntent(id: string): () => boolean {
+    const revision = this.#revision;
+    const generation = this.#focusGeneration;
+    return () => {
+      const entry = this.#views.get(id);
+      return (
+        this.#live() &&
+        this.#revision === revision &&
+        this.#focusGeneration === generation &&
+        this.#selected === id &&
+        !!entry?.visible &&
+        !entry.contents.isDestroyed() &&
+        entry.contents.isFocused() &&
+        this.options.owner.isFocused()
+      );
+    };
+  }
   owns(id: string) {
     const entry = this.#views.get(id);
     return this.#live() && !!entry && !entry.closing;

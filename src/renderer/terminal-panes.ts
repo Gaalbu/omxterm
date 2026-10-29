@@ -16,6 +16,7 @@ import { layoutPanes, leaf, type PaneLayout } from "./pane-layout";
 export type CreatePaneAdapter = (
   workingDirectoryOf?: TerminalSessionId,
   launchToken?: string,
+  restoreToken?: string,
 ) => ElectronTerminalAdapter;
 
 // One Terminal Surface and its Live Terminal Session (ADR 0016).

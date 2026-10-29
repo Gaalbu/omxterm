@@ -65,6 +65,53 @@ function createBridgeHarness() {
 }
 
 describe("renderer Electron terminal adapter", () => {
+  it("keeps restoration separate from SSH and cancels an unconsumed token once", async () => {
+    const h = createBridgeHarness();
+    const token = "00000000-0000-0000-0000-000000000001";
+    const bridge = {
+      ...h.bridge,
+      layout: {
+        initial: async () => null,
+        onCapture: () => () => {},
+        cancel: vi.fn(),
+      },
+    };
+    expect(() =>
+      createElectronTerminalAdapter(bridge, undefined, undefined, token, token),
+    ).toThrow("Conflicting");
+    expect(() =>
+      createElectronTerminalAdapter(bridge, undefined, "s1", undefined, token),
+    ).toThrow("Conflicting");
+    const queued = createElectronTerminalAdapter(
+      bridge,
+      undefined,
+      undefined,
+      undefined,
+      token,
+    );
+    queued.close();
+    queued.close();
+    expect(bridge.layout.cancel).toHaveBeenCalledExactlyOnceWith(token);
+    expect(h.calls.start).not.toHaveBeenCalled();
+    const mounting = createElectronTerminalAdapter(
+      bridge,
+      undefined,
+      undefined,
+      undefined,
+      token,
+    );
+    const started = mounting.start({ onOutput: vi.fn(), onExit: vi.fn() });
+    expect(h.calls.start).toHaveBeenCalledWith(
+      undefined,
+      undefined,
+      undefined,
+      token,
+    );
+    mounting.close();
+    h.startSession("s1");
+    await started;
+    expect(h.calls.close).toHaveBeenCalledExactlyOnceWith("s1", undefined);
+  });
   it("releases a late Surface registration after cancellation without starting a PTY", async () => {
     const harness = createBridgeHarness();
     let resolve!: (id: string) => void;

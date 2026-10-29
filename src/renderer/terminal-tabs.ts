@@ -1,3 +1,8 @@
+import { createTerminalTabsLayout } from "./terminal-tabs-layout";
+import type {
+  InitialLayout,
+  TerminalLayoutBridge,
+} from "../shared/terminal-layout";
 import {
   activateTabContent,
   disposeTabContent,
@@ -63,6 +68,8 @@ export interface TerminalTabsElements {
 export type ApplicationTab = TerminalTab | SettingsTab | HostedTab;
 
 export interface TerminalTabsOptions {
+  readonly initialLayout?: InitialLayout | undefined;
+  readonly layout?: TerminalLayoutBridge | undefined;
   readonly hostedContent?: HostedContentBridge;
   readonly onGraphicalSelected?: () => void;
   readonly settings?: SettingsBridge;
@@ -123,6 +130,7 @@ export interface TerminalTabs {
   dispose(): void;
 }
 
+// eslint-disable-next-line max-lines-per-function -- Keep window-owned lifecycle closures together; layout mechanics live in terminal-tabs-layout.
 export function createTerminalTabs(
   elements: TerminalTabsElements,
   options: TerminalTabsOptions,
@@ -157,6 +165,13 @@ export function createTerminalTabs(
   };
 
   const selectedApplicationTab = () => tabs[selectedIndex];
+  const layout = createTerminalTabsLayout(
+    elements.container,
+    tabs,
+    options,
+    selectedApplicationTab,
+    () => disposed || closing,
+  );
   const selectedTab = () => terminalTab(selectedApplicationTab());
   const focusedPane = () => (disposed ? undefined : selectedTab()?.focused);
   const interactivePane = () => (contentReady ? focusedPane() : undefined);
@@ -198,6 +213,7 @@ export function createTerminalTabs(
     const changed = selectedApplicationTab() !== tab;
     if (changed) actionGeneration += 1;
     selectedIndex = index;
+    layout.selected(tab);
     renderStrip();
     contextMenu.selectionChanged();
     if (tab.kind === "hosted") options.notifySelection?.(null, []);
@@ -217,6 +233,7 @@ export function createTerminalTabs(
     const index = tabs.indexOf(tab);
     if (tab.removed || index < 0) return;
     tab.removed = true;
+    layout.removed(tab);
     if (tab.kind === "settings") tab.view.dispose();
     else if (tab.kind === "hosted") hosted.forget(tab);
     else if (tab.kind === "terminal")
@@ -334,8 +351,14 @@ export function createTerminalTabs(
     pane: panes.handleCommand,
     extensions: options.extensions,
   });
+  const initialReady = layout.initialize({
+    panes,
+    select,
+    mount: mountPane,
+    disposed: () => disposed,
+  });
   return {
-    ready: createTab(),
+    ready: initialReady ?? createTab(),
     ...settingsActions,
     isTerminalSelected: () => !!interactivePane(),
     openOverlay: hosted.openOverlay,
@@ -381,6 +404,7 @@ export function createTerminalTabs(
       if (disposed) return;
       disposed = true;
       commands.dispose();
+      layout.dispose();
       hosted.dispose();
       contextMenu.dispose();
       removeLanguage();

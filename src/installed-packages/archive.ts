@@ -32,8 +32,13 @@ export type PackageManifest = {
   name: string;
   engines: { omxterm: string; api: string };
   backend: string;
-  capabilities?: ["terminal.openSsh.v1"];
-  view?: { entry: string; action: string; title: string };
+  capabilities?: (
+    | "terminal.openSsh.v1"
+    | "terminal.captureLayout.v1"
+    | "terminal.openLayout.v1"
+    | "state.v1"
+  )[];
+  view?: { entry: string; action: string; title: string; context?: "window" };
 };
 export type PackageRuntime = { appVersion: string; apiVersion: string };
 export const PACKAGE_LIMITS = {
@@ -123,8 +128,18 @@ function validateCapabilities(value: Record<string, unknown>): void {
   if (
     "capabilities" in value &&
     (!Array.isArray(value.capabilities) ||
-      value.capabilities.length !== 1 ||
-      value.capabilities[0] !== "terminal.openSsh.v1")
+      value.capabilities.length < 1 ||
+      value.capabilities.length > 4 ||
+      new Set(value.capabilities).size !== value.capabilities.length ||
+      value.capabilities.some(
+        (capability) =>
+          ![
+            "terminal.openSsh.v1",
+            "terminal.captureLayout.v1",
+            "terminal.openLayout.v1",
+            "state.v1",
+          ].includes(String(capability)),
+      ))
   )
     throw new PackageError("invalid-package");
 }
@@ -132,7 +147,13 @@ function validateCapabilities(value: Record<string, unknown>): void {
 function validateView(view: unknown, id: string): void {
   if (
     !isRecord(view) ||
-    !keys(view, ["entry", "action", "title"]) ||
+    !keys(view, [
+      "entry",
+      "action",
+      "title",
+      ...("context" in view ? ["context"] : []),
+    ]) ||
+    ("context" in view && view.context !== "window") ||
     !isExtensionResource(view.entry) ||
     !view.entry.endsWith(".html") ||
     !validId(view.action) ||

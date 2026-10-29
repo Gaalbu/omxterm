@@ -127,6 +127,12 @@ export const englishMessages = {
 
   "terminal.surface": "Terminal Surface",
   "terminal.sshExit": "SSH exited (code {code}).",
+  "layout.initializing":
+    "Opening saved layout: {settled}/{total} panes; {fallbacks} folder fallbacks; {failed} unavailable panes.",
+  "layout.completed":
+    "Saved layout opened: {settled}/{total} panes; {fallbacks} folder fallbacks; {failed} unavailable panes.",
+  "layout.partial":
+    "Saved layout partially opened: {settled}/{total} panes; {fallbacks} folder fallbacks; {failed} unavailable panes.",
   "terminal.tabs": "Terminal Tabs",
   "terminal.userFileErrors": "User File Errors",
   "terminal.surfaceFailure": "Terminal Surface Failure",

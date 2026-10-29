@@ -1,0 +1,12 @@
+Saved Layout is distributed under OMXTerm's MIT license (included as LICENSE).
+
+The bundled src/shared/terminal-layout.ts layout validation adapts pane
+coverage/indexing concepts from @ruscher's OMXTerm PR #622, commit
+b3c3a4ad6c1f2224bded65873ba0b09a07ec5d38. The original nested workspace model
+was changed to bounded flat nodes, one explicitly saved window, and fresh
+Default Shells; automatic session restoration and command replay are not included.
+Existing @ruscher contributor credit remains applicable.
+
+The source carries the Community Big MIT notice, Copyright (c) 2024
+Community Big. Its complete license is included as licenses/ashyterm.txt
+(from assets/licenses/ashyterm-MIT.txt in the OMXTerm source tree).

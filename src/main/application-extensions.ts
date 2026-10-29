@@ -111,8 +111,15 @@ function applicationViews(
           Object.keys(value).length === 1
         )
           return Promise.resolve({
-            capabilities: pin.manifest.capabilities ?? [],
+            capabilities: (pin.manifest.capabilities ?? []).filter(
+              (capability) => capability !== "state.v1",
+            ),
           });
+        if (
+          value.operation === "terminal.captureLayout.v1" ||
+          value.operation === "terminal.openLayout.v1"
+        )
+          return layoutRequest(value, signal);
         if (value.operation === "terminal.openSsh.v1") {
           if (
             !pin.manifest.capabilities?.includes("terminal.openSsh.v1") ||
@@ -135,6 +142,38 @@ function applicationViews(
       if (state === "settled") retired();
     },
   });
+  async function layoutRequest(
+    value: { [key: string]: import("../extension-runtime/protocol").Value },
+    signal: AbortSignal,
+  ) {
+    if (value.operation === "terminal.captureLayout.v1") {
+      if (
+        !pin.manifest.capabilities?.includes("terminal.captureLayout.v1") ||
+        Object.keys(value).length !== 1
+      )
+        throw new PackageError("unavailable");
+      let capture!: ReturnType<typeof options.layout.capture>;
+      await admit(signal, () => {
+        capture = options.layout.capture(
+          window,
+          AbortSignal.any([signal, epochSignal, target.signal]),
+        );
+      });
+      return capture;
+    }
+    if (
+      !pin.manifest.capabilities?.includes("terminal.openLayout.v1") ||
+      Object.keys(value).sort().join() !== "layout,operation" ||
+      !viewId
+    )
+      throw new PackageError("unavailable");
+    return options.layout.open(
+      window,
+      value.layout,
+      host.captureFocusIntent(viewId),
+      (commit) => admit(signal, commit),
+    );
+  }
   return {
     open: async () => {
       viewId = (
@@ -187,6 +226,14 @@ async function applicationManager(
 
 type ApplicationExtensionsOptions = {
   applicationRoot: string;
+  layout: {
+    capture: ReturnType<
+      typeof import("./terminal-layout-ipc").registerTerminalLayoutIpc
+    >["capture"];
+    open: ReturnType<
+      typeof import("./terminal-layout-transfer").createTerminalLayoutTransfer<BrowserWindow>
+    >["open"];
+  };
   ssh: Pick<
     ReturnType<
       typeof import("./ssh-terminal-launch").createSshTerminalLaunch<BrowserWindow>
@@ -209,7 +256,7 @@ export async function startApplicationExtensions(
 ) {
   const windows = new Map<
     BrowserWindow,
-    (sessionId?: string) => ExtensionTarget
+    (sessionId?: string, context?: "window") => ExtensionTarget
   >();
   const lifetime = new AbortController();
   const pending = new Map<
@@ -375,8 +422,15 @@ export async function startApplicationExtensions(
           extension: true,
           invoke() {
             if (claim && !claim()) return;
-            const captured =
+            const source =
               target ?? capture(BrowserWindow.getFocusedWindow() ?? undefined);
+            const captured =
+              source && view.context === "window"
+                ? windows.get(source.owner as BrowserWindow)?.(
+                    undefined,
+                    "window",
+                  )
+                : source;
             if (!captured || captured.signal.aborted || stopping) return;
             const window = captured.owner as BrowserWindow;
             const token = randomUUID();
@@ -427,7 +481,7 @@ export async function startApplicationExtensions(
     },
     registerWindow(
       window: BrowserWindow,
-      target: (sessionId?: string) => ExtensionTarget,
+      target: (sessionId?: string, context?: "window") => ExtensionTarget,
     ) {
       const contents = window.webContents;
       windows.set(window, target);

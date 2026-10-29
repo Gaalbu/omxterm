@@ -1,3 +1,4 @@
+/* eslint-disable max-lines, max-lines-per-function -- Keep session start, early native callbacks and retirement in the same controller lifetime. */
 import type {
   TerminalExit,
   TerminalSessionId,
@@ -47,6 +48,10 @@ import {
 } from "./terminal-session-failure";
 import { isTerminalRendererConfiguration } from "../shared/user-configuration";
 import { createWorkingDirectoryTracker } from "./terminal-working-directories";
+import {
+  restoredDirectory,
+  captureSessionDirectory,
+} from "./terminal-layout-session";
 import {
   createTabSelection,
   terminalSessionLaunch,
@@ -470,10 +475,11 @@ function createTerminalIpcController(
       options.consumeSshLaunch,
     );
     const { ssh } = launch;
+    const restored = launch.restoreToken !== undefined;
+    const restoredCwd = restoredDirectory(launch, options.consumeLayoutLaunch);
     if (launch.surfaceId !== undefined) surfaceFonts.start(launch.surfaceId);
-    const workingDirectory = workingDirectories.inherited(
-      launch.workingDirectoryOf,
-    );
+    const workingDirectory =
+      restoredCwd ?? workingDirectories.inherited(launch.workingDirectoryOf);
 
     const sessionId: TerminalSessionId = `s${nextSessionNumber}`;
     nextSessionNumber += 1;
@@ -551,6 +557,7 @@ function createTerminalIpcController(
         },
         ssh ? undefined : workingDirectory,
         ssh,
+        restored,
       );
     } catch (cause) {
       if (windowId !== undefined)
@@ -570,6 +577,12 @@ function createTerminalIpcController(
 
     if (!exitedBeforeRegistration && !disposed) {
       outputFlow.bind(createdSession);
+      workingDirectories.launched(
+        sessionId,
+        !ssh && createdSession.launchKind !== "explicit-command"
+          ? (workingDirectory ?? options.homeDirectory)
+          : undefined,
+      );
       sessions.set(sessionId, {
         session: createdSession,
         outputFlow,
@@ -714,6 +727,13 @@ function createTerminalIpcController(
         ? workingDirectories.reported(sessionId)
         : undefined;
     },
+    layoutDirectory: (id) =>
+      captureSessionDirectory(
+        id,
+        nextSessionNumber,
+        sessions,
+        workingDirectories,
+      ),
     claimContextMenuTarget: contextMenu.claim,
     hasBusyFocusedSession: selection.hasBusyFocusedSession,
     hasBusySession,

@@ -43,6 +43,17 @@ deactivation, async lifetime guards, bounded per-window geometry, complete captu
 cleanup, clipboard routing and overlay integration; no workspaces or splits are
 included.
 
+Saved Layout adapts pane coverage/indexing and tree serialization concepts from
+`src/shared/workspace.ts`, `src/renderer/pane-layout.ts` and
+`src/renderer/terminal-tabs-workspace.ts` at the same @ruscher source commit.
+Adapted host files are `src/shared/terminal-layout.ts` and
+`src/renderer/terminal-tabs-layout.ts`. Flat indexed nodes replace the nested
+workspace encoding to preserve deep layouts within transport bounds; only one
+explicitly saved window and fresh Default Shells are supported, not automatic
+workspace/session restoration. The separate `extensions/restoration` archive
+includes its adaptation notice, OMXTerm MIT license and the complete Community
+Big MIT notice as `licenses/ashyterm.txt`, alongside the host's retained notices.
+
 The configured Interface Language implementation also adapts the translator,
 English and Brazilian Portuguese catalogs, and catalog tests from
 `src/shared/i18n.ts`, `src/shared/locales/en.ts`,

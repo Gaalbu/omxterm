@@ -28,6 +28,12 @@ export interface NativeTerminalWindow {
   setAlwaysOnTop(value: boolean, level: "floating"): void;
 }
 
+export interface RestorationWindowOptions {
+  plan: import("./terminal-layout-transfer").PreparedLayout;
+  focus(): boolean;
+  accepted(): void;
+}
+
 export interface TerminalWindowLifecycle {
   readonly windowId: number;
   onWindowClosed(): void;
@@ -82,6 +88,7 @@ interface TerminalApplicationOptions<Window extends NativeTerminalWindow> {
   readonly alwaysOnTopDefault?: boolean;
   readonly createWindow: (
     lifecycle: TerminalWindowLifecycle,
+    restoration?: RestorationWindowOptions,
   ) => TerminalWindowInstance<Window>;
   readonly getSelectedWindow: () => Window | undefined;
   readonly showQuitConfirmation: (
@@ -117,7 +124,7 @@ interface TerminalApplicationOptions<Window extends NativeTerminalWindow> {
 export interface TerminalApplication<
   Window extends NativeTerminalWindow = NativeTerminalWindow,
 > {
-  newWindow(): Promise<void>;
+  newWindow(restoration?: RestorationWindowOptions): Promise<void>;
   closeSelectedWindow(): Promise<void>;
   requestWindowClose(window: Window): Promise<void>;
   mayCloseWindow(window: Window): boolean;
@@ -223,8 +230,11 @@ export function startTerminalApplication<Window extends NativeTerminalWindow>(
   };
 
   return {
-    async newWindow() {
-      if (quitting) return;
+    async newWindow(restoration) {
+      if (quitting) {
+        if (restoration) throw new Error("Application is quitting");
+        return;
+      }
 
       const windowId = nextWindowId;
       nextWindowId += 1;
@@ -235,55 +245,58 @@ export function startTerminalApplication<Window extends NativeTerminalWindow>(
         if (window) event();
         else pendingLifecycleEvents.push(event);
       };
-      const instance = options.createWindow({
-        windowId,
-        onWindowClosed() {
-          dispatch(() => {
-            windows.delete(instance.window);
-            options.operationalEvents?.write({
-              name: "window.closed",
-              windowId,
-              durationMs: elapsedMilliseconds(openedAt),
-            });
-            if (windows.size === 0) quit();
-          });
-        },
-        onTabsEmpty(reason) {
-          dispatch(() => {
-            const state = windows.get(instance.window);
-            if (!state || state.tabsEmpty) return;
-            state.tabsEmpty = true;
-            if (reason === "rendering-failure")
-              retainFailure(instance.window, {
-                reason: "rendering",
-                launchKind: "default-shell",
+      const instance = options.createWindow(
+        {
+          windowId,
+          onWindowClosed() {
+            dispatch(() => {
+              windows.delete(instance.window);
+              options.operationalEvents?.write({
+                name: "window.closed",
+                windowId,
+                durationMs: elapsedMilliseconds(openedAt),
               });
-            closeIfEmpty(instance.window);
-          });
-        },
-        onSessionStartError(context) {
-          dispatch(() => {
-            // Spawn rejection drops the renderer tab, but its acknowledgement
-            // remains a window owner independently of every sibling session.
-            retainFailure(instance.window, {
-              reason: "spawn",
-              launchKind: context.launchKind,
+              if (windows.size === 0) quit();
             });
-          });
+          },
+          onTabsEmpty(reason) {
+            dispatch(() => {
+              const state = windows.get(instance.window);
+              if (!state || state.tabsEmpty) return;
+              state.tabsEmpty = true;
+              if (reason === "rendering-failure")
+                retainFailure(instance.window, {
+                  reason: "rendering",
+                  launchKind: "default-shell",
+                });
+              closeIfEmpty(instance.window);
+            });
+          },
+          onSessionStartError(context) {
+            dispatch(() => {
+              // Spawn rejection drops the renderer tab, but its acknowledgement
+              // remains a window owner independently of every sibling session.
+              retainFailure(instance.window, {
+                reason: "spawn",
+                launchKind: context.launchKind,
+              });
+            });
+          },
+          onSessionExit(exit, context) {
+            dispatch(() => {
+              // Only the renderer knows whether another tab is still mounting.
+              // Its last-tab notification, not the native PTY count, closes an
+              // ordinarily emptied window. Native shutdown still owns PTY drain.
+              const failure = terminalSessionExitFailure(exit, context);
+              if (!failure) return;
+              // Even the last native session may have another failed or mounting
+              // tab beside it. Acknowledgement removes only its own dead tab.
+              retainFailure(instance.window, failure, context.sessionId);
+            });
+          },
         },
-        onSessionExit(exit, context) {
-          dispatch(() => {
-            // Only the renderer knows whether another tab is still mounting.
-            // Its last-tab notification, not the native PTY count, closes an
-            // ordinarily emptied window. Native shutdown still owns PTY drain.
-            const failure = terminalSessionExitFailure(exit, context);
-            if (!failure) return;
-            // Even the last native session may have another failed or mounting
-            // tab beside it. Acknowledgement removes only its own dead tab.
-            retainFailure(instance.window, failure, context.sessionId);
-          });
-        },
-      });
+        restoration,
+      );
       window = instance.window;
       windows.set(window, {
         sessionActivity: instance.sessionActivity,
@@ -296,6 +309,7 @@ export function startTerminalApplication<Window extends NativeTerminalWindow>(
       options.operationalEvents?.write({ name: "window.opened", windowId });
       window.setAlwaysOnTop(alwaysOnTopDefault, "floating");
       for (const event of pendingLifecycleEvents) event();
+      restoration?.accepted();
       await instance.load();
     },
     closeSelectedWindow() {
@@ -351,9 +365,7 @@ export function startTerminalApplication<Window extends NativeTerminalWindow>(
         });
       return quitRequest;
     },
-    newTabInSelectedWindow() {
-      sendToSelected({ action: "new" });
-    },
+    newTabInSelectedWindow: () => sendToSelected({ action: "new" }),
     closeSelectedTab() {
       const window = selectedWindow();
       if (!window) return Promise.resolve();
@@ -373,12 +385,8 @@ export function startTerminalApplication<Window extends NativeTerminalWindow>(
       return state.tabCloseRequest;
     },
     ...paneActions(options, selectedWindow, windows, confirmClose),
-    selectNextTab() {
-      sendToSelected({ action: "next" });
-    },
-    selectPreviousTab() {
-      sendToSelected({ action: "previous" });
-    },
+    selectNextTab: () => sendToSelected({ action: "next" }),
+    selectPreviousTab: () => sendToSelected({ action: "previous" }),
     selectTabInSelectedWindow(position) {
       sendToSelected({ action: "select", position });
     },

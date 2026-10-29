@@ -1,3 +1,7 @@
+import type {
+  InitialLayout,
+  TerminalLayoutBridge,
+} from "../shared/terminal-layout";
 import { hostedTabOptions } from "./hosted-overlay-subscriptions";
 import type { HostedContentBridge } from "../shared/extension-view";
 import { mountWindowChrome, type WindowChromeBridge } from "./window-chrome";
@@ -60,6 +64,8 @@ export interface TerminalWindowPageElements {
 }
 
 interface TerminalWindowPageOptions extends TerminalWindowActionSubscriptions {
+  readonly initialLayout?: InitialLayout;
+  readonly layout?: TerminalLayoutBridge;
   readonly hostedContent?: HostedContentBridge;
   readonly about?: AboutBridge;
   readonly palette?: CommandPaletteBridge;
@@ -69,6 +75,7 @@ interface TerminalWindowPageOptions extends TerminalWindowActionSubscriptions {
     fontConfigurationId?: string,
     workingDirectoryOf?: TerminalSessionId,
     launchToken?: string,
+    restoreToken?: string,
   ) => ElectronTerminalAdapter;
   readonly sshPane?: (token: string, accepted: boolean | null) => void;
   readonly configuration?: TerminalRendererConfiguration;
@@ -192,17 +199,15 @@ export function mountTerminalWindowPage(
     { strip: elements.tabStrip, container: elements.tabsContainer },
     {
       language,
+      initialLayout: options.initialLayout,
+      layout: options.layout,
       ...(options.settings ? { settings: options.settings } : {}),
       ...(options.extensions ? { extensions: options.extensions } : {}),
       ...hostedTabOptions(options.hostedContent, () =>
         auxiliaryPanel?.deactivate(),
       ),
-      createAdapter: (workingDirectoryOf, launchToken) =>
-        options.createAdapter(
-          fontConfigurationId,
-          workingDirectoryOf,
-          launchToken,
-        ),
+      createAdapter: (...intent) =>
+        options.createAdapter(fontConfigurationId, ...intent),
       sshPane: options.sshPane,
       canFocus: () => !disposed && !previewActive(),
       canAutoFocus: (unchangedFocus) =>

@@ -1,5 +1,6 @@
 import path from "node:path";
 import { createFilesServices } from "./files-services.js";
+import { createExtensionState, type ExtensionState } from "./state.js";
 import { pathToFileURL } from "node:url";
 import {
   InstalledPackages,
@@ -33,6 +34,7 @@ let phase:
   "waiting" | "pinning" | "pinned" | "activating" | "active" | "stopping" =
   "waiting";
 let version: OpenVersion | undefined;
+let state: ExtensionState | undefined;
 let activation: Promise<void> | undefined;
 let backend:
   | {
@@ -114,10 +116,12 @@ async function activate(): Promise<void> {
     const entryActivate = exports.activate as (context: {
       signal: AbortSignal;
       files: ReturnType<typeof createFilesServices>;
+      state?: ExtensionState;
     }) => unknown;
     const result: unknown = await entryActivate({
       signal: owner.signal,
       files: createFilesServices(),
+      ...(state ? { state } : {}),
     });
     if (
       !result ||
@@ -187,12 +191,19 @@ async function initialize(message: Message): Promise<void> {
     typeof config.selection.id !== "string"
   )
     throw new Error("protocol");
+  const leases = createNativeLeaseAdapter(config.addon);
   const store = await InstalledPackages.open({
     root: config.root,
     runtime: config.runtime,
-    leases: createNativeLeaseAdapter(config.addon),
+    leases,
   });
   version = await store.openVersion(config.selection.id, config.selection);
+  if (version.manifest.capabilities?.includes("state.v1"))
+    state = createExtensionState({
+      packageRoot: config.root,
+      id: version.manifest.id,
+      leases,
+    });
   if (owner.signal.aborted) return;
   phase = "pinned";
   send("pinned");

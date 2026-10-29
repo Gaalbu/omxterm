@@ -1,4 +1,6 @@
 import { contextBridge, ipcRenderer, webUtils } from "electron";
+import { createTerminalLayoutBridge } from "./terminal-layout-bridge";
+import { isLayoutToken } from "../shared/terminal-layout";
 import { createHostedContentBridge } from "./extension-view-bridge";
 import { createPaletteTransport } from "./command-palette-bridge";
 import { createAboutBridge } from "./about-bridge";
@@ -184,7 +186,8 @@ const terminal: TerminalBridge = {
       throw new TypeError("Invalid SSH pane response");
     ipcRenderer.send("terminal:ssh-pane", { token, accepted });
   },
-  async start(surfaceId, workingDirectoryOf, launchToken) {
+  layout: createTerminalLayoutBridge(ipcRenderer),
+  async start(surfaceId, workingDirectoryOf, launchToken, restoreToken) {
     if (surfaceId !== undefined && !isSurfaceIdentity(surfaceId))
       throw new TypeError("Invalid Surface identity");
     if (
@@ -197,19 +200,31 @@ const terminal: TerminalBridge = {
       (!/^[0-9a-f-]{36}$/.test(launchToken) || workingDirectoryOf !== undefined)
     )
       throw new TypeError("Invalid SSH launch token");
-    const sessionId: unknown = await (launchToken !== undefined
+    if (
+      restoreToken !== undefined &&
+      (!isLayoutToken(restoreToken) ||
+        launchToken !== undefined ||
+        workingDirectoryOf !== undefined)
+    )
+      throw new TypeError("Invalid layout restore token");
+    const sessionId: unknown = await (restoreToken !== undefined
       ? ipcRenderer.invoke(terminalIpc.start, {
           ...(surfaceId === undefined ? {} : { surfaceId }),
-          launchToken,
+          restoreToken,
         })
-      : workingDirectoryOf !== undefined
+      : launchToken !== undefined
         ? ipcRenderer.invoke(terminalIpc.start, {
             ...(surfaceId === undefined ? {} : { surfaceId }),
-            workingDirectoryOf,
+            launchToken,
           })
-        : surfaceId === undefined
-          ? ipcRenderer.invoke(terminalIpc.start)
-          : ipcRenderer.invoke(terminalIpc.start, surfaceId));
+        : workingDirectoryOf !== undefined
+          ? ipcRenderer.invoke(terminalIpc.start, {
+              ...(surfaceId === undefined ? {} : { surfaceId }),
+              workingDirectoryOf,
+            })
+          : surfaceId === undefined
+            ? ipcRenderer.invoke(terminalIpc.start)
+            : ipcRenderer.invoke(terminalIpc.start, surfaceId));
     if (!isTerminalSessionId(sessionId))
       throw new TypeError("Invalid Live Terminal Session identifier");
     return sessionId;

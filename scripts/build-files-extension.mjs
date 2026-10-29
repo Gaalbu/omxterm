@@ -25,7 +25,7 @@ export async function buildFilesExtension(output, suppliedCommit) {
 }
 
 export async function buildExtension(name, output, suppliedCommit) {
-  if (name !== "files" && name !== "ssh")
+  if (!["files", "ssh", "restoration"].includes(name))
     throw new Error("Unknown extension source");
   const manifest = JSON.parse(
     await readFile(
@@ -78,11 +78,18 @@ export async function buildExtension(name, output, suppliedCommit) {
         path.join(stage, resource),
       );
     await cp(path.join(root, "LICENSE"), path.join(stage, "LICENSE"));
-    if (name === "ssh")
+    if (name === "ssh" || name === "restoration")
       await cp(
-        path.join(root, "extensions/ssh/NOTICE"),
+        path.join(root, `extensions/${name}/NOTICE`),
         path.join(stage, "NOTICE"),
       );
+    if (name === "restoration") {
+      await mkdir(path.join(stage, "licenses"));
+      await cp(
+        path.join(root, "assets/licenses/ashyterm-MIT.txt"),
+        path.join(stage, "licenses/ashyterm.txt"),
+      );
+    }
     await writeFile(
       path.join(stage, "extension.json"),
       JSON.stringify(manifest),
@@ -98,7 +105,7 @@ export async function buildExtension(name, output, suppliedCommit) {
         `import pathlib,sys,zipfile
 source=pathlib.Path(sys.argv[1])
 with zipfile.ZipFile(sys.argv[2], 'x', compression=zipfile.ZIP_DEFLATED) as archive:
- for name in ['extension.json','backend.mjs','index.html','${name}.css','view.js','LICENSE'${name === "ssh" ? ",'NOTICE'" : ""}]:
+ for name in ['extension.json','backend.mjs','index.html','${name}.css','view.js','LICENSE'${name === "ssh" ? ",'NOTICE'" : name === "restoration" ? ",'NOTICE','licenses/ashyterm.txt'" : ""}]:
   entry=zipfile.ZipInfo(name, (2026,1,1,0,0,0))
   entry.external_attr=0o100600 << 16
   entry.compress_type=zipfile.ZIP_DEFLATED

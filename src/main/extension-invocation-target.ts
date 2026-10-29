@@ -10,6 +10,15 @@ export function extensionInvocationTarget(window: BrowserWindow) {
   let selected: string | null = null;
   window.once("closed", () => lifetime.abort());
   window.webContents.once("destroyed", () => lifetime.abort());
+  window.webContents.once("render-process-gone", () => lifetime.abort());
+  window.webContents.once("did-finish-load", () => {
+    window.webContents.on(
+      "did-start-navigation",
+      (_event, _url, inPlace, mainFrame) => {
+        if (mainFrame && !inPlace) lifetime.abort();
+      },
+    );
+  });
   return {
     started(id: string) {
       sessions.set(id, new AbortController());
@@ -24,7 +33,14 @@ export function extensionInvocationTarget(window: BrowserWindow) {
     capture(
       directory: (id: string) => string | undefined,
       source = selected ?? undefined,
+      context?: "window",
     ): ExtensionTarget {
+      if (context === "window")
+        return {
+          owner: window,
+          signal: lifetime.signal,
+          terminalDirectory: null,
+        };
       const session = source ? sessions.get(source) : undefined;
       return {
         owner: window,

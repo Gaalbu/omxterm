@@ -23,7 +23,13 @@ export function createElectronTerminalAdapter(
   fontConfigurationId?: string,
   workingDirectoryOf?: TerminalSessionId,
   launchToken?: string,
+  restoreToken?: string,
 ): ElectronTerminalAdapter {
+  if (
+    restoreToken !== undefined &&
+    (launchToken !== undefined || workingDirectoryOf !== undefined)
+  )
+    throw new TypeError("Conflicting terminal launch intents");
   let closed = false;
   let started = false;
   let ended = false;
@@ -102,13 +108,15 @@ export function createElectronTerminalAdapter(
       });
       const owner = retention ? await retention : undefined;
       if (closed) throw new Error("Terminal Adapter was closed before start");
-      const startedSessionId = await (launchToken !== undefined
-        ? bridge.start(owner, undefined, launchToken)
-        : workingDirectoryOf !== undefined
-          ? bridge.start(owner, workingDirectoryOf)
-          : owner === undefined
-            ? bridge.start()
-            : bridge.start(owner));
+      const startedSessionId = await (restoreToken !== undefined
+        ? bridge.start(owner, undefined, undefined, restoreToken)
+        : launchToken !== undefined
+          ? bridge.start(owner, undefined, launchToken)
+          : workingDirectoryOf !== undefined
+            ? bridge.start(owner, workingDirectoryOf)
+            : owner === undefined
+              ? bridge.start()
+              : bridge.start(owner));
       const closedBeforeStart = closed;
       sessionId = startedSessionId;
       for (const event of pendingEvents) {
@@ -138,6 +146,8 @@ export function createElectronTerminalAdapter(
       if (closed) return;
       closed = true;
       closeReason = reason;
+      if (restoreToken !== undefined && sessionId === undefined)
+        bridge.layout?.cancel(restoreToken);
       if (launchToken !== undefined && sessionId === undefined)
         bridge.sshPane?.(launchToken, null);
       if (surfaceId !== undefined) bridge.releaseSurface(surfaceId);

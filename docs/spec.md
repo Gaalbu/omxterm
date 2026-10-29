@@ -49,7 +49,7 @@ selection does not remove variables from the inherited environment (ADR 0020).
 OMXTerm:
 
 - opens the Default Shell in the user's home directory (except a split pane's
-  usable OSC 7 directory inheritance described below): on macOS and Linux the
+  usable OSC 7 directory inheritance or explicit Saved Layout opening described below): on macOS and Linux the
   operating-system-configured shell as an interactive login shell; on Windows,
   which has no login-shell concept, a configured `windowsShell` executable when
   present, otherwise Windows PowerShell — falling back to the ComSpec command
@@ -83,13 +83,17 @@ OMXTerm:
   an optional versioned per-user AppImage desktop installer and its checksum;
   running the AppImage directly remains supported.
 
-AI assistance, broadcast input, saved or reconnectable sessions, shell integration,
+AI assistance, broadcast input, saved or reconnectable running sessions, shell integration,
 profiles, a theme picker or catalog, automatic configuration reload, automatic
 updates, and remote terminal features beyond the optional
 [Linux ARM64 SSH Connect preview](ssh-connect.md) are outside the current product
 contract. SSH Connect is separately installed: its incomplete read-only alias
 index and distinct quick-connect page request a typed, main-owned literal
-system-ssh launch, without brokering authentication or adding reconnect.
+system-ssh launch, without brokering authentication or adding reconnect. The optional
+[Saved Layout preview](saved-layout.md) explicitly saves one window's terminal
+layout and local-directory provenance, opening fresh Default Shells in a new
+window without changing current work. It never saves/restores running sessions,
+commands or output; no startup restore or autosave is added.
 
 Restty 0.3.0 and its pinned Ghostty core provide the sole Terminal Surface in
 ordinary development and every packaged application. OMXTerm has no renderer
@@ -167,7 +171,8 @@ succeeds ([ADR 0025](adr/0025-use-restty-as-the-terminal-surface.md)).
   Shell in its source pane's last OSC 7-reported local directory when the shell
   emitted one and it still exists, otherwise in the home directory; main reads
   the report from PTY output, rejects non-local host names and UNC/device paths,
-  and never logs or persists the directory. An empty or local host name emitted
+  and never logs the directory. Persistence occurs only through explicit optional
+  Saved Layout saving. An empty or local host name emitted
   by a remote shell is indistinguishable from a local report; program output can
   also emit it. Either can only select an existing local directory, never execute
   shell text. Known SSH Connect sessions are excluded from local OSC7 tracking
@@ -231,8 +236,8 @@ succeeds ([ADR 0025](adr/0025-use-restty-as-the-terminal-surface.md)).
   existing tabs in that window. The reordered positions immediately drive
   visible order, next/previous cycling, and literal positional selection while
   the selected tab and every Live Terminal Session and Terminal Surface remain
-  unchanged. Tab order is ephemeral and is neither shared between windows nor
-  persisted or restored.
+  unchanged. Ordinary tab order is ephemeral and not shared between windows;
+  explicit Saved Layout saving can capture terminal order for a fresh window.
 - Close Tab defaults to `Cmd+W` on macOS and `Ctrl+Shift+W` on Linux and
   Windows, and terminates every session in the selected tab. A pending
   confirmation retains its original tab: approval never retargets a later
@@ -620,6 +625,38 @@ succeeds ([ADR 0025](adr/0025-use-restty-as-the-terminal-surface.md)).
 
 Closing a tab or window ends its sessions. Persistent and reconnectable sessions
 remain the responsibility of a session manager such as tmux.
+
+## Saved Layout
+
+The separately installed Linux ARM64 [Saved Layout extension](saved-layout.md)
+offers Save/Replace/Open/Forget, with Refresh for cross-instance conflicts or
+unknown outcomes. It captures only the original window's terminal tabs, weighted
+flat pane trees, focus/selection and reported-local/launch-local/home provenance.
+Graphical tabs are excluded and counted. Bounds are 16 tabs, 16 panes/tab, 32
+panes total and 256 KiB, rejecting whole requests rather than truncating.
+
+Opening transfers a fully validated plan to one new core window with no dummy
+shell. Every pane starts through normal Surface initialization, explicitly using
+Default Shell and never consuming a pending `-e`. Original work is untouched;
+partial failures retain healthy panes. Core owns tokens, status, cancellation
+and actual native shutdown independently of extension retirement. Keyboard Open
+waits for Enter release; delayed presentation respects newer focus intent.
+
+Explicit saving uses an extension-scoped native-lease/CAS state adapter outside
+configuration and immutable packages. Opaque revisions and Forget tombstones
+prevent stale destructive writes. Data survives disable/update/uninstall. Forget
+removes the active snapshot, not possible interrupted-write temp copies; the
+guide supplies deliberate local cleanup instructions, not an erasure guarantee.
+Malformed/unreadable state is not repaired. A possibly committed write followed
+by transport loss requires Refresh, never automatic retry. No terminal payload,
+command, environment, title, process or SSH target is stored.
+
+Directory provenance is not current-process inspection or authenticated OSC7.
+Invalid/remote/overlong reports revoke launch fallback. Known SSH, explicit
+commands, ended and pending panes use home slots. Asynchronous directory checks
+fall back to home on missing/unavailable paths without creating folders or
+retrying a failed PTY launch. OS-mounted folders and ordinary shell startup may
+access networks. See [ADR0042](adr/0042-save-layouts-without-restoring-sessions.md).
 
 ## Terminal behavior
 
