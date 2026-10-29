@@ -30,7 +30,7 @@ Both targets can be built natively from source (`npm run package:win:x64` or `np
 
 1. Check existing issues and pull requests first. For larger features or architectural changes, open or comment on an issue before writing code; small bug fixes and documentation edits can go straight to a PR.
 2. Fork [`luizomf/omxterm`](https://github.com/luizomf/omxterm) on GitHub and create a focused branch from `main`.
-3. Make your changes, add or update tests for changed behavior, and update affected documentation and contracts (`docs/spec.md`, `CONTEXT.md`, or `docs/adr/`) in the same commit.
+3. Follow [Making a change](#making-a-change) for implementation, tests, and documentation.
 4. Run the [verification checks](#verification) below, then [commit, push, and open a pull request](#commits-and-pull-requests) against `main`.
 
 Please write all code, documentation, commit messages, and GitHub issues/PRs in English.

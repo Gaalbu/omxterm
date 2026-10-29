@@ -272,18 +272,15 @@ While iterating on a specific subsystem, you can run targeted test files before 
 | Unix native resize failure                     | `npx vitest run test/integration/terminal-resize-race.test.ts test/unit/terminal-resize-failure.test.ts`                                                                                      |
 | Linux foreground Busy decision                 | `npx vitest run test/unit/linux-foreground.test.ts test/unit/postinstall.test.ts test/integration/linux-foreground.test.ts`                                                                   |
 
-The integrated host's concurrent-font phase joins the actual exit callbacks of
-its four newly started sessions after removing their DOM tabs, then rejects any
-exit of a previously live peer. Aggregate exit equality is not a completion
-oracle: a peer exit can numerically replace a missing target callback. Counts
-remain in the failure snapshot alongside missing-target and exited-peer indices.
-The unchanged wait deadline and independent fixture settlement still apply;
-DOM removal and a kill request do not prove native exit. Headless controlled
-callback-order checks run with
+The integrated host's concurrent-font phase requires actual exit callbacks from
+all four removed sessions and no exit from previously live peers; aggregate
+counts, DOM removal and kill requests do not prove completion. Failure snapshots
+include counts and missing-target/exited-peer indices. The wait deadline and
+independent fixture settlement still apply. Headless callback-order checks:
 `npm test -- test/unit/restty-host-concurrent-cleanup.test.ts`.
-These reproduce the aggregate oracle's false acceptance, not the cause of the
-historical Fedora timeout in [#722](https://github.com/luizomf/omxterm/issues/722).
-A prior instrumented native pass did not attribute or clear that failure.
+The historical Fedora timeout in [#722](https://github.com/luizomf/omxterm/issues/722)
+remains unattributed and is not cleared by these checks or the later instrumented
+native pass.
 
 The hover `early-capture` negative control qualifies the rejection of an undrawn
 hover generation: exact modified/`cue-not-drawn` phase, stale draw provenance,
@@ -294,17 +291,14 @@ continuations are only a presentation opportunity. The existing positive and
 release cases retain their strict destination/complement/unused-edge pixel
 oracles, and the other invalidation controls retain zero-pixel checks.
 
-[#721](https://github.com/luizomf/omxterm/issues/721) recorded 516 changed pixels
-while the expected early draw rejection and held-callback checks succeeded.
-Removing the unrelated whole-frame equality gate corrects the test's criterion;
-it does not identify the cause of those historical pixels or relabel that run
-as passing. Pixel comparison metadata remains available in existing phase
-receipts; no image-retention framework, extra capture, wait, tolerance or retry
-is needed. Capture, draw guards, deadlines and settlement behavior are unchanged.
-Headless checks execute the actual capture helper and frame hold with equal and
-different controlled bitmap pairs, plus a released/current-draw counterexample:
-`npm test -- test/unit/restty-hover-readiness.test.ts`. These establish oracle
-semantics, not native compositor reproduction or all-platform qualification.
+Headless capture-helper/frame-hold checks cover equal/different bitmaps and a
+released/current-draw counterexample:
+`npm test -- test/unit/restty-hover-readiness.test.ts`.
+Pixel comparison metadata remains in phase receipts. These checks establish
+oracle semantics, not native compositor reproduction or all-platform qualification.
+The historical bitmap variation in [#721](https://github.com/luizomf/omxterm/issues/721)
+remains unexplained; correcting the equality criterion did not turn that run into
+a pass. Capture, draw guards, deadlines and settlement behavior are unchanged.
 
 The `font-read-reload` suite holds one actual main-process `FileHandle.read`
 before its positional read, retaining native discovery, bounded bytes/face
