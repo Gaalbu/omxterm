@@ -24,6 +24,27 @@ refresh shows the last successful snapshot as stale. No npm/Python or source bui
 is required for a published archive. See [Files](files-development-preview.md#official-catalog)
 for compatibility and evidence limits.
 
+## Optional SSH Connect preview
+
+SSH Connect0.1.0 requires the separate
+[Linux ARM64 host0.24.0-dev.0 prerelease](https://github.com/luizomf/omxterm/releases/tag/v0.24.0-dev.0).
+It does not run on stable0.23.0 or dev.9; the normal stable downloads below remain
+unchanged. Download the preview AppImage, matching checksum and version-matched
+helper from that release, not `/latest/download`. Verify the checksums before
+launch/install. Unchanged Files0.1.0 is also supported on this exact preview host.
+
+In Settings → Extensions, choose **Browse official extensions**, then install
+SSH Connect and review the trusted-code warning. Open SSH Connect separately from
+File or the Command Palette; installation remains dormant. The
+[separate SSH release](https://github.com/luizomf/omxterm/releases/tag/ext-ssh-v0.1.0)
+also provides the prebuilt archive/checksum/receipt for local-file or link
+installation. No source build is needed. Both releases are non-Latest previews;
+only Linux ARM64 is qualified, with synthetic clients rather than real SSH
+authentication/connectivity. See [SSH Connect](ssh-connect.md) for requirements,
+source/qualification distinctions and grammar limits. Extensions are trusted
+code, not sandboxed; OpenSSH configuration and authentication remain OpenSSH's
+responsibility.
+
 ## macOS
 
 You need an Apple Silicon Mac (M1 or later) with macOS 12 Monterey or newer.

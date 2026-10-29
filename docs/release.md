@@ -275,6 +275,48 @@ compatible public host and public Files consumption succeed, #728 remains open;
 source integration or a valid empty catalog is not product distribution. No signing
 infrastructure, stable SDK or broader platform campaign is implied.
 
+## SSH preview publication
+
+The selected SSH milestone follows the partial Linux ARM64 preview topology,
+not the twelve-asset stable release below. Publish host `v0.24.0-dev.0` and separate
+`ext-ssh-v0.1.0` as prereleases with `--latest=false`. Do not remove the development
+suffix or bump main for catalog/docs/test-only changes: unchanged Files0.1.0 is
+explicitly compatible with this exact host version only. A different host version
+requires deliberate compatibility reconciliation and rebuilt/verified host bytes.
+Stable0.23.0, dev.9 and Files0.1.0 remain immutable.
+
+1. Reuse the qualified AppImage/helper and checksums built at
+   `a8a309fe4bd87675d01da193fa7318701e68a460`; host tag target is integrated
+   `a09d8530541399f85469c099ed20ac4b102647f8` (only two test files differ).
+   Preserve SSH `ssh-6d939f0.omxext` plus original `.sha256`/`.json`, built/tagged
+   at `6d939f0e837dba90728e6e892010a4a1889fe0c9`. Its extension inputs are unchanged
+   through final host source. Do not rebuild, rename or relabel published-version
+   bytes or change the receipt's build-time `not-run` qualification field.
+2. After checking proposed tags/releases are absent, create and verify exact tag
+   refs, then use `gh release create --verify-tag --draft --prerelease --latest=false`
+   with the four host assets and three SSH assets in their respective releases.
+   Draft metadata alone does not establish the existence of a tag ref. Download
+   and verify all seven filenames, sizes and hashes before publishing host, then
+   SSH. Recheck both immutable public releases and anonymously download/hash all
+   seven versioned asset URLs. Stable0.23.0 remains Latest.
+3. Only after public bytes verify, promote the SSH catalog entry alongside the
+   unchanged Files entry. Bind the embedded manifest's ID/version/engine strings,
+   original source commit, Linux ARM64 target and exact archive size/digest to the
+   immutable release URLs. `create-files-catalog.mjs` is Files-specific, not an SSH
+   generator; do not replace the complete catalog with a Files-only output.
+4. Read back the exact fixed raw catalog endpoint and compare its bytes to the
+   promoted source. Run the bounded [public SSH checkpoint](ssh-connect.md#public-distribution-checkpoint)
+   on the exact publicly downloaded host/archive. It uses production HTTPS and
+   verifies catalog install/reinstall, dormant activation, management, retained
+   local terminal and actual-exit Quit without rerunning the synthetic SSH matrix.
+   Record actual receipt hashes/outcomes separately from pre-publication evidence.
+
+The retained host FULL verifier, synthetic SSH campaign and immutable Files
+lifecycle may be reused while relevant inputs remain unchanged. None establishes
+real SSH authentication/connectivity, other-platform extension support, a stable
+SDK or public acquisition before the separate checkpoint. Do not mutate sealed
+release notes/assets to retroactively claim later verification.
+
 ## Publication
 
 Create tag `vX.Y.Z` and a draft GitHub Release in `luizomf/omxterm`. Upload every applicable file (twelve with both x64 platforms), download and verify the complete set against local byte counts and SHA-256 records, then publish to seal the immutable release:

@@ -9,8 +9,59 @@ builder produces `dist/extensions/ssh-0.1.0.omxext`, a SHA-256 sidecar and an
 unqualified source/tool receipt; existing outputs are never overwritten. Install
 the archive through Settings → Extensions and review the ordinary trusted-code
 warning. Open **SSH Connect** from File, the Command Palette or the terminal
-context menu. There is no new toolbar or default shortcut. Publication/catalog
-inclusion is separate from building this candidate.
+context menu. There is no new toolbar or default shortcut. Building an archive
+alone does not publish it.
+
+## Installing the distributed preview
+
+Use the [Linux ARM64 host 0.24.0-dev.0 prerelease](https://github.com/luizomf/omxterm/releases/tag/v0.24.0-dev.0)
+with the separate [SSH Connect 0.1.0 release](https://github.com/luizomf/omxterm/releases/tag/ext-ssh-v0.1.0).
+Neither is Latest; stable0.23.0 and dev.9 cannot run SSH Connect. In Settings →
+Extensions, explicitly **Browse official extensions**, select SSH Connect and
+review its version/digest and trusted-code warning. Installation is dormant;
+open SSH Connect separately to activate it. Official does not mean sandboxed.
+
+Local-file or **Install from link** installation also works with the exact
+[ssh-6d939f0.omxext archive](https://github.com/luizomf/omxterm/releases/download/ext-ssh-v0.1.0/ssh-6d939f0.omxext).
+Its source-named filename and original checksum/receipt are retained unchanged:
+version0.1.0,9418bytes,SHA-256
+`d11d16df09876d20a6fc766fcb1e5d76e2214d0d0965ad90be47496e4b066699`.
+The receipt identifies source6d939f0 and build-time qualification `not-run`;
+subsequent package evidence is separate, not a rewritten build receipt.
+
+The exact host/archive passed a synthetic-client campaign and host FULL verifier;
+unchanged Files0.1.0 passed its lifecycle on this host. These are not a real SSH
+connectivity/authentication campaign or proof of public catalog consumption.
+The [release procedure](release.md#ssh-preview-publication) requires a separate
+public-only checkpoint after rollout; record its actual outcome, never infer it
+from source integration or these instructions.
+
+## Public distribution checkpoint
+
+On an assigned idle ordinary-user Linux ARM64 guest, reuse the opt-in
+`test/integration/ssh-packaged.test.ts` with absolute `OMXTERM_SSH_PACKAGED_APPIMAGE`,
+`ARCHIVE`, `EVIDENCE` paths and `APPIMAGE_SHA256`, `ARCHIVE_SHA256`, `VERSION`
+(all names prefixed `OMXTERM_SSH_PACKAGED_`). For the bounded public-only path,
+also set `OMXTERM_SSH_PACKAGED_CATALOG=public` and
+`OMXTERM_SSH_PACKAGED_CATALOG_SHA256` to the promoted catalog's exact digest.
+
+```sh
+npm test -- test/integration/ssh-packaged.test.ts
+```
+
+The public mode verifies a separate fixed-endpoint readback, then the unchanged
+packaged app independently browses the production endpoint and installs the SSH
+card with captured-digest consent. It checks dormant installation, activation,
+catalog Reinstall/actual backend retirement, fresh activation, Disable/Uninstall,
+the same local PTY/Surface and normal joined Quit. It does not run the longer
+synthetic argv/exit/keyboard campaign or execute an SSH client. No endpoint
+substitution, custom CA or source product runtime is used. Native consent and
+input are fixture-controlled; inspect the retained catalog/terminal captures.
+Failure receipts/profiles are retained; successful cleanup does not turn a failed
+scenario into a pass. Existing process ownership and exact AppImage/asar checks
+remain in force. Without the public-mode inputs the original synthetic campaign
+is unchanged. Public execution belongs after asset publication and fixed-catalog
+promotion, not during source preparation.
 
 ## Connecting
 

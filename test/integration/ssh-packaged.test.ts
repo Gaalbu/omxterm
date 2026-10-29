@@ -18,6 +18,12 @@ import { promisify } from "node:util";
 import { it } from "vitest";
 import { launchLinuxPackagedProcess } from "../../scripts/linux-packaged-process.mjs";
 import { inspector, until } from "../fixtures/packaged-inspector.js";
+import {
+  CATALOG_BYTES,
+  OFFICIAL_CATALOG_URL,
+  parseCatalog,
+} from "../../src/main/extension-catalog.js";
+import { downloadExtension } from "../../src/main/extension-download.js";
 
 const prefix = "OMXTERM_SSH_PACKAGED_";
 const names = [
@@ -28,16 +34,67 @@ const names = [
   "VERSION",
   "EVIDENCE",
 ] as const;
-const enabled = names.some((name) => process.env[prefix + name] !== undefined);
+const enabled = [...names, "CATALOG", "CATALOG_SHA256"].some(
+  (name) => process.env[prefix + name] !== undefined,
+);
 const execute = promisify(execFile);
 const digest = (bytes: Buffer) =>
   createHash("sha256").update(bytes).digest("hex");
 
+function publicCatalogMode() {
+  const mode = process.env.OMXTERM_SSH_PACKAGED_CATALOG;
+  const sha256 = process.env.OMXTERM_SSH_PACKAGED_CATALOG_SHA256;
+  assert.ok(mode === undefined || mode === "public");
+  if (mode) assert.match(sha256 ?? "", /^[a-f0-9]{64}$/);
+  else assert.equal(sha256, undefined);
+  return {
+    mode,
+    timeout: mode ? 180000 : 120000,
+    scope: mode
+      ? "unchanged extracted AppImage; public SSH catalog consumption; controlled input/consent; no SSH client execution"
+      : "unchanged extracted AppImage; separate SSH; synthetic client, no connectivity",
+  };
+}
+async function recordPublicCatalog(
+  mode: string | undefined,
+  receipts: string,
+  archiveSha256: string,
+) {
+  if (!mode) return;
+  const url = OFFICIAL_CATALOG_URL;
+  const bytes = await downloadExtension(
+    url,
+    AbortSignal.timeout(60000),
+    CATALOG_BYTES,
+  );
+  const release = parseCatalog(bytes).find(
+    (entry) => entry.id === "omxterm.ssh",
+  );
+  assert.equal(release?.archive.sha256, archiveSha256);
+  assert.equal(release?.version, "0.1.0");
+  assert.equal(digest(bytes), process.env.OMXTERM_SSH_PACKAGED_CATALOG_SHA256);
+  await writeFile(path.join(receipts, "public-catalog.json"), bytes);
+  await writeFile(
+    path.join(receipts, "public-readback.json"),
+    JSON.stringify(
+      {
+        url,
+        sha256: digest(bytes),
+        bytes: bytes.length,
+        scope:
+          "separate public readback; production Settings independently fetches the fixed endpoint",
+      },
+      null,
+      2,
+    ),
+  );
+}
+
 // Opt-in, assigned idle Linux ARM64 desktop ONLY. Extraction preserves the
 // exact asar and application bootstrap; no developer entry or package patch.
 it.skipIf(!enabled)(
-  "qualifies separate SSH with a synthetic client in the exact Linux ARM64 package",
-  { timeout: 240000 },
+  "qualifies separate SSH in the exact Linux ARM64 package",
+  { timeout: 360000 },
   async () => {
     assert.equal(process.platform, "linux");
     assert.equal(process.arch, "arm64");
@@ -61,6 +118,7 @@ it.skipIf(!enabled)(
       ),
       "Prepared guest needs a POSIX sh/bash account shell",
     );
+    const { mode: catalogMode, timeout, scope } = publicCatalogMode();
     const root = await mkdtemp(path.join(os.tmpdir(), "omxterm-ssh-packaged-"));
     const evidence = values.EVIDENCE;
     await mkdir(evidence, { recursive: true });
@@ -80,6 +138,7 @@ it.skipIf(!enabled)(
     const json = (name: string, value: unknown) =>
       writeFile(path.join(receipts, name), JSON.stringify(value, null, 2));
     try {
+      await recordPublicCatalog(catalogMode, receipts, values.ARCHIVE_SHA256);
       const appBytes = await readFile(values.APPIMAGE);
       const archiveBytes = await readFile(values.ARCHIVE);
       assert.equal(digest(appBytes), values.APPIMAGE_SHA256);
@@ -215,6 +274,7 @@ it.skipIf(!enabled)(
         archiveSha256: values.ARCHIVE_SHA256,
         version: values.VERSION,
         readiness,
+        catalogMode,
       };
       await json(
         "attachment.json",
@@ -227,7 +287,7 @@ it.skipIf(!enabled)(
         "scenario.json",
         await client.evaluate(
           `${observer}.run(${JSON.stringify(options)})`,
-          120000,
+          timeout,
         ),
       );
       await owner.verifyMain();
@@ -311,8 +371,7 @@ it.skipIf(!enabled)(
         failures: failures.map((error) =>
           error instanceof Error ? error.stack : String(error),
         ),
-        scope:
-          "unchanged extracted AppImage; separate SSH; synthetic client, no connectivity",
+        scope,
       });
       if (passed && failures.length === 0)
         await rm(root, { recursive: true, force: true });

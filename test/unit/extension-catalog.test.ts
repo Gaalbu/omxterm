@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import {
   parseCatalog,
@@ -35,6 +36,46 @@ const bytes = (entries: unknown[] = [release]) =>
   Buffer.from(JSON.stringify({ schemaVersion: 1, entries }));
 beforeEach(() => vi.mocked(downloadExtension).mockReset());
 describe("official catalog", () => {
+  it("offers the exact separate SSH preview without changing immutable Files metadata", async () => {
+    const catalog = parseCatalog(
+      await readFile("distribution/official-extensions-v1.json"),
+    );
+    const ssh = catalog.find((entry) => entry.id === "omxterm.ssh")!;
+    const files = catalog.find((entry) => entry.id === "omxterm.files")!;
+    const manifest = JSON.parse(
+      await readFile("extensions/ssh/extension.json", "utf8"),
+    ) as { version: string; engines: CatalogRelease["engines"] };
+    expect(ssh).toMatchObject({
+      version: manifest.version,
+      engines: manifest.engines,
+      sourceCommit: "6d939f0e837dba90728e6e892010a4a1889fe0c9",
+      targets: ["linux-arm64"],
+      archive: {
+        bytes: 9418,
+        sha256:
+          "d11d16df09876d20a6fc766fcb1e5d76e2214d0d0965ad90be47496e4b066699",
+        url: "https://github.com/luizomf/omxterm/releases/download/ext-ssh-v0.1.0/ssh-6d939f0.omxext",
+      },
+    });
+    expect(files).toMatchObject({
+      version: "0.1.0",
+      engines: { omxterm: ">=0.23.0-dev.8 <0.24.0", api: "0.1.x" },
+      archive: {
+        bytes: 7917,
+        sha256:
+          "c1fd36c4ddb966c93235f38973730a74c86303051ca7a095b6e5df4787bc7b9f",
+      },
+    });
+    expect(catalogCompatible(ssh, runtime, "linux-arm64")).toBe(false);
+    for (const entry of [files, ssh])
+      expect(
+        catalogCompatible(
+          entry,
+          { ...runtime, appVersion: "0.24.0-dev.0" },
+          "linux-arm64",
+        ),
+      ).toBe(true);
+  });
   it("accepts bounded plain-text releases and an explicitly empty published catalog", () => {
     expect(parseCatalog(bytes())).toEqual([release]);
     expect(parseCatalog(bytes([]))).toEqual([]);

@@ -60,4 +60,14 @@ ARM64 host prerelease and separate Files release are both **not Latest**. Assets
 must be published and downloaded/hash-verified before promoting the generated
 entry. Empty source catalog integration is useful implementation, not completed
 public distribution. Public-endpoint packaged consumption is a separate required
-milestone; follow the [publication procedure](release.md#files-catalog-publication).
+milestone; follow the [Files publication procedure](release.md#files-catalog-publication).
+
+SSH Connect0.1.0 uses the same catalog/installation owner, with target Linux ARM64
+and host minimum0.24.0-dev.0. The separately released source-named
+`ssh-6d939f0.omxext` and its original checksum/receipt retain the qualified bytes;
+its version is the manifest/release version, not a renamed artifact. The catalog
+keeps Files metadata unchanged and adds SSH only after exact public asset
+readback. The Files generator above must not be used for SSH or to erase other
+entries. Follow the [SSH preview procedure](release.md#ssh-preview-publication)
+for its partial host/extension prereleases and bounded public-consumption gate.
+Catalog admission is not qualification of every version in an engine range.

@@ -138,10 +138,14 @@ async function run(options) {
     return child;
   };
   syncBuiltinESMExports();
-  dialog.showOpenDialog = async () => ({
-    canceled: false,
-    filePaths: [options.archive],
-  });
+  dialog.showOpenDialog = async () => {
+    assert.notEqual(
+      options.catalogMode,
+      "public",
+      "public smoke cannot fall back to local installation",
+    );
+    return { canceled: false, filePaths: [options.archive] };
+  };
   dialog.showMessageBox = async (_owner, prompt) => {
     if (prompt.title === "Trust extension code?") {
       assert.ok(prompt.detail.includes(options.archiveSha256));
@@ -238,14 +242,45 @@ async function run(options) {
     () => js("!!document.querySelector('.terminal-surface canvas')"),
     "initial Surface",
   );
+  const panelContains = (text) =>
+    js(
+      `document.querySelector('.extensions-panel')?.textContent.includes(${JSON.stringify(text)}) === true`,
+    );
+  async function catalogInstall(label) {
+    await js(`(() => {
+      const card = [...document.querySelectorAll('.extension-catalog-card')].find(c => c.querySelector('h4')?.textContent === 'SSH Connect · 0.1.0');
+      const button = card?.querySelector('button');
+      if (!button || button.disabled || button.textContent !== ${JSON.stringify(label)}) throw Error('SSH catalog action unavailable');
+      card.scrollIntoView({block:'center'});
+    })()`);
+    await screenshot(`public-catalog-${label.toLowerCase()}.png`);
+    await js(`(() => {
+      const card = [...document.querySelectorAll('.extension-catalog-card')].find(c => c.querySelector('h4')?.textContent === 'SSH Connect · 0.1.0');
+      const button = card?.querySelector('button');
+      if (!button || button.disabled || button.textContent !== ${JSON.stringify(label)}) throw Error('SSH catalog action unavailable');
+      button.click();
+    })()`);
+  }
+  await js(
+    "window.__sshPublicCanvas = document.querySelector('.terminal-surface canvas')",
+  );
   await settings();
-  await click(core, "Install local .omxext…");
+  if (options.catalogMode === "public") {
+    await click(core, "Browse official extensions");
+    await until(
+      () => panelContains("Catalog loaded."),
+      "public catalog loaded",
+      65000,
+    );
+    await catalogInstall("Install");
+  } else await click(core, "Install local .omxext…");
   await until(
     () =>
       js(
         "document.querySelector('.extensions-panel').textContent.includes('generation 1')",
       ),
     "SSH installed",
+    options.catalogMode ? 65000 : 15000,
   );
   const installed = await js(
     "document.querySelector('.extensions-panel').textContent",
@@ -278,6 +313,80 @@ async function run(options) {
   assert.equal(fs.existsSync(file("ssh-live.json")), false);
   assert.equal(fs.existsSync(file("client-invocations.jsonl")), false);
   checks.push("capability-alias-discovery-no-client-execution");
+  if (options.catalogMode === "public") {
+    // This checkpoint proves acquisition/management, not another SSH argv campaign.
+    await settings();
+    await catalogInstall("Reinstall");
+    await until(() => panelContains("generation 2"), "public reinstall", 65000);
+    await until(
+      () => hosted().length === 0 && children[0].closed,
+      "reinstall retirement",
+    );
+    assert.deepEqual(children[0].exit, { code: 0, signal: null });
+    assert.equal(children.length, 1, "reinstall remains dormant");
+    assert.equal(state.approvals, 2);
+    await closeSettings();
+    menu("SSH Connect");
+    await until(
+      async () =>
+        hosted().length === 1 &&
+        (await hosted()[0].executeJavaScript(
+          "!!document.querySelector('[data-alias=fixture-fast]')",
+        )),
+      "fresh SSH activation",
+    );
+    assert.equal(children.length, 2);
+    await settings();
+    await click(core, "Disable");
+    await until(
+      () => hosted().length === 0 && children[1].closed,
+      "disable retirement",
+    );
+    assert.deepEqual(children[1].exit, { code: 0, signal: null });
+    await click(core, "Uninstall");
+    await until(() => panelContains("uninstalled"), "SSH uninstalled");
+    await closeSettings();
+    await js("document.querySelector('#tab-strip [role=tab]').click()");
+    await until(
+      () => js("!!document.activeElement?.closest('.terminal-surface')"),
+      "original terminal focus",
+    );
+    const destination = file("public-shell-after");
+    const quoted = "'" + destination.replaceAll("'", "'\\''") + "'";
+    await core.insertText(`printf '%s' "$$" > ${quoted}`);
+    key(core, "Enter");
+    await until(
+      () =>
+        fs.existsSync(destination) &&
+        fs.readFileSync(destination, "utf8") === String(shell.probePid),
+      "same shell accepts input",
+    );
+    assert.ok(alive(ptys[0]));
+    assert.equal(
+      await js(
+        "window.__sshPublicCanvas === document.querySelector('.terminal-surface canvas')",
+      ),
+      true,
+    );
+    assert.equal(fs.existsSync(file("client-invocations.jsonl")), false);
+    await screenshot("public-terminal-after.png");
+    checks.push(
+      "public-catalog-install-reinstall-dormant-retirement",
+      "fresh-activation-disable-uninstall",
+      "same-PTY-and-Surface-no-SSH-execution",
+    );
+    prepareQuit();
+    return {
+      ...state,
+      catalog: {
+        mode: "public",
+        endpoint:
+          "https://raw.githubusercontent.com/luizomf/omxterm/main/distribution/official-extensions-v1.json",
+      },
+      scope:
+        "Production public HTTPS; controlled input/consent; no client execution or real authentication",
+    };
+  }
   const baselineTabs = await tabCount();
   // DOM gestures are deliberate: exact repeat/release ownership, not physical
   // layout or Electron's optional suppression of a prevented native keyup.
@@ -606,33 +715,36 @@ async function run(options) {
   );
   assert.deepEqual(fs.readdirSync(file("home/.ssh")), ["config"]);
   assert.equal(fs.existsSync(file("home/.ssh/known_hosts")), false);
-  app.once("will-quit", () => {
-    save("quit.json", {
-      ...state,
-      joined:
-        ptys.every((record) => !alive(record)) &&
-        children.every(
-          (child) =>
-            child.closed &&
-            child.exit?.code === 0 &&
-            child.exit.signal === null,
-        ),
+  prepareQuit();
+  function prepareQuit() {
+    app.once("will-quit", () => {
+      save("quit.json", {
+        ...state,
+        joined:
+          ptys.every((record) => !alive(record)) &&
+          children.every(
+            (child) =>
+              child.closed &&
+              child.exit?.code === 0 &&
+              child.exit.signal === null,
+          ),
+      });
+      cleanup();
     });
-    cleanup();
-  });
-  requestQuit = () => {
-    // Production builds this label from app.name, not the dialog's brand title.
-    const items = [];
-    const collect = (entries) => {
-      for (const item of entries) {
-        items.push({ label: item.label, enabled: item.enabled });
-        if (item.submenu) collect(item.submenu.items);
-      }
+    requestQuit = () => {
+      // Production builds this label from app.name, not the dialog's brand title.
+      const items = [];
+      const collect = (entries) => {
+        for (const item of entries) {
+          items.push({ label: item.label, enabled: item.enabled });
+          if (item.submenu) collect(item.submenu.items);
+        }
+      };
+      collect(Menu.getApplicationMenu().items);
+      save("quit-menu.json", { appName: app.name, items });
+      menu(`Quit ${app.name}`);
     };
-    collect(Menu.getApplicationMenu().items);
-    save("quit-menu.json", { appName: app.name, items });
-    menu(`Quit ${app.name}`);
-  };
+  }
   return {
     ...state,
     scope:
