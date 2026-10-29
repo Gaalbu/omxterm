@@ -48,6 +48,15 @@ describe("Application Network Boundary", () => {
       }
       if (
         path.relative(root, file).split(path.sep).join("/") ===
+        "main/ssh-terminal-launch.ts"
+      ) {
+        // Pure address validation exposes no socket or network transport.
+        const validationImport = 'import { isIP } from "node:net";';
+        expect(source.split(validationImport)).toHaveLength(2);
+        source = source.replace(validationImport, "");
+      }
+      if (
+        path.relative(root, file).split(path.sep).join("/") ===
         "main/extension-view-host.ts"
       ) {
         // One explicit custom-origin load, constrained by the host/resource

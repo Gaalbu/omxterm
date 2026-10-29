@@ -169,9 +169,11 @@ describe("renderer Electron terminal adapter", () => {
     harness.output("s2", "own output");
     harness.output("s1", "foreign output");
     harness.exit("s3", { exitCode: 0, signal: 0 });
-    harness.exit("s2", { exitCode: 0, signal: 15 });
     adapter.write("typed input");
     adapter.resize({ cols: 120, rows: 40 });
+    harness.exit("s2", { exitCode: 0, signal: 15 });
+    adapter.write("after exit");
+    adapter.resize({ cols: 90, rows: 30 });
 
     expect(onOutput).toHaveBeenCalledOnce();
     expect(onOutput).toHaveBeenCalledWith("own output");
@@ -181,8 +183,11 @@ describe("renderer Electron terminal adapter", () => {
     );
     expect(onExit).toHaveBeenCalledOnce();
     expect(onExit).toHaveBeenCalledWith({ exitCode: 0, signal: 15 });
-    expect(harness.calls.input).toHaveBeenCalledWith("s2", "typed input");
-    expect(harness.calls.resize).toHaveBeenCalledWith("s2", {
+    expect(harness.calls.input).toHaveBeenCalledExactlyOnceWith(
+      "s2",
+      "typed input",
+    );
+    expect(harness.calls.resize).toHaveBeenCalledExactlyOnceWith("s2", {
       cols: 120,
       rows: 40,
     });

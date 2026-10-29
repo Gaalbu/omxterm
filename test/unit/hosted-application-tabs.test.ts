@@ -39,9 +39,11 @@ function harness(canFocus = () => true) {
     close: vi.fn(async () => {}),
   };
   const notifyEmpty = vi.fn();
+  const sshPane = vi.fn();
   const h = createTabsHarness({
     tabsOptions: {
       canFocus,
+      sshPane,
       extensions: { request: extensionRequest },
       notifyEmpty,
       hostedContent: bridge,
@@ -60,6 +62,7 @@ function harness(canFocus = () => true) {
     ...h,
     extensionRequest,
     notifyEmpty,
+    sshPane,
     bridge,
     open: (id = "view-a") => open({ id, title: id }),
     retire,
@@ -69,6 +72,46 @@ function harness(canFocus = () => true) {
 const settle = async () => {
   for (let i = 0; i < 8; i++) await Promise.resolve();
 };
+
+it.each(["source", "changed-selection", "modal"])(
+  "composes SSH handoff and retained Close from %s",
+  async (mode) => {
+    let blocked = false;
+    const h = harness(() => !blocked);
+    await h.tabs.ready;
+    h.open("ssh-view");
+    await settle();
+    if (mode === "changed-selection")
+      h.tabs.handleCommand({ action: "previous" });
+    if (mode === "modal") blocked = true;
+    h.tabs.handleCommand({
+      action: "open-ssh",
+      token: "launch-token",
+      sourceView: "ssh-view",
+      title: "SSH · alias",
+    });
+    await settle();
+    expect(h.createAdapter).toHaveBeenLastCalledWith(undefined, "launch-token");
+    expect(h.sshPane).toHaveBeenCalledWith("launch-token", true);
+    const pane = h.mount.mock.calls[1]![0];
+    expect(pane.hidden).toBe(mode !== "source");
+    expect(pane.closest<HTMLElement>(".terminal-tab")!.hidden).toBe(
+      mode !== "source",
+    );
+    expect(h.surfaces[1]!.focus.mock.calls.length > 0).toBe(mode === "source");
+    h.adapters[1]!.handlers!.onExit({
+      exitCode: 23,
+      signal: 0,
+      retained: true,
+    });
+    const notice = pane.querySelector<HTMLElement>(".terminal-exit-notice")!;
+    expect(notice.textContent).toContain("23");
+    expect(h.surfaces[1]!.dispose).not.toHaveBeenCalled();
+    notice.querySelector("button")!.click();
+    expect(h.surfaces[1]!.dispose).toHaveBeenCalledOnce();
+    expect(pane.isConnected).toBe(false);
+  },
+);
 
 it("denies modal action admission and keeps late hosted publication behind the same owner", async () => {
   let blocked = false;

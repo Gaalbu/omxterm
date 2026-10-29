@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   mkdtemp,
   mkdir,
@@ -25,6 +25,7 @@ import {
 
 const roots: string[] = [];
 afterEach(async () => {
+  vi.useRealTimers();
   await Promise.all(
     roots.splice(0).map((root) => rm(root, { recursive: true, force: true })),
   );
@@ -227,6 +228,47 @@ it("transfers to the original core owner once, independently of later extension 
   ).rejects.toThrow();
   launcher.dispose();
 });
+
+it.each(["expiry", "quit"])(
+  "bounds pending launches and revokes outstanding tokens on %s",
+  async (ending) => {
+    vi.useFakeTimers();
+    const owner = {},
+      view = {};
+    const tokens: string[] = [];
+    const launcher = createSshTerminalLaunch({
+      lookup: async () => "/ssh",
+      alive: () => true,
+      notify(_owner: object, message) {
+        tokens.push(message.token);
+      },
+    });
+    const open = (source: object) =>
+      launcher.open(owner, source, "view", { host: "alias" }, async (commit) =>
+        commit(),
+      );
+    const first = open(view);
+    await Promise.resolve();
+    await expect(open(view)).rejects.toThrow("busy");
+    const remaining = Array.from({ length: 31 }, () => open({}));
+    await Promise.resolve();
+    expect(tokens).toHaveLength(32);
+    await expect(open({})).rejects.toThrow("busy");
+    if (ending === "expiry") vi.advanceTimersByTime(60_000);
+    else launcher.dispose();
+    expect(await Promise.all([first, ...remaining])).toEqual(
+      Array.from({ length: 32 }, () => ({
+        ok: false,
+        error: "outcome-unknown",
+      })),
+    );
+    for (const token of tokens)
+      expect(() => launcher.consume(owner, token)).toThrow();
+    if (ending === "quit")
+      await expect(open({})).rejects.toThrow("unavailable");
+    launcher.dispose();
+  },
+);
 
 it("local pre-transfer revocation refuses; core cancellation and Quit revoke unused tokens", async () => {
   const owner = {};

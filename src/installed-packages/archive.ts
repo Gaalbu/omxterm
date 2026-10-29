@@ -3,7 +3,8 @@ import { constants } from "node:fs";
 import { lstat, mkdir, open } from "node:fs/promises";
 import path from "node:path";
 import { crc32 } from "node:zlib";
-import { satisfies, valid, validRange } from "semver";
+import { valid, validRange } from "semver";
+import { packageCompatible } from "./compatibility.js";
 import { fromBufferPromise, type Entry, type ZipFile } from "yauzl";
 import { isExtensionResource } from "../shared/extensions.js";
 
@@ -149,10 +150,7 @@ export function checkCompatibility(
   manifest: PackageManifest,
   runtime: PackageRuntime,
 ): void {
-  if (
-    !satisfies(runtime.appVersion, manifest.engines.omxterm) ||
-    !satisfies(runtime.apiVersion, manifest.engines.api)
-  )
+  if (!packageCompatible(manifest, runtime))
     throw new PackageError("incompatible");
 }
 

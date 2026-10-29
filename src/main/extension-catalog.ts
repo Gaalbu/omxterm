@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { satisfies, valid, validRange, gt } from "semver";
+import { valid, validRange, gt } from "semver";
+import { packageCompatible } from "../installed-packages/compatibility.js";
 import {
   isRecord,
   validId,
@@ -167,9 +168,7 @@ export function catalogCompatible(
   target: string,
 ): boolean {
   return (
-    release.targets.includes(target) &&
-    satisfies(runtime.appVersion, release.engines.omxterm) &&
-    satisfies(runtime.apiVersion, release.engines.api)
+    release.targets.includes(target) && packageCompatible(release, runtime)
   );
 }
 export function catalogAction(

@@ -95,6 +95,50 @@ it.each(["edit", "blur", "hide", "lost-release"])(
     expect(launches(request)).toHaveLength(0);
   },
 );
+it.each(["blur", "hide", "lost-release"])(
+  "recovers pointer and fresh-key admission after %s without the lost keyup",
+  async (reason) => {
+    const { request, quick, visibility } = await setup();
+    vi.useFakeTimers();
+    quick.value = "host";
+    key(quick, "keydown");
+    if (reason === "blur") window.dispatchEvent(new Event("blur"));
+    if (reason === "hide") {
+      visibility(false);
+      visibility(true);
+    }
+    if (reason === "lost-release") vi.advanceTimersByTime(30_000);
+    key(quick, "keydown", true);
+    expect(launches(request)).toHaveLength(0);
+    [...document.querySelectorAll("button")]
+      .find((button) => button.textContent === "Connect")!
+      .click();
+    expect(launches(request)).toHaveLength(1);
+    await Promise.resolve();
+    key(quick, "keydown");
+    key(quick, "keyup");
+    expect(launches(request)).toHaveLength(2);
+  },
+);
+it("filters an admitted discovery response using edits made while it was pending", async () => {
+  const { request, search } = await setup();
+  let finish!: (value: Awaited<ReturnType<SshBridge["request"]>>) => void;
+  request.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  [...document.querySelectorAll("button")]
+    .find((button) => button.textContent === "Refresh")!
+    .click();
+  search.value = "alp";
+  search.dispatchEvent(new Event("input"));
+  finish({ ok: true, aliases: ["alpha", "beta"] });
+  await Promise.resolve();
+  expect(document.querySelector('[data-alias="alpha"]')).not.toBeNull();
+  expect(document.querySelector('[data-alias="beta"]')).toBeNull();
+});
 it("bounds pointer submission and reports lost replies without automatic replay", async () => {
   const { request, quick } = await setup();
   let fail!: (error: Error) => void;

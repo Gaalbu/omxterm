@@ -78,6 +78,7 @@ export function mountSshPage(document: Document, bridge: SshBridge) {
   document.body.append(page);
   let aliases: string[] = [];
   let revision = 0;
+  let discoveryRevision = 0;
   let selected = 0;
   let reading = false;
   let pending = false;
@@ -97,6 +98,7 @@ export function mountSshPage(document: Document, bridge: SshBridge) {
     );
   const cancelGesture = () => {
     gesture = undefined;
+    suppressClick = false;
     if (timer) clearTimeout(timer);
     timer = undefined;
   };
@@ -194,11 +196,11 @@ export function mountSshPage(document: Document, bridge: SshBridge) {
     reading = true;
     aliases = [];
     render();
-    const current = revision;
+    const current = ++discoveryRevision;
     summary.textContent = "Reading aliases…";
     try {
       const reply = await bridge.request({ operation: "aliases" });
-      if (disposed || current !== revision) return;
+      if (disposed || current !== discoveryRevision) return;
       if (!reply.ok || !Array.isArray(reply.aliases)) {
         warning.textContent =
           "Alias discovery is unavailable or may still be reading. Quick connect remains available; no automatic retry.";
@@ -212,7 +214,7 @@ export function mountSshPage(document: Document, bridge: SshBridge) {
       }
       render();
     } catch {
-      if (!disposed && current === revision) {
+      if (!disposed && current === discoveryRevision) {
         warning.textContent =
           "Alias discovery is unavailable or may still be reading. No automatic retry.";
         render();
@@ -220,10 +222,7 @@ export function mountSshPage(document: Document, bridge: SshBridge) {
     } finally {
       reading = false;
       if (!disposed) {
-        if (
-          current !== revision &&
-          summary.textContent === "Reading aliases…"
-        ) {
+        if (current !== discoveryRevision) {
           warning.textContent =
             "The discovery result was invalidated. Choose Refresh to read again.";
           render();
@@ -274,10 +273,10 @@ export function mountSshPage(document: Document, bridge: SshBridge) {
       if (!owned) return;
       event.preventDefault();
       event.stopPropagation();
-      suppressClick = true;
       if (event.repeat || gesture || pending || !available || !visible) return;
       const target = capture(event.target);
       if (!target) return;
+      suppressClick = true;
       gesture = { target, revision };
       timer = setTimeout(cancelGesture, 30_000);
     },
@@ -291,6 +290,7 @@ export function mountSshPage(document: Document, bridge: SshBridge) {
       event.stopPropagation();
       const owned = gesture;
       cancelGesture();
+      suppressClick = true;
       window.setTimeout(() => {
         suppressClick = false;
       }, 0);
@@ -304,6 +304,7 @@ export function mountSshPage(document: Document, bridge: SshBridge) {
     if (!next) {
       cancelGesture();
       revision++;
+      discoveryRevision++;
     } else if (!disposed) {
       if (!reading) render();
       search.focus();
@@ -333,6 +334,7 @@ export function mountSshPage(document: Document, bridge: SshBridge) {
     dispose() {
       disposed = true;
       revision++;
+      discoveryRevision++;
       cancelGesture();
       unsubscribe();
       lifetime.abort();

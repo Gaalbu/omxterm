@@ -82,6 +82,7 @@ export function terminalTabCreator(
     if (foreground) owner.select(tabs.length - 1, tabs.length === 1);
     else {
       pane.tab.container.hidden = true;
+      pane.container.hidden = true;
       owner.render();
     }
     if (ssh) options.sshPane?.(ssh.token, true);

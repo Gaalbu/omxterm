@@ -99,7 +99,13 @@ does not detect manually typed ssh inside an ordinary shell.
 
 The optional exact manifest declaration is
 `"capabilities": ["terminal.openSsh.v1"]`; unknown declarations are rejected.
-Existing Files API0.1.x manifests remain compatible and receive no SSH capability.
+The unchanged Files 0.1.0 preview remains compatible and receives no SSH
+capability. Host 0.24.0-dev.0 explicitly admits its original
+`>=0.23.0-dev.8 <0.24.0` host range at both catalog and installed-store checks;
+ordinary semver would exclude this new prerelease tuple. This exception is
+limited to that host version, Files identity/version and its original host/API
+ranges. API compatibility and target checks still apply. It does not modify the
+published Files archive or admit other packages or future host versions.
 The own-view bridge's `{operation:"host.capabilities"}` query reports declared
 available selectors. The concrete request is
 `{operation:"terminal.openSsh.v1",target:{host,user?,port?}}` with exact keys.
