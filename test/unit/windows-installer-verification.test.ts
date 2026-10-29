@@ -16,7 +16,7 @@ function adapter() {
 }
 
 describe("exact Windows installer verification", () => {
-  it("accepts the reviewed packaging footprint including beta PTY artifact exclusions", async () => {
+  it("accepts the reviewed packaging footprint including separate extension exclusions", async () => {
     const configuration = await readFile(
       new URL("../../electron-builder.yml", import.meta.url),
       "utf8",
@@ -24,6 +24,48 @@ describe("exact Windows installer verification", () => {
     expect(() =>
       inspectWindowsInstallerInputs(configuration, "26.15.3", "omxterm"),
     ).not.toThrow();
+  });
+  it("keeps exact input guarding after the separate-archive exclusion review", async () => {
+    const configuration = await readFile(
+      new URL("../../electron-builder.yml", import.meta.url),
+      "utf8",
+    );
+    for (const [config, builder, name] of [
+      [
+        configuration.replace("oneClick: true", "oneClick: false"),
+        "26.15.3",
+        "omxterm",
+      ],
+      [
+        configuration.replace(
+          "com.otaviomiranda.omxterm",
+          "com.example.changed",
+        ),
+        "26.15.3",
+        "omxterm",
+      ],
+      [
+        configuration.replaceAll('    - "!dist/**/*.omxext"\n', ""),
+        "26.15.3",
+        "omxterm",
+      ],
+      [
+        configuration.replaceAll('    - "!dist/**/*.omxext.json"\n', ""),
+        "26.15.3",
+        "omxterm",
+      ],
+      [
+        configuration.replaceAll('    - "!dist/**/*.omxext.sha256"\n', ""),
+        "26.15.3",
+        "omxterm",
+      ],
+      [configuration, "26.15.4", "omxterm"],
+      [configuration, "26.15.3", "other-package"],
+    ] as const) {
+      expect(() =>
+        inspectWindowsInstallerInputs(config, builder, name),
+      ).toThrow(/footprint/i);
+    }
   });
   it("recognizes the persistent NSIS cache as existing installation state", async () => {
     const execute = vi.fn().mockResolvedValue({

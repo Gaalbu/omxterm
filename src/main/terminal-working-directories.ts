@@ -1,5 +1,6 @@
 import { statSync } from "node:fs";
 import { hostname } from "node:os";
+import { isLayoutPath } from "../shared/terminal-layout";
 import type { TerminalSessionId } from "../shared/terminal-contract";
 import {
   isWorkingDirectoryUri,
@@ -22,6 +23,8 @@ export function createWorkingDirectoryTracker(
   } = {},
 ) {
   const directories = new Map<TerminalSessionId, string>();
+  const launches = new Map<TerminalSessionId, string>();
+  const reported = new Set<TerminalSessionId>();
   // An unterminated report, or a possibly split introducer, per session.
   const carries = new Map<TerminalSessionId, string>();
   // Once over budget, consume the same rejected report through its terminator.
@@ -31,9 +34,11 @@ export function createWorkingDirectoryTracker(
   const isDirectory = options.isDirectory ?? existingDirectory;
 
   const record = (sessionId: TerminalSessionId, uri: string) => {
-    const directory = isWorkingDirectoryUri(uri)
+    const candidate = isWorkingDirectoryUri(uri)
       ? localWorkingDirectory(uri, hostName(), platform)
       : undefined;
+    const directory = isLayoutPath(candidate, platform) ? candidate : undefined;
+    reported.add(sessionId);
     // A remote or unusable report replaces, never keeps, an older one.
     if (directory === undefined) directories.delete(sessionId);
     else directories.set(sessionId, directory);
@@ -80,6 +85,7 @@ export function createWorkingDirectoryTracker(
             carries.set(sessionId, text.slice(start));
           else {
             directories.delete(sessionId);
+            reported.add(sessionId);
             discarding.add(sessionId);
             if (pendingSt) carries.set(sessionId, "\u001b");
           }
@@ -87,10 +93,30 @@ export function createWorkingDirectoryTracker(
         }
         if (!end.cancelled) record(sessionId, text.slice(body, end.index));
         // Overflow invalidates cwd before cancellation, regardless of chunking.
-        else if (end.index - body > MAX_WORKING_DIRECTORY_REPORT_LENGTH)
+        else if (end.index - body > MAX_WORKING_DIRECTORY_REPORT_LENGTH) {
           directories.delete(sessionId);
+          reported.add(sessionId);
+        }
         from = end.index + end.length;
       }
+    },
+    launched(sessionId: TerminalSessionId, directory: string | undefined) {
+      if (directory !== undefined) launches.set(sessionId, directory);
+    },
+    provenance(
+      sessionId: TerminalSessionId,
+    ): import("../shared/terminal-layout").LayoutDirectory {
+      const directory = directories.get(sessionId);
+      if (directory !== undefined)
+        return { kind: "reported-local", path: directory };
+      const launch = launches.get(sessionId);
+      return !reported.has(sessionId) && launch !== undefined
+        ? { kind: "launch-local", path: launch }
+        : { kind: "home" };
+    },
+    // Capture without filesystem IO. The backend validates existence when used.
+    reported(sessionId: TerminalSessionId): string | undefined {
+      return directories.get(sessionId);
     },
     // A reported directory may have been removed since; home is the fallback.
     inherited(sessionId: TerminalSessionId | undefined): string | undefined {
@@ -102,6 +128,8 @@ export function createWorkingDirectoryTracker(
     },
     forget(sessionId: TerminalSessionId) {
       directories.delete(sessionId);
+      launches.delete(sessionId);
+      reported.delete(sessionId);
       carries.delete(sessionId);
       discarding.delete(sessionId);
     },

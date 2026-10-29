@@ -1,6 +1,6 @@
 {
   "name": "omxterm",
-  "version": "0.23.0-dev.1",
+  "version": "0.24.0-dev.1",
   "description": "Open-source personal desktop terminal for ARM64 macOS, Linux, and Windows",
   "desktopName": "omxterm.desktop",
   "author": "Luiz Otávio Miranda",
@@ -17,6 +17,9 @@
     "test": "vitest run --maxWorkers=4",
     "test:integration": "vitest run test/integration/local-shell.test.ts",
     "build": "node build.mjs",
+    "build:installed-packages": "node scripts/build-installed-packages.mjs",
+    "build:extension-runtime": "node scripts/build-extension-runtime.mjs",
+    "build:restoration-extension": "node scripts/build-restoration-extension.mjs",
     "check:portable": "npm run format:check && npm run lint && npm run typecheck && npm test && npm run build",
     "package:mac": "npm run build && npm run package-built:mac",
     "package:linux": "npm run build && npm run package-built:linux",
@@ -40,12 +43,16 @@
   "dependencies": {
     "node-pty": "1.2.0-beta.18",
     "restty": "0.3.0",
+    "semver": "7.8.5",
     "text-shaper": "0.1.28",
-    "yaml": "2.9.1"
+    "yaml": "2.9.1",
+    "yauzl": "3.4.0"
   },
   "devDependencies": {
     "@electron/asar": "4.3.1",
     "@types/node": "24.19.1",
+    "@types/semver": "7.7.1",
+    "@types/yauzl": "3.4.0",
     "electron": "43.8.1",
     "electron-builder": "26.15.3",
     "esbuild": "0.28.2",

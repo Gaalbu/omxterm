@@ -161,6 +161,7 @@ function harness(
       },
     },
     "./window-chrome-feature-scenario": { createWindowChromeFeatureScenario },
+    "./extension-view-scenario": { extensionViewOnly: false },
     "./fixture-session-input": { createFixtureSessionInput },
     "./restty-host-platform": {
       explicitFixtureReadyMarker,
@@ -178,6 +179,7 @@ function harness(
     "./native-fixture-pty": {},
     "./window-chrome-native-drag": {},
     "./application-menu-exercise": {},
+    "./command-palette-exercise": {},
     "./about-keyboard-exercise": { exerciseAboutKeyboard: async () => {} },
     "./about-dialog-exercise": {
       createAboutExercise: () => ({

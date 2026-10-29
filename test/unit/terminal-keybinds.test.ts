@@ -108,13 +108,23 @@ describe("terminal keybind accelerators", () => {
     );
   });
 
-  it("ships a valid, collision-free default for every action", () => {
-    const canonicals = TERMINAL_ACTION_NAMES.map((action) => {
-      expect(isValidAccelerator(DEFAULT_TERMINAL_KEYBINDS[action])).toBe(true);
-      return canonicalAccelerator(DEFAULT_TERMINAL_KEYBINDS[action]);
-    });
-    expect(new Set(canonicals).size).toBe(TERMINAL_ACTION_NAMES.length);
-  });
+  it.each(["darwin", "linux", "win32"])(
+    "keeps every default canonically conflict-free on %s",
+    (platform) => {
+      const defaults = terminalDefaultKeybinds(platform);
+      expect(defaults.commandPalette).toBe(
+        platform === "darwin" ? "CommandOrControl+Shift+P" : "Control+Shift+P",
+      );
+      const canonicals = TERMINAL_ACTION_NAMES.map((action) => {
+        const value = defaults[action];
+        expect(value).not.toBeNull();
+        if (value === null) throw new Error("Existing default was unbound");
+        expect(isValidAccelerator(value)).toBe(true);
+        return canonicalAccelerator(value, platform);
+      });
+      expect(new Set(canonicals).size).toBe(canonicals.length);
+    },
+  );
 
   describe("resolving a keyboard input to an action", () => {
     const keyInput = (

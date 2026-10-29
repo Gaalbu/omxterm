@@ -1,3 +1,4 @@
+/* eslint-disable max-lines -- Keep the existing cohesive native panel scenario together. */
 import assert from "node:assert/strict";
 import {
   overlayActionsConsumed,
@@ -95,6 +96,7 @@ function createScenario(options: PanelOptions) {
     openLocalImage: () => application.openLocalImageInSelectedWindow(),
     showAbout: options.showAbout,
     showSettings: unexpected,
+    showCommandPalette: unexpected,
     splitSelectedPane: unexpected,
     closeSelectedPane: unexpected,
     focusSelectedPane: unexpected,
@@ -175,7 +177,7 @@ export async function exerciseAuxiliaryPanel(options: PanelOptions) {
   window.setContentSize(1000, 700);
   window.focus();
   await until("document.querySelectorAll('canvas').length === 1");
-  await wait(() => sizes[0]!.length > 0, "initial grid");
+  await wait(() => (sizes[0]?.length ?? 0) > 0, "initial grid");
   await until(terminalFocused);
   application.newTabInSelectedWindow();
   await until("document.querySelectorAll('canvas').length === 2");

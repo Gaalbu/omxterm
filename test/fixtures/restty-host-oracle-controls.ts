@@ -90,7 +90,7 @@ export function resttyHostOracleRendererControl(
             } else {
               replace(
                 "  const applyRuntimeTheme = (theme: TerminalTheme, labels?: Labels) => {",
-                `  const applyRuntimeTheme = (theme: TerminalTheme, labels?: Labels) => {\n    if (${predicate}) ptyCallbacks?.onData?.("\\x1b_Ga=d,d=A,q=2;\\x1b\\\\");`,
+                `  const applyRuntimeTheme = (theme: TerminalTheme, labels?: Labels) => {\n    if (${predicate}) output("\\x1b_Ga=d,d=A,q=2;\\x1b\\\\");`,
               );
             }
           }

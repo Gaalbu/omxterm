@@ -34,6 +34,11 @@ sudo pacman -S --needed base-devel python patch binutils procps-ng fontconfig fi
 ARM64 and x64; use C++ build tools and `patch` on both architectures.
 Full Linux package startup verification also requires Python 3.9+ and Linux
 pidfd support (kernel 5.3+); identity-checked signaling fails closed without them.
+A positive PID can disappear between the kernel's lookup and pidfd preparation;
+older kernels can return `EINVAL` at that boundary. The helper accepts that
+acquisition result only when a subsequent `/proc/<pid>/stat` read proves the
+process disappeared. Existing/reused or unreadable identities, other errors,
+and `EINVAL` from signaling remain failures; no PID-only signal fallback is used.
 
 Verify that the fixture fonts are installed with `fc-list : family` (missing fixture fonts cause native font integration tests to fail with `Configured native fixture font is missing`).
 
@@ -236,6 +241,18 @@ Do not infer full-suite execution coverage from aggregate counters or empty pass
 
 ### Focused checks
 
+The [internal extension backend runtime](extension-backend-runtime.md) has an
+explicit `npm run build:extension-runtime` artifact and actual native process/store
+tests. Normal Linux ARM64 `npm run build` also includes the runtime and native
+lease/Files move addons for the [Files preview](files-development-preview.md).
+Application startup constructs infrastructure without activating installed code;
+explicit shared actions activate it. Files remains a separately built archive.
+The runtime's default integration wrapper launches real Electron/Node children even
+without opening windows; use an assigned native environment. No application
+startup activation, package/fuse/signing qualification or public SDK follows from
+building that artifact. Controlled lifecycle tests under `test/unit/extension-runtime-*`
+remain headless and do not execute the native addon.
+
 While iterating on a specific subsystem, you can run targeted test files before running the full suite:
 
 | Subsystem                                      | Command                                                                                                                                                                                       |
@@ -254,6 +271,34 @@ While iterating on a specific subsystem, you can run targeted test files before 
 | Literal argv                                   | `npx vitest run test/integration/literal-argv.test.ts test/unit/postinstall.test.ts`                                                                                                          |
 | Unix native resize failure                     | `npx vitest run test/integration/terminal-resize-race.test.ts test/unit/terminal-resize-failure.test.ts`                                                                                      |
 | Linux foreground Busy decision                 | `npx vitest run test/unit/linux-foreground.test.ts test/unit/postinstall.test.ts test/integration/linux-foreground.test.ts`                                                                   |
+
+The integrated host's concurrent-font phase requires actual exit callbacks from
+all four removed sessions and no exit from previously live peers; aggregate
+counts, DOM removal and kill requests do not prove completion. Failure snapshots
+include counts and missing-target/exited-peer indices. The wait deadline and
+independent fixture settlement still apply. Headless callback-order checks:
+`npm test -- test/unit/restty-host-concurrent-cleanup.test.ts`.
+The historical Fedora timeout in [#722](https://github.com/luizomf/omxterm/issues/722)
+remains unattributed and is not cleared by these checks or the later instrumented
+native pass.
+
+The hover `early-capture` negative control qualifies the rejection of an undrawn
+hover generation: exact modified/`cue-not-drawn` phase, stale draw provenance,
+the same actually held callback through capture, explicit release, and clean
+native settlement. It does not require complete compositor bitmap equality.
+A draw-call receipt is not a presentation fence; even the baseline's two frame
+continuations are only a presentation opportunity. The existing positive and
+release cases retain their strict destination/complement/unused-edge pixel
+oracles, and the other invalidation controls retain zero-pixel checks.
+
+Headless capture-helper/frame-hold checks cover equal/different bitmaps and a
+released/current-draw counterexample:
+`npm test -- test/unit/restty-hover-readiness.test.ts`.
+Pixel comparison metadata remains in phase receipts. These checks establish
+oracle semantics, not native compositor reproduction or all-platform qualification.
+The historical bitmap variation in [#721](https://github.com/luizomf/omxterm/issues/721)
+remains unexplained; correcting the equality criterion did not turn that run into
+a pass. Capture, draw guards, deadlines and settlement behavior are unchanged.
 
 The `font-read-reload` suite holds one actual main-process `FileHandle.read`
 before its positional read, retaining native discovery, bounded bytes/face
@@ -583,6 +628,17 @@ ARM64 complete native checks (and optional full x64 checks) run `check:portable`
 > npm run package:win        # ARM64; use npm run package:win:x64 on x64
 > npm run package:verify -- --windows-unpacked-only
 > ```
+
+The exact Windows verifier requires installed-payload removal independently of
+registration/shortcut/process cleanup: the custom installation root must be
+absent or a real empty directory. Non-recursive removal preserves unexpected
+residual files/directories as failure evidence; exact owned-cache cleanup and
+later relocated-uninstaller cleanup do not establish payload removal.
+Headless controlled-command regressions exercise the actual transaction with real
+files (including cleared registrations but retained payload):
+`npm test -- test/unit/windows-installer-transaction.test.ts test/unit/windows-installer-verification.test.ts test/unit/windows-verification-options.test.ts`.
+These tests do not execute NSIS or PowerShell, reproduce an installer defect, or
+replace disposable-Windows exact-installer qualification.
 
 For native x64 **build-only** delivery, use `npm run package:linux:x64` or
 `npm run package:win:x64`, then `npm run package:verify -- --inspection-only`.

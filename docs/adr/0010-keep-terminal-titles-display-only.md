@@ -7,7 +7,8 @@ single-line text, removes control and invisible bidirectional formatting
 characters, and rejects a request longer than 256 Unicode code points instead
 of truncating it. This bound is applied to the raw parsed request before
 sanitization. Under the tab model in ADR 0016, an empty or invalid
-request restores that Live Terminal Session's starting-shell basename; the
+request restores that Live Terminal Session's starting-shell basename (or the
+validated `SSH · HOST` fallback for SSH Connect under ADR0041); the
 native Terminal Window uses `OMXTerm` only as its final fallback when no session
 is selected.
 

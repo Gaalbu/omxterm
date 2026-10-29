@@ -1,0 +1,25 @@
+import { app } from "electron";
+import { userInfo } from "node:os";
+import { configureApplicationAbout } from "./application-about";
+import { startupLaunchRequest } from "./launch-request";
+import { installedFontFamilyMetrics } from "./installed-font-family";
+
+export function prepareStartup(developmentIcon: string, packagedIcon: string) {
+  configureApplicationAbout(
+    app,
+    app.isPackaged ? packagedIcon : developmentIcon,
+  );
+  const launch = startupLaunchRequest(process.argv, app.isPackaged);
+  if (!app.isPackaged) app.dock?.setIcon(developmentIcon);
+  const account = userInfo();
+  return {
+    account,
+    consumeLaunchRequest: launch,
+    configurationLoadOptions: {
+      environment: process.env,
+      homeDirectory: account.homedir,
+      platform: process.platform,
+      getInstalledFontFamilyMetrics: installedFontFamilyMetrics,
+    },
+  };
+}

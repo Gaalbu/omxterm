@@ -14,12 +14,38 @@ interface NativeQuit {
   quit(): void;
 }
 
+function boundedExtensionCleanup(
+  dispose: () => Promise<unknown>,
+  unknown?: () => void,
+) {
+  return new Promise<void>((resolve) => {
+    let completed = false;
+    const finish = (settled: boolean) => {
+      if (completed) return;
+      completed = true;
+      clearTimeout(timer);
+      if (!settled) unknown?.();
+      resolve();
+    };
+    const timer = setTimeout(() => finish(false), 15_000);
+    void Promise.resolve()
+      .then(dispose)
+      .then(
+        (result) => finish(result !== false),
+        () => finish(false),
+      );
+  });
+}
+
 export function registerTerminalShutdown(
   native: NativeQuit,
   options: {
     readonly application: () =>
       Pick<TerminalApplication, "isQuitting" | "requestQuit"> | undefined;
     readonly disposeSessions: () => void;
+    // Extensions receive bounded cleanup time, never a veto over normal Quit.
+    readonly disposeExtensions?: () => Promise<unknown>;
+    readonly onExtensionCleanupUnknown?: () => void;
   },
 ) {
   const pendingExits = new Set<Promise<void>>();
@@ -42,6 +68,13 @@ export function registerTerminalShutdown(
     // report exit. A native close error propagates and cannot become success.
     draining = true;
     options.disposeSessions();
+    if (options.disposeExtensions)
+      pendingExits.add(
+        boundedExtensionCleanup(
+          options.disposeExtensions,
+          options.onExtensionCleanupUnknown,
+        ),
+      );
     void Promise.all([...pendingExits]).then(() => {
       stopped = true;
       native.quit();

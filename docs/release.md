@@ -198,6 +198,125 @@ $name = "OMXTerm-<version>-arm64.exe"   # or OMXTerm-<version>-x64.exe
 Get-Content "$name.sha256"
 ```
 
+## Files preview preparation
+
+A Linux ARM64 Files preview is a separate preparation lane, not the complete
+stable-release asset set below and not an announcement that a preview is published.
+Use an ordinary-user disposable Linux ARM64 guest and an exact committed source:
+
+```sh
+npm ci
+npm run build
+node scripts/build-files-extension.mjs
+npm run package-built:linux
+npm run package:verify -- --inspection-only
+OMXTERM_FILES_BUILD=1 npm test -- test/integration/files-extension-build.test.ts
+```
+
+Build Files **after** `npm run build` (which clears `dist`) and **before** packaging
+so exclusion is actually checked. The Files archive and its `.sha256`/`.json`
+sidecars live in `dist/extensions`, outside the host package. Its minimum host
+is `0.23.0-dev.8`; `v0.22.0` cannot consume it. When building an exported source
+archive, pass `OUTPUT.omxext FULL_SOURCE_COMMIT` to the Files builder and verify
+the export's source correspondence. The receipt distinguishes supplied source
+identity from a clean local Git HEAD.
+
+Inspection-only now includes packaged Linux ARM64 extension store/native loading
+and bootstrap module resolution. It is **not** Files activation, GUI or normal
+Quit qualification. Before publication, qualify the exact packaged host with the
+separate archive: captured-byte trust, dormant install, explicit Files activation,
+real filesystem mutation/conflict, deliberate replacement/management, the same
+live PTY and joined Quit. Preserve source/lock/tool/runtime identities, package
+and archive hashes, actual tested host/target, outcomes and limitations alongside
+the build receipt; never turn its `not-run` field into an inferred pass.
+
+Root/maintainers decide publication after review and qualification. If publishing
+a partial Linux ARM64 preview, label it explicitly as a prerelease and not Latest,
+keep Files as a separately downloadable versioned artifact, and disclose missing
+platform/SDK/catalog qualification. Do not mutate an already published release to
+add it. Public readback/checksums and a compatible public host are needed before
+claiming distribution; neither a branch, local artifact nor CI upload is shipment.
+The normal stable-release procedure and its complete asset set remain unchanged.
+
+## Files catalog publication
+
+This partial preview is separate from the complete stable release below. The
+integration maintainer owns publication after full candidate review/corrections and
+exact packaged qualification. Keep source review SHA, final SHA, host package and
+Files archive identities distinct; a reused archive retains its original source
+receipt. Files0.1.0 minimum dev.8 remains valid for local/link installation; dev.9
+adds catalog browsing. Do not rebuild or replace published same-version bytes.
+
+1. Qualify the final Linux ARM64 host AppImage with the separate Files archive:
+   catalog → exact-byte trust → dormant install → Files operation/conflict →
+   replacement/management → same live PTY → joined Quit. Record whether transport
+   is controlled or actual public HTTPS, plus synthetic-input/dialog limitations.
+2. Create separate draft prereleases at exact source commits: host
+   `v0.23.0-dev.9` and Files `ext-files-v0.1.0`. Use `--prerelease --latest=false`
+   with `gh release create`; neither becomes Latest. Host gets the qualified
+   AppImage/checksum (and helper/checksum if included, with helper qualification
+   limitations). Files gets its `.omxext`, `.omxext.sha256`, `.omxext.json`.
+   Preserve MIT/provenance and explicitly state Linux ARM64 preview/SDK limits.
+3. Download draft assets and compare exact sizes/SHA-256 against retained receipts;
+   then publish/seal each release. Download public URLs again and verify the same
+   bytes, including archive checksum and receipt. Never clobber an existing release.
+4. Generate the candidate from those verified archive/receipt/checksum files:
+   `node scripts/create-files-catalog.mjs PATH/files-0.1.0.omxext CANDIDATE.json`.
+   Inspect its original source commit, immutable release URLs, target, engine range,
+   byte count and digest. Promote this reviewed JSON to
+   `distribution/official-extensions-v1.json` only after public availability.
+5. Read back the exact fixed raw catalog endpoint; run one bounded actual packaged
+   public-endpoint installation and retained-terminal/management/Quit smoke. Verify
+   downloaded bytes against the published release receipt. A localhost transport
+   fixture or successful upload does not qualify this boundary.
+
+Record publication URLs, exact readback hashes and actual outcomes. Until both a
+compatible public host and public Files consumption succeed, #728 remains open;
+source integration or a valid empty catalog is not product distribution. No signing
+infrastructure, stable SDK or broader platform campaign is implied.
+
+## SSH preview publication
+
+The selected SSH milestone follows the partial Linux ARM64 preview topology,
+not the twelve-asset stable release below. Publish host `v0.24.0-dev.0` and separate
+`ext-ssh-v0.1.0` as prereleases with `--latest=false`. Do not remove the development
+suffix or bump main for catalog/docs/test-only changes: unchanged Files0.1.0 is
+explicitly compatible with this exact host version only. A different host version
+requires deliberate compatibility reconciliation and rebuilt/verified host bytes.
+Stable0.23.0, dev.9 and Files0.1.0 remain immutable.
+
+1. Reuse the qualified AppImage/helper and checksums built at
+   `a8a309fe4bd87675d01da193fa7318701e68a460`; host tag target is integrated
+   `a09d8530541399f85469c099ed20ac4b102647f8` (only two test files differ).
+   Preserve SSH `ssh-6d939f0.omxext` plus original `.sha256`/`.json`, built/tagged
+   at `6d939f0e837dba90728e6e892010a4a1889fe0c9`. Its extension inputs are unchanged
+   through final host source. Do not rebuild, rename or relabel published-version
+   bytes or change the receipt's build-time `not-run` qualification field.
+2. After checking proposed tags/releases are absent, create and verify exact tag
+   refs, then use `gh release create --verify-tag --draft --prerelease --latest=false`
+   with the four host assets and three SSH assets in their respective releases.
+   Draft metadata alone does not establish the existence of a tag ref. Download
+   and verify all seven filenames, sizes and hashes before publishing host, then
+   SSH. Recheck both immutable public releases and anonymously download/hash all
+   seven versioned asset URLs. Stable0.23.0 remains Latest.
+3. Only after public bytes verify, promote the SSH catalog entry alongside the
+   unchanged Files entry. Bind the embedded manifest's ID/version/engine strings,
+   original source commit, Linux ARM64 target and exact archive size/digest to the
+   immutable release URLs. `create-files-catalog.mjs` is Files-specific, not an SSH
+   generator; do not replace the complete catalog with a Files-only output.
+4. Read back the exact fixed raw catalog endpoint and compare its bytes to the
+   promoted source. Run the bounded [public SSH checkpoint](ssh-connect.md#public-distribution-checkpoint)
+   on the exact publicly downloaded host/archive. It uses production HTTPS and
+   verifies catalog install/reinstall, dormant activation, management, retained
+   local terminal and actual-exit Quit without rerunning the synthetic SSH matrix.
+   Record actual receipt hashes/outcomes separately from pre-publication evidence.
+
+The retained host FULL verifier, synthetic SSH campaign and immutable Files
+lifecycle may be reused while relevant inputs remain unchanged. None establishes
+real SSH authentication/connectivity, other-platform extension support, a stable
+SDK or public acquisition before the separate checkpoint. Do not mutate sealed
+release notes/assets to retroactively claim later verification.
+
 ## Publication
 
 Create tag `vX.Y.Z` and a draft GitHub Release in `luizomf/omxterm`. Upload every applicable file (twelve with both x64 platforms), download and verify the complete set against local byte counts and SHA-256 records, then publish to seal the immutable release:

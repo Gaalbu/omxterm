@@ -281,9 +281,9 @@ describe("View -> Pane", () => {
       DEFAULT_TERMINAL_KEYBINDS,
       terminalDefaultKeybinds("linux"),
     ]) {
-      const values = Object.values(keybinds).map((value) =>
-        value.toLowerCase(),
-      );
+      const values = Object.values(keybinds)
+        .filter((value) => value !== null)
+        .map((value) => value.toLowerCase());
       expect(new Set(values).size).toBe(values.length);
     }
     const invocations = terminalActionInvocations(actions);

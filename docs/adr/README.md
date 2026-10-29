@@ -46,6 +46,14 @@ source/test boundaries and known limitations.
 | 0035 | [Select the interface language explicitly](0035-select-the-interface-language-explicitly.md)                                   |
 | 0036 | [Distribute build-only x64 CI artifacts](0036-distribute-build-only-x64-ci-artifacts.md)                                       |
 | 0037 | [Allow the Linux software WebGL fallback](0037-allow-the-linux-software-webgl-fallback.md)                                     |
+| 0038 | [Serialize installation transactions and pin immutable package versions](0038-pin-immutable-installed-packages.md)             |
+| 0039 | [Own packaged web content by activation epoch](0039-own-packaged-web-content-by-epoch.md)                                      |
+| 0040 | [Run extension backends in owned bundled-Node children](0040-run-backends-in-owned-node-children.md)                           |
+
+[ADR0041: Transfer explicit SSH launches to core](0041-transfer-ssh-launches-to-core.md)
+adds the optional Linux ARM64 SSH Connect capability and ended-readable Surface.
+[ADR0042: Save layouts without restoring sessions](0042-save-layouts-without-restoring-sessions.md)
+adds explicit optional Saved Layout capture/open and extension-scoped CAS state.
 
 ## Related boundaries
 

@@ -2,6 +2,7 @@ import type {
   TerminalSessionId,
   TerminalTabCommand,
 } from "../shared/terminal-contract";
+import type { ExtensionsBridge } from "../shared/extensions";
 import type { TerminalPaneCommand } from "../shared/terminal-panes";
 
 // Command state belongs to the application-tab lifetime, including the captured
@@ -13,16 +14,37 @@ export function createApplicationTabCommands<Tab>(
     readonly selected: () => Tab | undefined;
     readonly select: (index: number) => void;
     readonly create: () => Promise<void>;
+    readonly openSsh?: (
+      command: Extract<TerminalTabCommand, { action: "open-ssh" }>,
+    ) => void;
     readonly close: (tab: Tab | undefined) => void;
     readonly closeSession: (id: TerminalSessionId) => void;
     readonly pane: (command: TerminalPaneCommand) => void;
+    readonly extensions?: ExtensionsBridge | undefined;
+    readonly refuseSsh?: (token: string) => void;
+    readonly canFocus?: (() => boolean) | undefined;
   },
 ) {
   let pendingClose: Tab | undefined;
   return {
     handle(command: TerminalTabCommand) {
-      if (!options.available()) return;
+      if (!options.available()) {
+        if (command.action === "open-ssh") options.refuseSsh?.(command.token);
+        return;
+      }
       switch (command.action) {
+        case "open-ssh":
+          options.openSsh?.(command);
+          return;
+        case "open-extension":
+          void options.extensions
+            ?.request({
+              operation: "open",
+              token: command.token,
+              accepted: options.canFocus?.() !== false,
+            })
+            .catch(() => {});
+          return;
         case "new":
           void options.create().catch(() => {});
           return;

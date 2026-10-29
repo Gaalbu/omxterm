@@ -20,6 +20,11 @@ export function startAbout(options: {
   readonly getVersion: () => string;
   readonly openExternal: (url: string) => Promise<unknown>;
   readonly selectedContents: () => TrustedWebContents | undefined;
+  readonly sendAction?: (
+    sender: TrustedWebContents,
+    channel: string,
+    payload?: unknown,
+  ) => void;
 }) {
   let disposed = false;
   const trusted = (event: IpcEvent) =>
@@ -46,7 +51,10 @@ export function startAbout(options: {
     show() {
       const sender = options.selectedContents();
       if (sender && trusted({ sender, senderFrame: sender.mainFrame }))
-        sender.send(aboutIpc.open, undefined);
+        (
+          options.sendAction ??
+          ((owner, channel, payload) => owner.send(channel, payload))
+        )(sender, aboutIpc.open);
     },
     dispose() {
       if (disposed) return;

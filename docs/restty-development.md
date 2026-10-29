@@ -186,6 +186,11 @@ npx vitest run test/integration/restty-host-integration.test.ts
 
 ### Optional rendering and memory diagnostics
 
+For repeatable memory-first baseline/candidate comparisons, calibration controls,
+and review policy, see the [performance baseline workflow](performance-baseline.md).
+It reuses the small real-rendering 1→3→1 Surface fixture without running the
+larger functional suites below.
+
 These opt-in diagnostic runs inspect specific rendering and memory boundaries in isolated fixtures:
 
 | Diagnostic                   | Command                                                                                                                                                                                                         |

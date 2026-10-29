@@ -27,7 +27,7 @@ export function createPaneMount(deps: {
   readonly selectedTab: () => TerminalTab | undefined;
   readonly onSessionEnd: (
     pane: TerminalPane,
-    exit: { signal: number; startupFailed?: true },
+    exit: import("../shared/terminal-contract").TerminalExit,
   ) => void;
   readonly notifyFocus: (tab: TerminalTab) => void;
   readonly removePane: (pane: TerminalPane, notify: boolean) => void;

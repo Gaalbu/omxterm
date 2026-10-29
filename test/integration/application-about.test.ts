@@ -73,7 +73,8 @@ it.for([
               bundle: true,
               platform: "node",
               format: "esm",
-              external: ["electron", "node-pty", "yaml"],
+              // Match production's ESM boundary for CommonJS dependencies.
+              external: ["electron", "node-pty", "yaml", "yauzl", "semver"],
             });
           }
         },

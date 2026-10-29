@@ -35,10 +35,12 @@ export function mountAboutDialog(
 export function retainDismissalGesture(document: Document) {
   const page = document.defaultView;
   let owned: string | undefined;
+  let settled: (() => void) | undefined;
   const identity = (event: KeyboardEvent) =>
     event.code || `${event.key}:${event.location}`;
   const release = () => {
     owned = undefined;
+    settled = undefined;
   };
   const onKey = (event: KeyboardEvent) => {
     if (owned !== identity(event)) return;
@@ -46,14 +48,20 @@ export function retainDismissalGesture(document: Document) {
       release();
       return;
     }
+    const complete = event.type === "keyup" ? settled : undefined;
     if (event.type === "keyup") release();
     event.preventDefault();
     event.stopImmediatePropagation();
+    complete?.();
   };
   page?.addEventListener("keydown", onKey, true);
   page?.addEventListener("keyup", onKey, true);
   page?.addEventListener("blur", release);
   return {
+    settle(event: KeyboardEvent, complete?: () => void) {
+      owned = identity(event);
+      settled = complete;
+    },
     track(event: KeyboardEvent, closeButton: HTMLButtonElement) {
       if (
         event.key === "Escape" ||

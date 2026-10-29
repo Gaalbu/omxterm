@@ -31,6 +31,25 @@ body {
   );
 }
 
+.terminal-exit-notice {
+  position: absolute;
+  z-index: 5;
+  right: 12px;
+  bottom: 12px;
+  max-width: calc(100% - 24px);
+  padding: 8px 12px;
+  color: var(--terminal-foreground, #eee);
+  background: var(--terminal-background, #111);
+  border: 1px solid currentColor;
+  font: 13px/1.5 sans-serif;
+}
+.terminal-exit-notice button {
+  color: inherit;
+  background: transparent;
+  border: 1px solid currentColor;
+  cursor: pointer;
+}
+
 #terminal-window-content {
   display: flex;
   flex: 1 1 auto;
@@ -44,6 +63,24 @@ body {
   min-height: 0;
   min-width: 0;
   background: transparent;
+}
+
+.hosted-content-tab {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+.hosted-content-tab[hidden] {
+  display: none;
+}
+.hosted-content-tab > button {
+  align-self: flex-end;
+}
+.hosted-content-slot {
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 /* A Terminal Tab holds one pane or a split of panes. */
@@ -546,6 +583,17 @@ body.tabs-visible .terminal-tab {
   color: #ffffff;
   background: #8c1d18;
   border-radius: 6px;
+}
+
+.terminal-layout-status {
+  flex: none;
+  padding: 6px 16px;
+  font:
+    13px/1.5 system-ui,
+    sans-serif;
+  color: var(--terminal-foreground, #eee);
+  background: var(--terminal-background, #111);
+  user-select: text;
 }
 
 #user-file-errors,

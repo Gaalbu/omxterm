@@ -33,6 +33,87 @@ function validate(
 }
 
 describe("disabled keybinds and bare function keys", () => {
+  it.each(["darwin", "linux", "win32"])(
+    "delivers the palette default and preserves explicit remaps/null on %s",
+    (platform) => {
+      const defaults = validate({}, platform);
+      const input = keyInput({
+        key: "p",
+        shift: true,
+        meta: platform === "darwin",
+        control: platform !== "darwin",
+      });
+      expect(terminalActionForKeyboardInput(defaults, input, platform)).toBe(
+        "commandPalette",
+      );
+      expect(
+        terminalActionForKeyboardInput(
+          validate({ commandPalette: null }, platform),
+          input,
+          platform,
+        ),
+      ).toBeUndefined();
+      expect(
+        terminalActionForKeyboardInput(
+          validate({ commandPalette: "Control+Alt+P" }, platform),
+          input,
+          platform,
+        ),
+      ).toBeUndefined();
+      // Unrelated custom shortcuts stay untouched.
+      expect(validate({ newWindow: "Control+Alt+P" }, platform).newWindow).toBe(
+        "Control+Alt+P",
+      );
+      const configured = validate(
+        { commandPalette: "Control+Alt+P" },
+        platform,
+      );
+      expect(
+        terminalActionForKeyboardInput(
+          configured,
+          keyInput({ key: "p", control: true, alt: true }),
+          platform,
+        ),
+      ).toBe("commandPalette");
+      expect(
+        validate({ commandPalette: null }, platform).commandPalette,
+      ).toBeNull();
+    },
+  );
+  it.each(["darwin", "linux", "win32"])(
+    "reports an existing user mapping that collides with the new default on %s",
+    (platform) => {
+      const occupied = platform === "darwin" ? "shift+cmd+p" : "shift+ctrl+p";
+      expect(() => validate({ newWindow: occupied }, platform)).toThrow(
+        expect.objectContaining({
+          location: "keybinds.newWindow",
+          reason: `conflicts with the "commandPalette" keybind on ${platform === "darwin" ? "Cmd" : "Ctrl"}+Shift+P. Choose another shortcut for one of them, or set one of them to null to disable its shortcut`,
+        }),
+      );
+      expect(() => validate({ newWindow: occupied }, platform)).toThrow(
+        /Choose another shortcut.*null/,
+      );
+      for (const commandPalette of [null, "Control+Alt+P"]) {
+        const resolved = validate(
+          { newWindow: occupied, commandPalette },
+          platform,
+        );
+        expect(resolved.commandPalette).toBe(commandPalette);
+        expect(
+          terminalActionForKeyboardInput(
+            resolved,
+            keyInput({
+              key: "p",
+              shift: true,
+              meta: platform === "darwin",
+              control: platform !== "darwin",
+            }),
+            platform,
+          ),
+        ).toBe("newWindow");
+      }
+    },
+  );
   it("ships Ctrl+Shift+F for Find and F11 for full screen on Linux and Windows", () => {
     for (const platform of ["linux", "win32"]) {
       const defaults = terminalDefaultKeybinds(platform);

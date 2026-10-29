@@ -1,0 +1,505 @@
+import { app, BrowserWindow, dialog, ipcMain } from "electron";
+import path from "node:path";
+import { randomUUID } from "node:crypto";
+import type { Translator } from "../shared/i18n";
+import { terminalIpc } from "../shared/terminal-ipc";
+import type { createWindowActionSender } from "./window-action-delivery";
+import {
+  InstalledPackages,
+  createNativeLeaseAdapter,
+  PackageError,
+} from "../installed-packages/installed-packages";
+import { createExtensionRuntime } from "../extension-runtime/electron-runtime";
+import {
+  createExtensionManager,
+  type ExtensionTarget,
+} from "./extension-manager";
+import { createExtensionPackageTrust } from "./extension-package-trust";
+import { installExtensionFromDialog } from "./extension-install-dialog";
+import { ExtensionDownloadError } from "./extension-download";
+import { CatalogError, createExtensionCatalog } from "./extension-catalog";
+import { createCatalogAcquisition } from "./extension-catalog-acquisition";
+import { createExtensionLinkInstaller } from "./extension-link-install";
+import { extensionResourceOwner } from "./extension-view-reader";
+import { startExtensionViewHost } from "./extension-view-ipc";
+import {
+  extensionsIpc,
+  isExtensionsRequest,
+  type ExtensionsResult,
+} from "../shared/extensions";
+import type { IpcEvent } from "./terminal-ipc-types";
+import type { CoreAction } from "./action-catalog";
+
+function managementFailure(error: unknown): ExtensionsResult {
+  // Never expose native errors/URLs or turn uncertain publication into success.
+  const errorCode =
+    error instanceof PackageError ||
+    error instanceof ExtensionDownloadError ||
+    error instanceof CatalogError
+      ? error.code
+      : "outcome-unknown";
+  return { ok: false, error: errorCode };
+}
+
+function managementEntry(
+  entry: Awaited<
+    ReturnType<ReturnType<typeof createExtensionManager>["snapshot"]>
+  >[number],
+) {
+  return {
+    id: entry.id,
+    generation: entry.generation,
+    name: entry.manifest?.name ?? entry.id,
+    version: entry.manifest?.version ?? null,
+    installed: entry.digest !== null,
+    enabled: entry.enabled,
+    local: entry.local,
+  };
+}
+
+function applicationViews(
+  options: Parameters<typeof startApplicationExtensions>[0],
+  {
+    pin,
+    target,
+    signal: epochSignal,
+    call,
+    admit,
+    retired,
+  }: Parameters<Parameters<typeof createExtensionManager>[0]["createViews"]>[0],
+) {
+  const window = target.owner as BrowserWindow;
+  const view = pin.manifest.view!;
+  const viewOwner = {};
+  let viewId: string | undefined;
+  const host = startExtensionViewHost({
+    ipcMain,
+    owner: window,
+    preloadPath: path.join(
+      options.applicationRoot,
+      "preload",
+      "extension-view.cjs",
+    ),
+    resources: extensionResourceOwner(pin),
+    contentSlot: () => {
+      const [width, height] = window.getContentSize();
+      // Preserve a core-owned recovery strip; renderer geometry may only narrow it.
+      return { x: 0, y: 34, width: width!, height: Math.max(0, height! - 34) };
+    },
+    onKeybind: options.keybind,
+    onRequest(value, signal) {
+      if (epochSignal.aborted || target.signal.aborted || signal.aborted)
+        return Promise.reject(new PackageError("unavailable"));
+      if (
+        value &&
+        typeof value === "object" &&
+        !Array.isArray(value) &&
+        value.operation === "terminal-directory"
+      )
+        return Promise.resolve(
+          target.terminalDirectory
+            ? { ok: true, directory: target.terminalDirectory }
+            : {
+                ok: false,
+                error:
+                  "No local terminal directory was reported at invocation. Use Home or enter a path.",
+              },
+        );
+      if (value && typeof value === "object" && !Array.isArray(value)) {
+        if (
+          value.operation === "host.capabilities" &&
+          Object.keys(value).length === 1
+        )
+          return Promise.resolve({
+            capabilities: (pin.manifest.capabilities ?? []).filter(
+              (capability) => capability !== "state.v1",
+            ),
+          });
+        if (
+          value.operation === "terminal.captureLayout.v1" ||
+          value.operation === "terminal.openLayout.v1"
+        )
+          return layoutRequest(value, signal);
+        if (value.operation === "terminal.openSsh.v1") {
+          if (
+            !pin.manifest.capabilities?.includes("terminal.openSsh.v1") ||
+            Object.keys(value).sort().join() !== "operation,target" ||
+            !viewId
+          )
+            return Promise.reject(new PackageError("unavailable"));
+          return options.ssh.open(
+            window,
+            viewOwner,
+            viewId,
+            value.target,
+            (commit) => admit(signal, commit),
+          );
+        }
+      }
+      return call(value, signal);
+    },
+    onState(state) {
+      if (state === "settled") retired();
+    },
+  });
+  async function layoutRequest(
+    value: { [key: string]: import("../extension-runtime/protocol").Value },
+    signal: AbortSignal,
+  ) {
+    if (value.operation === "terminal.captureLayout.v1") {
+      if (
+        !pin.manifest.capabilities?.includes("terminal.captureLayout.v1") ||
+        Object.keys(value).length !== 1
+      )
+        throw new PackageError("unavailable");
+      let capture!: ReturnType<typeof options.layout.capture>;
+      await admit(signal, () => {
+        capture = options.layout.capture(
+          window,
+          AbortSignal.any([signal, epochSignal, target.signal]),
+        );
+      });
+      return capture;
+    }
+    if (
+      !pin.manifest.capabilities?.includes("terminal.openLayout.v1") ||
+      Object.keys(value).sort().join() !== "layout,operation" ||
+      !viewId
+    )
+      throw new PackageError("unavailable");
+    return options.layout.open(
+      window,
+      value.layout,
+      host.captureFocusIntent(viewId),
+      (commit) => admit(signal, commit),
+    );
+  }
+  return {
+    open: async () => {
+      viewId = (
+        await host.open({ entryResource: view.entry, title: view.title })
+      ).id;
+    },
+    retire: host.retire,
+  };
+}
+
+async function applicationManager(
+  options: Parameters<typeof startApplicationExtensions>[0],
+  owner: AbortSignal,
+) {
+  const runtime = { appVersion: app.getVersion(), apiVersion: "0.1.0" };
+  const root = path.join(app.getPath("userData"), "extensions");
+  const addon = path.join(
+    options.applicationRoot,
+    "extension-runtime",
+    "extension-leases.node",
+  );
+  const packages = await InstalledPackages.open({
+    root,
+    runtime,
+    leases: createNativeLeaseAdapter(addon),
+  });
+  const backend = await createExtensionRuntime({
+    root,
+    runtime,
+    addon,
+    bootstrap: path.join(
+      options.applicationRoot,
+      "extension-runtime",
+      "bootstrap.mjs",
+    ),
+    environment: process.env,
+    owner,
+  });
+  return createExtensionManager({
+    packages,
+    runtime: backend,
+    trust: createExtensionPackageTrust({
+      packages,
+      runtime,
+      temporaryDirectory: app.getPath("temp"),
+    }),
+    createViews: (input) => applicationViews(options, input),
+  });
+}
+
+type ApplicationExtensionsOptions = {
+  applicationRoot: string;
+  layout: {
+    capture: ReturnType<
+      typeof import("./terminal-layout-ipc").registerTerminalLayoutIpc
+    >["capture"];
+    open: ReturnType<
+      typeof import("./terminal-layout-transfer").createTerminalLayoutTransfer<BrowserWindow>
+    >["open"];
+  };
+  ssh: Pick<
+    ReturnType<
+      typeof import("./ssh-terminal-launch").createSshTerminalLaunch<BrowserWindow>
+    >,
+    "open"
+  >;
+  isTrustedSender(event: IpcEvent): boolean;
+  changed(): void;
+  translator(): Translator;
+  sendAction: ReturnType<typeof createWindowActionSender>["sendAction"];
+  keybind: NonNullable<
+    Parameters<typeof startExtensionViewHost>[0]["onKeybind"]
+  >;
+};
+
+// Startup creates infrastructure, never activates installed code. Unsupported
+// platforms retain Settings with an explicit preview-unavailable result.
+export async function startApplicationExtensions(
+  options: ApplicationExtensionsOptions,
+) {
+  const windows = new Map<
+    BrowserWindow,
+    (sessionId?: string, context?: "window") => ExtensionTarget
+  >();
+  const lifetime = new AbortController();
+  const pending = new Map<
+    BrowserWindow,
+    { token: string; invoke(): Promise<void> }
+  >();
+  let manager: ReturnType<typeof createExtensionManager> | undefined;
+  let installations: Awaited<
+    ReturnType<NonNullable<typeof manager>["snapshot"]>
+  > = [];
+  let stopping = false;
+  const catalog = createExtensionCatalog(
+    { appVersion: app.getVersion(), apiVersion: "0.1.0" },
+    `${process.platform}-${process.arch}`,
+  );
+  const catalogLoads = createCatalogAcquisition(catalog);
+  const supported = process.platform === "linux" && process.arch === "arm64";
+  if (supported)
+    try {
+      manager = await applicationManager(options, lifetime.signal);
+      installations = await manager.snapshot();
+    } catch {
+      await manager?.dispose();
+      manager = undefined;
+      // A broken extension store/runtime must not prevent terminal startup.
+    }
+  async function refresh(): Promise<ExtensionsResult> {
+    if (!manager)
+      return {
+        ok: false,
+        error: supported ? "runtime-unavailable" : "unsupported",
+      };
+    installations = await manager.snapshot();
+    options.changed();
+    return {
+      ok: true,
+      pendingCleanup: manager.pendingCleanup(),
+      entries: installations.map(managementEntry),
+      catalog: catalog.snapshot(installations),
+    };
+  }
+  const busy = new Set<BrowserWindow>();
+  const links = createExtensionLinkInstaller(
+    () => stopping,
+    options.translator,
+  );
+  async function open(
+    window: BrowserWindow,
+    token: string,
+    accepted: boolean,
+  ): Promise<ExtensionsResult> {
+    const issued = pending.get(window);
+    if (!issued || issued.token !== token)
+      return { ok: false, error: "unavailable" };
+    pending.delete(window);
+    if (!accepted || BrowserWindow.getFocusedWindow() !== window || stopping)
+      return { ok: false, error: "unavailable" };
+    await issued.invoke();
+    return { ok: true };
+  }
+  ipcMain.handle(
+    extensionsIpc,
+    async (event, ...args: unknown[]): Promise<ExtensionsResult> => {
+      if (
+        stopping ||
+        !options.isTrustedSender(event) ||
+        event.senderFrame !== event.sender.mainFrame
+      )
+        throw new Error("Rejected extension management owner");
+      const window = BrowserWindow.fromWebContents(event.sender);
+      if (
+        !window ||
+        !windows.has(window) ||
+        args.length !== 1 ||
+        !isExtensionsRequest(args[0])
+      )
+        throw new TypeError("Invalid extension management request");
+      if (args[0].operation === "open")
+        return open(window, args[0].token, args[0].accepted);
+      if (args[0].operation === "cancel-install") {
+        links.cancel(window, args[0].token);
+        catalogLoads.cancel(window, args[0].token);
+        return { ok: true };
+      }
+      if (!manager) return refresh();
+      if (args[0].operation === "catalog-refresh") {
+        try {
+          await catalogLoads.refresh(window, args[0].token);
+          return { ok: true, catalog: catalog.snapshot(installations) };
+        } catch (error) {
+          return {
+            ...managementFailure(error),
+            catalog: catalog.snapshot(installations),
+          };
+        }
+      }
+      if (busy.has(window)) return { ok: false, error: "busy" };
+      busy.add(window);
+      try {
+        const request = args[0];
+        if (request.operation === "snapshot") await manager.collect();
+        if (request.operation === "catalog-install") {
+          const release = catalog.select(request.selection);
+          await links.install(
+            window,
+            manager,
+            {
+              operation: "install-link",
+              url: release.archive.url,
+              token: request.token,
+            },
+            release,
+          );
+        } else if (request.operation === "install-link")
+          await links.install(window, manager, request);
+        else if (request.operation === "install")
+          await installExtensionFromDialog(
+            window,
+            manager,
+            () => stopping,
+            options.translator,
+          );
+        else if (request.operation === "uninstall")
+          await manager.uninstall(request.id, request.generation);
+        else if (
+          request.operation === "enable" ||
+          request.operation === "disable"
+        )
+          await manager.setEnabled(
+            request.id,
+            request.generation,
+            request.operation === "enable",
+          );
+        return await refresh();
+      } catch (error) {
+        return managementFailure(error);
+      } finally {
+        busy.delete(window);
+      }
+    },
+  );
+  const capture = (window: BrowserWindow | undefined, sessionId?: string) =>
+    window ? windows.get(window)?.(sessionId) : undefined;
+  function actions(
+    target?: ExtensionTarget,
+    claim?: () => boolean,
+  ): CoreAction[] {
+    if (stopping) return [];
+    return installations.flatMap((entry) => {
+      const view = entry.enabled && entry.digest && entry.manifest?.view;
+      if (!view) return [];
+      const open = manager!.action({
+        id: entry.id,
+        generation: entry.generation,
+        digest: entry.digest!,
+      });
+      return [
+        {
+          id: view.action,
+          label: view.title,
+          accelerator: null,
+          palette: true,
+          extension: true,
+          invoke() {
+            if (claim && !claim()) return;
+            const source =
+              target ?? capture(BrowserWindow.getFocusedWindow() ?? undefined);
+            const captured =
+              source && view.context === "window"
+                ? windows.get(source.owner as BrowserWindow)?.(
+                    undefined,
+                    "window",
+                  )
+                : source;
+            if (!captured || captured.signal.aborted || stopping) return;
+            const window = captured.owner as BrowserWindow;
+            const token = randomUUID();
+            pending.set(window, {
+              token,
+              invoke: async () => {
+                try {
+                  await open(captured);
+                } catch {
+                  if (!window.isDestroyed() && !stopping)
+                    void dialog.showMessageBox(window, {
+                      type: "error",
+                      message: options.translator().t("extensions.unavailable"),
+                      detail: options
+                        .translator()
+                        .t("extensions.unavailableDetail"),
+                    });
+                }
+              },
+            });
+            options.sendAction(window.webContents, terminalIpc.tabCommand, {
+              action: "open-extension",
+              token,
+            });
+          },
+        },
+      ];
+    });
+  }
+  return {
+    actions,
+    capture,
+    contextMenu(
+      window: BrowserWindow,
+      sessionId: string | undefined,
+      claim: () => boolean,
+    ) {
+      const target = capture(window, sessionId);
+      return target
+        ? actions(
+            target,
+            () => BrowserWindow.getFocusedWindow() === window && claim(),
+          ).map((action) => ({
+            label: action.label,
+            click: action.invoke,
+          }))
+        : [];
+    },
+    registerWindow(
+      window: BrowserWindow,
+      target: (sessionId?: string, context?: "window") => ExtensionTarget,
+    ) {
+      const contents = window.webContents;
+      windows.set(window, target);
+      window.once("closed", () => {
+        windows.delete(window);
+        pending.delete(window);
+        // The native window getter is no longer usable after closed.
+        manager?.cancel(contents);
+      });
+    },
+    async dispose() {
+      stopping = true;
+      links.dispose();
+      catalogLoads.dispose();
+      pending.clear();
+      ipcMain.removeHandler(extensionsIpc);
+      lifetime.abort();
+      return (await manager?.dispose()) ?? true;
+    },
+  };
+}

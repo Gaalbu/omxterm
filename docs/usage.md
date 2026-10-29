@@ -2,7 +2,7 @@
 
 [Install OMXTerm](installation.md), open it, and start typing. It launches your default shell in your home folder (on Windows, Windows PowerShell by default).
 
-**[Tabs](#windows-tabs-and-sessions)** · **[Shortcuts](#built-in-platform-shortcuts)** · **[Copy and paste](#copy-and-paste)** · **[Images](#previewing-local-images)** · **[Troubleshooting](#troubleshooting)**
+**[Tabs](#windows-tabs-and-sessions)** · **[Command Palette](#command-palette)** · **[Shortcuts](#built-in-platform-shortcuts)** · **[Copy and paste](#copy-and-paste)** · **[Images](#previewing-local-images)** · **[Troubleshooting](#troubleshooting)**
 
 For fonts, themes, shortcuts, and snippets, see [Configuration](configuration.md). [How it works](how-it-works.md) explains the relationship between the terminal, your shell, and running sessions.
 
@@ -31,6 +31,14 @@ Choose **View → Pane → Split Right** (`Cmd+D` / `Ctrl+Shift+O`) or **Split D
 ### Close confirmation
 
 To protect active work, OMXTerm asks for confirmation before closing a pane, tab or window with a running command. Close Pane only asks about the focused pane; Close Tab asks once for all of the tab's panes. On Windows, confirmation is shown for all live sessions. You can disable this prompt anytime by setting `"confirmClose": false` in `config.json`.
+
+### Save a terminal arrangement
+
+The optional Linux ARM64 [Saved Layout extension](saved-layout.md) explicitly
+saves one window's terminal tabs, splits and available local folders. Open starts
+fresh shells in a new window without closing current work. It does not restore
+output, processes or commands. Installation, conflicts, folder provenance and
+Forget's active-snapshot/remnant limits are described in its guide.
 
 ## Window controls
 
@@ -77,6 +85,41 @@ The application menu displays your active shortcuts, including any custom bindin
 On keyboards where `+` shares the `=` key, include `Shift` (`Cmd+Shift+=` or `Ctrl+Shift+=`).
 
 On Linux and Windows, press and release **Alt** to open the application menu (even when the title bar is hidden), and press `Escape` to close it. On macOS, use the system menu bar. To customize shortcuts, see [keybinds](configuration.md#keybinds).
+
+## Command Palette
+
+Choose **View → Command Palette…** to search core application actions. On Linux
+and Windows, release **Alt** to reach the native menu; on macOS, use the system
+menu bar. The default shortcut is **Cmd+Shift+P** on macOS and **Ctrl+Shift+P** on
+Linux/Windows. Remap or disable it in **Settings → Shortcuts → Command Palette…**
+or [`keybinds.commandPalette`](configuration.md#keybinds). Explicit remaps and
+`null` are preserved. If a custom action already uses this combination, resolve
+the standard configuration collision error by remapping or disabling either
+binding; no automatic config rewrite occurs.
+
+Type part of an action's displayed name, use **↑/↓** to select a result, then
+press and release **Enter**, or click a result. The dialog closes before the
+existing action runs, keeping its normal guards and close confirmations.
+**Escape** or clicking the backdrop cancels. Copy/Paste/Select All edit the
+palette query while it owns input, not your terminal.
+
+Results include window/tab and pane actions, Settings, About, local-image
+preview, reload and developer tools, with their current shortcuts where bound.
+Search uses case-insensitive substring matching in the selected interface
+language (en-US or pt-BR); there is no fuzzy search or command history. Copy,
+Paste, Select All, Find, numbered tab selection and the palette itself are not
+results. **Find is intentionally omitted:** routing it back to the formerly
+focused Terminal Surface after palette input is not established. Use
+**Edit → Find…** directly instead.
+
+The palette keeps its original tab/pane target; if that target changes or ends,
+it does not run the action against a replacement. It can open above Settings
+without discarding drafts or pending saves, but does not stack with About,
+image preview or snippet preview. Cancel returns focus to the surviving prior
+control when its target is still current. If the window loses focus, cancel and
+reopen the palette before choosing an action: its old authorization is no longer
+valid. Reopen after a language or shortcut change to refresh the catalog. Opening or searching does not rewrite your
+configuration, and adds no persistent toolbar.
 
 ## Copy and paste
 

@@ -12,6 +12,7 @@ export const brazilianPortugueseMessages: Readonly<
   "common.close": "Fechar",
 
   "menu.settings": "Configurações…",
+  "action.commandPalette": "Paleta de comandos…",
   "menu.about": "Sobre o OMXTerm",
   "menu.quit": "Sair do {name}",
   "menu.edit": "Editar",
@@ -136,6 +137,13 @@ export const brazilianPortugueseMessages: Readonly<
   "chrome.closeWindow": "Fechar Janela",
 
   "terminal.surface": "Superfície do terminal",
+  "terminal.sshExit": "SSH encerrou (código {code}).",
+  "layout.initializing":
+    "Abrindo layout salvo: {settled}/{total} painéis; {fallbacks} pastas substituídas pela pasta pessoal; {failed} painéis indisponíveis.",
+  "layout.completed":
+    "Layout salvo aberto: {settled}/{total} painéis; {fallbacks} pastas substituídas pela pasta pessoal; {failed} painéis indisponíveis.",
+  "layout.partial":
+    "Layout salvo parcialmente aberto: {settled}/{total} painéis; {fallbacks} pastas substituídas pela pasta pessoal; {failed} painéis indisponíveis.",
   "terminal.tabs": "Abas do terminal",
   "terminal.userFileErrors": "Erros nos arquivos do usuário",
   "terminal.surfaceFailure": "Falha na superfície do terminal",
@@ -143,6 +151,14 @@ export const brazilianPortugueseMessages: Readonly<
     "Falha ao inicializar a superfície do terminal do OMXTerm: {detail}",
   "terminal.backendLost":
     "O backend de renderização da superfície do terminal do OMXTerm foi perdido",
+  "palette.title": "Paleta de comandos",
+  "palette.query": "Buscar ações…",
+  "palette.empty": "Nenhuma ação encontrada",
+  "palette.loading": "Carregando ações…",
+  "palette.error": "Ações indisponíveis. Feche e tente novamente.",
+  "hosted.close": "Fechar",
+  "hosted.failure":
+    "Não foi possível ocultar, atualizar ou fechar o conteúdo hospedado. Feche a janela para recuperar.",
   "search.region": "Buscar no histórico do terminal",
   "search.placeholder": "Buscar no histórico",
   "search.clear": "Limpar",
@@ -201,6 +217,94 @@ export const brazilianPortugueseMessages: Readonly<
   "settings.page.terminal": "Terminal",
   "settings.page.window": "Novas Janelas",
   "settings.page.file": "Arquivo de Configuração",
+  "settings.page.extensions": "Extensões",
+  "extensions.heading": "Extensões locais · prévia de desenvolvimento",
+  "extensions.explanation":
+    "Instale um pacote .omxext baixado separadamente. O código da extensão tem as permissões do seu usuário; não há isolamento de segurança. Pacotes instalados ficam inativos até serem acionados. Esta prévia é exclusiva para Linux ARM64.",
+  "extensions.install": "Instalar .omxext local…",
+  "extensions.url": "Link HTTPS do arquivo",
+  "extensions.installLink": "Instalar pelo link",
+  "extensions.downloading":
+    "Baixando e validando o arquivo… Revise o aviso de confiança antes de instalar. Cancelar interrompe o processo antes da aprovação.",
+  "extensions.invalid-url": "Use um link HTTPS sem credenciais ou fragmento",
+  "extensions.download-failed":
+    "Falha no download. Verifique o link, a rede e o certificado; páginas de login não são compatíveis",
+  "extensions.download-limit":
+    "O download excede o limite de 64 MiB ou cinco redirecionamentos",
+  "extensions.download-timeout": "O download excedeu o limite de 60 segundos",
+  "extensions.cancelled": "Instalação cancelada antes da aprovação",
+  "extensions.invalid-catalog": "O catálogo é inválido ou excede seus limites",
+  "extensions.catalog-mismatch":
+    "Os bytes ou o manifesto do arquivo não correspondem à versão selecionada no catálogo",
+  "extensions.catalog-selection":
+    "A seleção do catálogo expirou; selecione a versão novamente",
+  "extensions.catalogHeading": "Extensões oficiais",
+  "extensions.catalogTrust":
+    "Oficial significa mantida pelo projeto, não isolada ou inofensiva. Extensões executam código confiado com acesso a arquivos, programas e redes. HTTPS e o hash do catálogo vinculam os bytes selecionados; não são uma assinatura independente do autor. Autores terceiros continuam responsáveis por suas extensões.",
+  "extensions.catalogBrowse": "Explorar extensões oficiais",
+  "extensions.catalogRefresh": "Atualizar catálogo",
+  "extensions.catalogRetry": "Tentar catálogo novamente",
+  "extensions.catalogLoading": "Carregando o catálogo oficial…",
+  "extensions.catalogStale":
+    "Não foi possível atualizar o catálogo. Exibindo a última consulta bem-sucedida; as versões podem estar desatualizadas.",
+  "extensions.catalogUnavailable":
+    "Catálogo indisponível. Extensões instaladas e instalação de arquivo local continuam funcionando offline.",
+  "extensions.catalogIdle":
+    "O catálogo se conecta apenas ao escolher Explorar ou Atualizar. Sem atualizações automáticas.",
+  "extensions.catalogLoaded":
+    "Catálogo carregado. Escolha uma versão para verificar seus bytes e revisar a confiança antes de instalar.",
+  "extensions.catalogEmpty": "O catálogo ainda não tem extensões publicadas.",
+  "extensions.catalogInstalled": "Instalada: {version}",
+  "extensions.catalogNotInstalled": "Não instalada",
+  "extensions.catalogInstall": "Instalar",
+  "extensions.catalogUpdate": "Atualizar",
+  "extensions.catalogReinstall": "Reinstalar",
+  "extensions.catalogReplace": "Substituir versão instalada",
+  "extensions.catalogReplaceWarning":
+    "Isso substitui a extensão instalada por uma versão anterior ou por bytes diferentes da mesma versão. Revise a versão e o resumo antes de aprovar.",
+  "extensions.refresh": "Atualizar",
+  "extensions.enable": "Habilitar",
+  "extensions.disable": "Desabilitar",
+  "extensions.uninstall": "Desinstalar",
+  "extensions.empty": "Nenhuma extensão local instalada.",
+  "extensions.error":
+    "{reason}. Sem repetição automática. Atualize para consultar o estado atual.",
+  "extensions.cleanupUnchecked":
+    "A limpeza dos dados retidos ainda não foi verificada. ",
+  "extensions.cleanupPending":
+    "Limpeza pendente: um pacote ainda está em uso ou a limpeza não terminou. Outras instâncias: desconhecidas.",
+  "extensions.refreshed":
+    "Registro atualizado. A atividade local pertence a esta instância; a atividade em outras instâncias é desconhecida.",
+  "extensions.state":
+    "{id} · geração {generation} · {installed} · local {local} · outras instâncias desconhecidas",
+  "extensions.enabled": "habilitada",
+  "extensions.disabled": "desabilitada",
+  "extensions.uninstalled": "desinstalada",
+  "extensions.dormant": "inativa",
+  "extensions.starting": "iniciando",
+  "extensions.active": "ativa",
+  "extensions.stopping": "encerrando",
+  "extensions.failed": "falhou",
+  "extensions.unknown": "desconhecida",
+  "extensions.busy": "Uma operação já está em andamento",
+  "extensions.invalid-package": "Pacote de extensão inválido",
+  "extensions.incompatible": "Pacote de extensão incompatível",
+  "extensions.invalid-store": "Armazenamento de extensões inválido",
+  "extensions.conflict": "A geração instalada mudou",
+  "extensions.outcome-unknown": "Resultado da operação desconhecido",
+  "extensions.runtime-unavailable":
+    "Armazenamento ou execução de extensões indisponível. Os terminais continuam utilizáveis",
+  "extensions.unsupported": "A prévia de Files requer Linux ARM64",
+  "extensions.unavailable": "Extensão indisponível",
+  "extensions.unavailableDetail":
+    "Atualize Extensões nas Configurações para consultar a instalação. Nenhuma operação foi repetida automaticamente.",
+  "extensions.chooserTitle": "Instalar extensão local",
+  "extensions.chooserType": "Extensão OMXTerm",
+  "extensions.trustTitle": "Confiar no código da extensão?",
+  "extensions.trustMessage": "Instalar {name} {version}?",
+  "extensions.trustDetail":
+    "Este é código local confiável, sem isolamento de segurança. Ele pode ler e alterar arquivos, executar programas e usar a rede com as permissões do seu usuário. Autores terceiros são responsáveis por suas extensões. Instale apenas pacotes em que você confia. A instalação fica inativa até você acionar sua ação.\n\nPacote: {id}\nSHA-256: {digest}\nGeração atual: {generation}",
+  "extensions.trustInstall": "Confiar e instalar",
   "settings.language": "Idioma",
   "settings.english": "English (United States)",
   "settings.portuguese": "Português (Brasil)",

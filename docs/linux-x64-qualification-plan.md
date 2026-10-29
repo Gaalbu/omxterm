@@ -1,6 +1,7 @@
 # Linux x64 qualification plan (#706)
 
-This is a proposed, not executed, contribution plan for
+This plan accompanies the bounded results in
+[the qualification report](linux-x64-qualification-results.md) for
 [#706](https://github.com/luizomf/omxterm/issues/706). It adds no release gate or
 product behavior. ADR 0036's build-only delivery policy remains unchanged.
 
@@ -41,6 +42,7 @@ must remain an explicit limitation. Do not change deadlines, bypass prerequisite
 add compatibility flags without recording them, or infer broad distro/GPU support.
 Run graphical suites serially; clean up only owned processes and installed files.
 
-No qualification result is claimed by this planning document. No helper has been
-installed as part of this PR. Any useful source correction discovered during
-qualification needs its own reproducible regression and reviewable scope.
+Qualification results, performed helper changes and remaining failures are
+recorded in the companion report; this plan alone is not evidence of a pass.
+Any useful source correction needs its own reproducible regression and reviewable
+scope.

@@ -278,13 +278,28 @@ export async function verifyExactWindowsInstaller({
             );
           await new Promise((resolve) => setTimeout(resolve, 200));
         }
-        for (const directory of [installRoot, cleanupRoot])
-          await rm(directory, {
-            recursive: true,
-            force: true,
-            maxRetries: 10,
-            retryDelay: 200,
-          });
+        // Registration/process absence does not prove removal at the custom /D
+        // destination. Accept only an absent root or a real, empty directory;
+        // rmdir is non-recursive so residual payload is never erased as evidence.
+        try {
+          const remaining = await lstat(installRoot);
+          if (!remaining.isDirectory() || remaining.isSymbolicLink())
+            throw new Error("Unexpected installation root type");
+          await rmdir(installRoot);
+        } catch (error) {
+          if (error.code !== "ENOENT")
+            throw new Error(
+              "NSIS installed payload removal not established; retain transaction and relocated-uninstaller evidence",
+            );
+        }
+        // This separate tree contains the verifier's relocated uninstaller,
+        // not installed payload. Remove it only after the removal proof above.
+        await rm(cleanupRoot, {
+          recursive: true,
+          force: true,
+          maxRetries: 10,
+          retryDelay: 200,
+        });
       },
     },
   });

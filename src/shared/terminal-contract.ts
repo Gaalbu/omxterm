@@ -1,3 +1,4 @@
+import { isHostedContentId } from "./extension-view";
 import {
   isTerminalPaneCommand,
   type TerminalPaneCommand,
@@ -16,6 +17,7 @@ export interface TerminalExit {
   readonly exitCode: number;
   readonly signal: number;
   readonly startupFailed?: true;
+  readonly retained?: true;
 }
 
 // The main process allocates ids as `s` plus a positive counter scoped to one
@@ -71,6 +73,13 @@ export const MAX_TAB_SELECT_POSITION = 9;
 // a failed session's tab after its native failure dialog was acknowledged.
 export type TerminalTabCommand =
   | { readonly action: "new" }
+  | { readonly action: "open-extension"; readonly token: string }
+  | {
+      readonly action: "open-ssh";
+      readonly token: string;
+      readonly sourceView: string;
+      readonly title: string;
+    }
   | { readonly action: "close" }
   | { readonly action: "prepare-close" }
   | { readonly action: "resolve-close"; readonly confirmed: boolean }
@@ -170,6 +179,10 @@ export function isTerminalSessionExit(
   if (
     !isStrictRecord(value, ["sessionId", "exitCode", "signal"]) &&
     !(
+      isStrictRecord(value, ["sessionId", "exitCode", "signal", "retained"]) &&
+      value.retained === true
+    ) &&
+    !(
       isStrictRecord(value, [
         "sessionId",
         "exitCode",
@@ -199,6 +212,21 @@ export function isTerminalTabCommand(
   value: unknown,
 ): value is TerminalTabCommand {
   if (isTerminalPaneCommand(value)) return true;
+  if (isStrictRecord(value, ["action", "token", "sourceView", "title"]))
+    return (
+      value.action === "open-ssh" &&
+      typeof value.token === "string" &&
+      /^[0-9a-f-]{36}$/.test(value.token) &&
+      isHostedContentId(value.sourceView) &&
+      typeof value.title === "string" &&
+      value.title.length <= 300
+    );
+  if (isStrictRecord(value, ["action", "token"]))
+    return (
+      value.action === "open-extension" &&
+      typeof value.token === "string" &&
+      /^[0-9a-f-]{36}$/.test(value.token)
+    );
   if (isStrictRecord(value, ["action"]))
     return (
       value.action === "new" ||
@@ -268,6 +296,10 @@ export function isTerminalSize(value: unknown): value is TerminalSize {
 export function isTerminalExit(value: unknown): value is TerminalExit {
   if (
     !isStrictRecord(value, ["exitCode", "signal"]) &&
+    !(
+      isStrictRecord(value, ["exitCode", "signal", "retained"]) &&
+      value.retained === true
+    ) &&
     !(
       isStrictRecord(value, ["exitCode", "signal", "startupFailed"]) &&
       value.startupFailed === true

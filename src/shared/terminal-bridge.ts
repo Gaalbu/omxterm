@@ -1,4 +1,5 @@
 import type { SettingsBridge } from "./settings";
+import type { ExtensionsBridge } from "./extensions";
 import type { SettingsTabSelection } from "./terminal-panes";
 import type { AboutBridge } from "./about";
 import type {
@@ -18,6 +19,9 @@ import type { TerminalSnippetsResponse } from "./terminal-snippets";
 import type { LocalImageActivation, LocalImageData } from "./local-image";
 
 export interface TerminalBridge {
+  readonly layout?: import("./terminal-layout").TerminalLayoutBridge;
+  readonly hostedContent?: import("./extension-view").HostedContentBridge;
+  readonly palette?: import("./command-palette").CommandPaletteBridge;
   configuration(): Promise<TerminalRendererConfiguration>;
   fontData(family?: string): Promise<TerminalFontData>;
   snippets(): Promise<TerminalSnippetsResponse>;
@@ -37,7 +41,10 @@ export interface TerminalBridge {
   start(
     surfaceId?: string,
     workingDirectoryOf?: TerminalSessionId,
+    launchToken?: string,
+    restoreToken?: string,
   ): Promise<TerminalSessionId>;
+  sshPane?(token: string, accepted: boolean | null): void;
   input(sessionId: TerminalSessionId, data: string): void;
   resize(sessionId: TerminalSessionId, size: TerminalSize): void;
   close(sessionId: TerminalSessionId, reason?: "rendering-failure"): void;
@@ -83,6 +90,7 @@ declare global {
       readonly terminal: TerminalBridge;
       readonly about: AboutBridge;
       readonly settings: SettingsBridge;
+      readonly extensions?: ExtensionsBridge;
     };
   }
 }

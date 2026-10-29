@@ -6,7 +6,42 @@ import {
 } from "../shared/i18n";
 import type { TerminalSessionFailure } from "./terminal-application";
 import type { TerminalExit } from "../shared/terminal-contract";
-import type { TerminalSessionEndContext } from "./terminal-ipc-types";
+import type {
+  TerminalSessionEndContext,
+  TerminalSessionStartErrorContext,
+} from "./terminal-ipc-types";
+import { LocalTerminalSessionStartError } from "./local-terminal-session";
+
+export function throwSessionStartError(
+  cause: unknown,
+  liveSessions: number,
+  notify: (context: TerminalSessionStartErrorContext) => void,
+): never {
+  const launchKind =
+    cause instanceof LocalTerminalSessionStartError
+      ? cause.launchKind
+      : "default-shell";
+  notify({ launchKind, liveSessions });
+  throw new Error(
+    launchKind === "explicit-command"
+      ? "The requested command could not be started"
+      : "The Default Shell could not be started",
+  );
+}
+
+export function retainedSshExit(
+  exit: TerminalExit,
+  ssh: boolean,
+  closed: boolean,
+) {
+  return ssh &&
+    !closed &&
+    exit.signal === 0 &&
+    !exit.startupFailed &&
+    exit.exitCode !== 0
+    ? { retained: true as const }
+    : {};
+}
 
 export function terminalExitOutcome(exit: TerminalExit) {
   const outcome = exit.startupFailed

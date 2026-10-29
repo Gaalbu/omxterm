@@ -75,8 +75,9 @@ local directory through OSC 7 in its own output, the new pane starts there if
 that directory still exists; otherwise it starts in the home directory, like a
 new tab. Main reads OSC 7 from the PTY output it already relays, accepts only an
 empty, `localhost` or local host name and a local absolute path (a drive path on
-Windows; UNC and device paths are rejected), and never logs, persists or sends
-the directory. CAN/SUB cancellation discards an unfinished report and resumes
+Windows; UNC and device paths are rejected), and never logs the directory.
+Explicit optional Saved Layout capture may send provenance to its trusted
+extension for persistence, never to the terminal renderer (ADR0042). CAN/SUB cancellation discards an unfinished report and resumes
 scanning subsequent output without accepting the cancelled URI. Overflow still
 invalidates an older cwd regardless of chunk boundaries; an in-bound cancellation
 alone leaves the last completed report unchanged. OMXTerm injects nothing to
@@ -84,7 +85,9 @@ make shells report it (ADR 0013). A
 remote shell that reports no host name, or this machine's name, is
 indistinguishable from a local one, and program output can also emit the
 sequence; either can only choose an existing local start directory, never run
-anything. A Launch Request applies only to the first tab's first pane.
+anything. Known SSH Connect launches are excluded before OSC7 tracking; their
+splits/new tabs use home and the Default Shell (ADR0041). This does not identify
+manually typed ssh. A Launch Request applies only to the first tab's first pane.
 
 ## Window presentation
 
@@ -113,6 +116,12 @@ Internal tab drag data is excluded from file-path insertion at the document drop
 boundary. Moving tabs across windows is not implemented.
 
 ## Session ownership and lifecycle
+
+SSH Connect ordinary nonzero exits retain an ended-readable Surface until pane
+removal, with an exit-code notice and Close (ADR0041). Transport authority ends,
+but Restty/fonts remain for local copy/search/refit, including fast exit during
+start. The native record retires normally and the ended pane is not Busy.
+Exit0, startup/signal acknowledgement and authorized removal keep their rules.
 
 Every session has exactly one pane lifetime owner. Ordinary shell exit closes
 its pane, and its nearest sibling takes the space and focus; removing a tab's
@@ -232,8 +241,12 @@ minima stay unchanged. Layout tokens/budgets are recorded in the
 
 IPC gains per-session identity beneath each window controller, and selection
 refits the active grid. Tab order and visibility are in-memory presentation;
-restoration, workspaces, broadcast input, pane maximize and moving tabs or
-panes between tabs or windows are outside current scope.
+workspaces, broadcast input, pane maximize and moving tabs or panes between
+tabs or windows are outside current scope. Explicit optional
+[Saved Layout](0042-save-layouts-without-restoring-sessions.md) is the narrow
+exception for saving terminal order/layout/cwd and opening fresh shells in a
+new window. Complete initial pane ownership precedes bounded ordinary mounts;
+no dummy session or repeated split-action simulation is used.
 
 Headless style and host tests cover shared separator paint, retained target sizes,
 per-Surface marker insets, initial/reloaded accent propagation, and both split-axis

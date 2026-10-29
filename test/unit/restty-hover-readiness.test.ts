@@ -1,4 +1,8 @@
 import type { BrowserWindow } from "electron";
+import {
+  requireEarlyHoverFailure,
+  type HoverDraw,
+} from "../fixtures/restty-hover-evidence";
 import { runInNewContext } from "node:vm";
 import { afterEach, expect, it, vi } from "vitest";
 import { HOVER_FRAME_HOLD_SOURCE } from "../fixtures/restty-hover-control";
@@ -22,6 +26,8 @@ function fixture(
       | "keyup-replaced-empty";
     captureChange?: "viewport" | "identity" | "clear";
     beforeNoopKeyup?: boolean;
+    earlyCapture?: "changed" | "unchanged";
+    releaseBeforeCapture?: boolean;
   } = {},
 ) {
   let snapshot: HoverSnapshot = {
@@ -79,7 +85,25 @@ function fixture(
   }
   const dispatch = (event: Event) => {
     if (event.type === "keyup" && options.beforeNoopKeyup) return true;
+    const prior = snapshot.draw;
     replace(event.type === "keyup" ? 0 : Number(event.modified));
+    if (event.modified && options.earlyCapture) {
+      const drawn = snapshot.draw;
+      snapshot = {
+        ...snapshot,
+        draw: {
+          ...drawn,
+          drawRevision: prior.drawRevision,
+          drawCellRevision: prior.drawCellRevision,
+          drawCells: prior.drawCells,
+        },
+      };
+      // This callback really stays pending in the same hold used by the native
+      // control; a pixel buffer change does not execute it.
+      context.window.requestAnimationFrame(() => {
+        snapshot = { ...snapshot, draw: drawn };
+      });
+    }
     return true;
   };
   const canvas = {
@@ -88,16 +112,34 @@ function fixture(
     __localImageFixtureCoreCells: () => snapshot.core,
     dispatchEvent: dispatch,
   };
+  const nativeFrames: (() => void)[] = [];
+  let callbackId = 0;
   const context = {
+    __hoverFrame: undefined as unknown as {
+      arm: (canvasId: number) => void;
+      bind: (revision: number) => unknown;
+      state: () => {
+        active: boolean;
+        pending: number;
+        drawCellRevision: number;
+        cellRevision: number;
+      };
+      release: () => unknown;
+    },
     document: { querySelectorAll: () => [canvas] },
     PointerEvent: Event,
     KeyboardEvent: Event,
     requestAnimationFrame: (callback: () => void) => callback(),
     window: {
+      requestAnimationFrame: (callback: () => void) => {
+        nativeFrames.push(callback);
+        return ++callbackId;
+      },
       dispatchEvent: dispatch,
       omxterm: { terminal: { configuration: async () => {} } },
     },
   };
+  if (options.earlyCapture) runInNewContext(HOVER_FRAME_HOLD_SOURCE, context);
   let captures = 0,
     bitmapReads = 0;
   const records: string[] = [];
@@ -159,7 +201,8 @@ function fixture(
         }
         const { width, height } = snapshot.geometry.viewport;
         const bytes = Buffer.alloc(width * height * 4);
-        if (snapshot.draw.cells) bytes[(4 * width + 12) * 4] = 255;
+        if (snapshot.draw.cells && options.earlyCapture !== "unchanged")
+          bytes[(4 * width + 12) * 4] = 255;
         return {
           getSize: () => ({ width, height }),
           toBitmap: () => {
@@ -181,18 +224,39 @@ function fixture(
         text: "fixture",
         prefixColumns: 1,
         destinationColumns: 1,
+        ...(options.earlyCapture ? { control: "early-capture" as const } : {}),
+        ...(options.earlyCapture
+          ? {
+              beforeStimulus: async () => {
+                context.__hoverFrame.arm(1);
+              },
+              afterStimulus: async (stimulus: HoverSnapshot) => {
+                for (const callback of nativeFrames.splice(0)) callback();
+                context.__hoverFrame.bind(stimulus.draw.revision);
+                if (options.releaseBeforeCapture)
+                  context.__hoverFrame.release();
+              },
+            }
+          : {}),
       }),
     counts: () => ({ captures, bitmapReads }),
+    held: () => context.__hoverFrame.state(),
+    release: () => context.__hoverFrame.release(),
     records: () =>
       records
         .filter((s) => s.startsWith(HOVER_PHASE_PREFIX))
         .map(
           (s) =>
             JSON.parse(s.slice(HOVER_PHASE_PREFIX.length)) as {
+              phase: string;
               category: string;
               pixels?: { total: number; missingCells: number };
-              stimulus?: { revision: number };
-              latest: { draw: { revision: number } };
+              stimulus: {
+                revision: number;
+                cellRevision: number;
+                cells: number;
+              };
+              latest: { draw: HoverDraw };
             },
         ),
   };
@@ -253,6 +317,51 @@ it("retains missing-pixel evidence for geometry-stable capture invalidation", as
     pixels: { total: 0, missingCells: 1 },
   });
   expect(f.counts().captures).toBe(2);
+});
+
+it.each(["unchanged", "changed"] as const)(
+  "qualifies a truly held draw with %s compositor bytes",
+  async (earlyCapture) => {
+    const f = fixture({ earlyCapture });
+    try {
+      await expect(f.run()).rejects.toMatchObject({
+        category: "cue-not-drawn",
+      });
+      expect(f.held()).toMatchObject({
+        active: true,
+        pending: 1,
+        cellRevision: 3,
+        drawCellRevision: 2,
+      });
+      const failed = f.records().at(-1)!;
+      expect(failed.pixels?.total).toBe(earlyCapture === "changed" ? 1 : 0);
+      expect(() => requireEarlyHoverFailure(failed)).not.toThrow();
+      expect(f.counts()).toEqual({ captures: 2, bitmapReads: 2 });
+    } finally {
+      f.release();
+    }
+    expect(f.held()).toMatchObject({
+      active: false,
+      pending: 0,
+      drawCellRevision: 3,
+    });
+  },
+);
+
+it("does not qualify a current draw as the early-capture negative control", async () => {
+  const f = fixture({ earlyCapture: "changed", releaseBeforeCapture: true });
+  await expect(f.run()).resolves.toEqual({
+    modifiedHoverChangedPixels: 1,
+    releasedHoverChangedPixels: 0,
+  });
+  const modified = f.records().find((phase) => phase.phase === "modified")!;
+  expect(() => requireEarlyHoverFailure(modified)).toThrow("did not reject");
+  // Even a false error category cannot substitute for stale draw provenance.
+  expect(() =>
+    requireEarlyHoverFailure({ ...modified, category: "cue-not-drawn" }),
+  ).toThrow("current draw");
+  expect(f.held()).toMatchObject({ active: false, pending: 0 });
+  expect(f.counts()).toEqual({ captures: 3, bitmapReads: 3 });
 });
 
 function frameFixture() {

@@ -1,3 +1,4 @@
+/* eslint-disable max-lines, max-lines-per-function -- Keep native startup composition and its captured application/window lifetimes together. */
 import {
   app,
   BrowserWindow,
@@ -9,24 +10,34 @@ import {
 } from "electron";
 import * as nodePty from "node-pty";
 import { existsSync } from "node:fs";
-import { userInfo } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { terminalIpc } from "../shared/terminal-ipc";
+import { registerExtensionViewScheme } from "./extension-view-host";
+import { sendExtensionAwareClipboard } from "./extension-view-ipc";
+import { coreActionMenuTemplate } from "./application-menu";
 import {
-  terminalActionInvocations,
-  terminalApplicationMenuTemplate,
-} from "./application-menu";
+  createCoreActionCatalog,
+  type CoreActionCatalog,
+} from "./action-catalog";
+import { startCommandPalette } from "./command-palette";
+import { terminalMenuActions } from "./terminal-menu-actions";
+import { extensionInvocationTarget } from "./extension-invocation-target";
+import { startApplicationExtensions } from "./application-extensions";
+import { registerSshTerminalLaunch } from "./ssh-terminal-ipc";
+import { startApplicationLayout } from "./application-layout";
 import { terminalContextMenuTemplate } from "./terminal-context-menu";
 import * as applicationAbout from "./application-about";
 import { startApplicationSettings } from "./application-settings";
-import { deliverKeybindsFromKeyEvents } from "./keybind-delivery";
+import {
+  registerWindowActionDelivery,
+  createWindowActionSender,
+  deliverExtensionKeybind,
+} from "./window-action-delivery";
 import { createKeybindCapture } from "./keybind-capture";
 import { createDefaultShellResolver, defaultShellName } from "./default-shell";
-import {
-  MalformedLaunchRequestError,
-  startupLaunchRequest,
-} from "./launch-request";
+import { MalformedLaunchRequestError } from "./launch-request";
+import { prepareStartup } from "./application-startup";
 import { registerTerminalShutdown } from "./terminal-shutdown";
 import { applyLinuxDisplayBackendDefault } from "./linux-display-backend";
 import { applyChromiumSandboxPolicy } from "./chromium-sandbox-policy";
@@ -52,7 +63,6 @@ import {
 import { registerWindowChrome } from "./window-chrome";
 import * as nativeMenu from "./native-application-menu";
 import { createNativeTerminalWindowTitleController } from "./terminal-window-attention";
-import { installedFontFamilyMetrics } from "./installed-font-family";
 import { fontIpcRouter } from "./terminal-font-data";
 import { loadTerminalSnippets } from "./snippets";
 import {
@@ -105,19 +115,30 @@ const linuxWindowIconPath =
       : developmentApplicationIconPath
     : undefined;
 
-const notifyWindow = (channel: string) => (window: BrowserWindow) =>
-  window.webContents.send(channel);
+let palette: ReturnType<typeof startCommandPalette> | undefined;
+const { sendAction, notifyWindow } = createWindowActionSender(() => palette);
 
 let terminalApplication: TerminalApplication<BrowserWindow> | undefined;
-// Settings shortcut recording owns a window's keyboard through key delivery.
 const keybindCapture = createKeybindCapture(process.platform);
 let operationalEvents: OperationalEventLog | undefined;
 let disposeTerminalSessions = () => {};
+let extensions:
+  Awaited<ReturnType<typeof startApplicationExtensions>> | undefined;
+let sshLaunch: ReturnType<typeof registerSshTerminalLaunch>;
+let layouts: ReturnType<typeof startApplicationLayout>;
 const shutdown = registerTerminalShutdown(app, {
   application: () => terminalApplication,
-  disposeSessions: () => disposeTerminalSessions(),
+  disposeSessions: () => {
+    sshLaunch?.dispose();
+    layouts?.dispose();
+    disposeTerminalSessions();
+  },
+  disposeExtensions: () => extensions?.dispose() ?? Promise.resolve(true),
+  onExtensionCleanupUnknown: () =>
+    process.stderr.write("Extension cleanup did not settle before Quit.\n"),
 });
 
+registerExtensionViewScheme();
 applyChromiumSandboxPolicy(app.commandLine);
 
 applyChromiumGpuPolicy(app.commandLine);
@@ -130,7 +151,10 @@ app
   .whenReady()
   .then(async () => {
     const { account, consumeLaunchRequest, configurationLoadOptions } =
-      prepareStartup();
+      prepareStartup(
+        developmentApplicationIconPath,
+        packagedApplicationIconPath,
+      );
     operationalEvents = createOperationalEventLog({
       environment: process.env,
       homeDirectory: account.homedir,
@@ -157,7 +181,28 @@ app
         operationalEvents!.write({ name: "application.started" });
         const terminalIpcRouter = fontIpcRouter(ipcMain, operationalEvents!);
         disposeTerminalSessions = () => terminalIpcRouter.dispose();
+        sshLaunch = registerSshTerminalLaunch(
+          terminalIpcRouter.isTrustedSender,
+          () => terminalApplication?.isQuitting() === true,
+        );
+        layouts = startApplicationLayout({
+          trusted: terminalIpcRouter.isTrustedSender,
+          home: account.homedir,
+          application: () => terminalApplication,
+        });
         let rebuildMenu = () => {};
+        let actionCatalog: CoreActionCatalog;
+        extensions = await startApplicationExtensions({
+          translator: () => currentTranslator(),
+          sendAction,
+          applicationRoot,
+          ssh: sshLaunch,
+          layout: layouts,
+          isTrustedSender: terminalIpcRouter.isTrustedSender,
+          changed: () => rebuildMenu(),
+          keybind: (event, input) =>
+            deliverExtensionKeybind(actionCatalog, event, input),
+        });
         const nativeTitleInset = terminalNativeTitleInset(process.platform);
         const backgroundEffects = createWindowBackgroundEffectsOwner(
           process.platform,
@@ -198,7 +243,7 @@ app
         terminalApplication = startTerminalApplication<BrowserWindow>({
           confirmClose: userConfiguration.confirmClose,
           alwaysOnTopDefault: userConfiguration.alwaysOnTop,
-          createWindow(lifecycle) {
+          createWindow(lifecycle, restoration) {
             const consumeLaunch = consumeLaunchRequest(lifecycle.windowId);
             const active = configurationReloader.current();
             const initialShell = resolveCurrentDefaultShell();
@@ -212,17 +257,12 @@ app
             );
             const shellName = defaultShellName(process.platform, initialShell);
             lockTerminalRendererNavigation(window.webContents);
-            deliverKeybindsFromKeyEvents(
-              window.webContents,
-              () => configurationReloader.current().configuration.keybinds,
-              (action) => keybindActionInvocations[action](),
-              process.platform,
+            const actionDelivery = registerWindowActionDelivery(
+              window,
+              () => actionCatalog,
               keybindCapture,
+              () => palette,
             );
-            // Retain the target: BrowserWindow.webContents throws after closed.
-            const captureTarget = window.webContents;
-            window.on("blur", () => keybindCapture.release(captureTarget));
-            window.once("closed", () => keybindCapture.release(captureTarget));
             guardTerminalWindowClose(window, terminalApplication!);
             const chrome = registerWindowChrome(window, ipcMain, {
               platform: process.platform,
@@ -251,6 +291,8 @@ app
               app.dock,
             );
             window.once("closed", () => titleController.dispose());
+            sshLaunch.register(window);
+            const invocationTarget = extensionInvocationTarget(window);
             const controller = terminalIpcRouter.registerController({
               windowId: lifecycle.windowId,
               configuration: terminalRendererConfiguration(
@@ -263,10 +305,17 @@ app
                 active.configuration,
               ),
               webContents: window.webContents,
-              createSession(callbacks, workingDirectory) {
+              consumeSshLaunch: (token) => sshLaunch.consume(window, token),
+              homeDirectory: account.homedir,
+              initialLayout: () => layouts.initial(window),
+              consumeLayoutLaunch: (token) => layouts.consume(window, token),
+              createSession(callbacks, workingDirectory, ssh, restored) {
                 return shutdown.createSession(nodePty.spawn, {
                   shell: resolveCurrentDefaultShell(),
-                  launchRequest: consumeLaunch(),
+                  launchRequest: restored
+                    ? { kind: "default-shell" }
+                    : (ssh?.request ?? consumeLaunch()),
+                  ...(ssh ? { fallbackTitle: ssh.title } : {}),
                   platform: process.platform,
                   homeDirectory: account.homedir,
                   ...(workingDirectory ? { workingDirectory } : {}),
@@ -278,15 +327,27 @@ app
               onSessionStartError: lifecycle.onSessionStartError,
               onTabsEmpty: lifecycle.onTabsEmpty,
               onSessionExit: (exit, context) => {
+                actionDelivery.invalidate();
+                invocationTarget.ended(context.sessionId);
                 titleController.sessionEnded(context.sessionId);
                 lifecycle.onSessionExit(exit, context);
               },
-              onSessionStarted: titleController.sessionStarted,
-              onSessionSelected: titleController.selectSession,
-              onSettingsSelected: () =>
+              onSessionStarted: (sessionId, title) => {
+                invocationTarget.started(sessionId);
+                titleController.sessionStarted(sessionId, title);
+              },
+              onSessionSelected: (sessionId) => {
+                invocationTarget.selected(sessionId);
+                actionDelivery.select(sessionId);
+                titleController.selectSession(sessionId);
+              },
+              onSettingsSelected: () => {
+                invocationTarget.selected(null);
+                actionDelivery.select("settings");
                 titleController.selectSettings(
                   currentTranslator().t("settings.title"),
-                ),
+                );
+              },
               onSessionTitleSync: titleController.syncSessionTitle,
               onTitleRequest: titleController.requestTitle,
               onBell: titleController.ringBell,
@@ -313,8 +374,8 @@ app
                 ),
               confirmPaste: () => nativeDialogs.confirmPaste(window),
               showClipboardContextMenu(request) {
-                Menu.buildFromTemplate(
-                  terminalContextMenuTemplate(
+                Menu.buildFromTemplate([
+                  ...terminalContextMenuTemplate(
                     window,
                     terminalApplication!,
                     request,
@@ -322,11 +383,28 @@ app
                       .closePane,
                     currentTranslator().t,
                   ),
-                ).popup({ window });
+                  ...extensions!.contextMenu(
+                    window,
+                    request?.sessionId,
+                    () =>
+                      !!request && controller.claimContextMenuTarget(request),
+                  ),
+                ]).popup({ window });
               },
             });
 
-            window.once("ready-to-show", () => backgroundEffects.show(window));
+            layouts.register(window, controller, restoration?.plan);
+            extensions!.registerWindow(window, (source, context) =>
+              invocationTarget.capture(
+                (id) => controller.reportedWorkingDirectory?.(id),
+                source,
+                context,
+              ),
+            );
+            window.once("ready-to-show", () => {
+              if (restoration && !restoration.focus()) window.showInactive();
+              else backgroundEffects.show(window);
+            });
             const windowHost = registerTerminalWindowHost(
               window,
               controller,
@@ -359,11 +437,13 @@ app
           showClosePaneConfirmation: nativeDialogs.confirmClosePane,
           showSessionFailure: nativeDialogs.sessionFailure,
           sendFontZoom: (window, command) =>
-            window.webContents.send(terminalIpc.fontZoom, command),
+            sendAction(window.webContents, terminalIpc.fontZoom, command),
           sendClipboardAction: (window, action, target) =>
-            window.webContents.send(
-              terminalIpc.clipboardAction,
-              target ? { action, target } : action,
+            sendExtensionAwareClipboard(
+              ipcMain,
+              window.webContents,
+              action,
+              target,
             ),
           sendFind: notifyWindow(terminalIpc.find),
           sendTitleBarToggle: notifyWindow(terminalIpc.titleBarToggle),
@@ -372,12 +452,12 @@ app
           sendLocalImageOpen: notifyWindow(terminalIpc.localImageOpen),
           toggleDeveloperTools: (window) => window.webContents.toggleDevTools(),
           sendTabCommand: (window, command) =>
-            window.webContents.send(terminalIpc.tabCommand, command),
+            sendAction(window.webContents, terminalIpc.tabCommand, command),
           quit: () => app.quit(),
           operationalEvents: operationalEvents!,
         });
 
-        const menuActions = {
+        const menuActions = terminalMenuActions(terminalApplication, {
           newWindow: () => {
             void terminalApplication!.newWindow().catch((cause) => {
               const failure = terminalApplicationFailure("new-window", cause);
@@ -388,62 +468,44 @@ app
               nativeDialogs.applicationFailure(failure);
             });
           },
-          closeSelectedWindow: () =>
-            void terminalApplication!.closeSelectedWindow(),
-          newTabInSelectedWindow: terminalApplication.newTabInSelectedWindow,
-          closeSelectedTab: () => void terminalApplication!.closeSelectedTab(),
-          closeSelectedPane: () =>
-            void terminalApplication!.closeSelectedPane(),
-          splitSelectedPane: terminalApplication.splitSelectedPane,
-          focusSelectedPane: terminalApplication.focusSelectedPane,
-          equalizeSelectedPanes: terminalApplication.equalizeSelectedPanes,
-          selectNextTab: terminalApplication.selectNextTab,
-          selectPreviousTab: terminalApplication.selectPreviousTab,
-          selectTabInSelectedWindow:
-            terminalApplication.selectTabInSelectedWindow,
-          requestQuit: () => void terminalApplication!.requestQuit(),
-          toggleSelectedFullScreen:
-            terminalApplication.toggleSelectedFullScreen,
-          toggleSelectedAlwaysOnTop:
-            terminalApplication.toggleSelectedAlwaysOnTop,
-          toggleSelectedDevTools: terminalApplication.toggleSelectedDevTools,
-          zoomInSelectedWindow: () =>
-            terminalApplication!.zoomSelectedWindow("in"),
-          zoomOutSelectedWindow: () =>
-            terminalApplication!.zoomSelectedWindow("out"),
-          resetSelectedWindowZoom: () =>
-            terminalApplication!.zoomSelectedWindow("reset"),
-          copySelectedTerminal: () =>
-            terminalApplication!.clipboardSelectedWindow("copy"),
-          pasteSelectedTerminal: () =>
-            terminalApplication!.clipboardSelectedWindow("paste"),
-          selectAllSelectedTerminal: () =>
-            terminalApplication!.clipboardSelectedWindow("select-all"),
-          findInSelectedTerminal: terminalApplication.findInSelectedWindow,
-          toggleSelectedSnippets: terminalApplication.toggleSelectedSnippets,
-          toggleSelectedTabBar: terminalApplication.toggleSelectedTabBar,
-          toggleSelectedTitleBar: terminalApplication.toggleSelectedTitleBar,
           reloadUserConfiguration: () => void configurationReloader.reload(),
-          openLocalImage: terminalApplication.openLocalImageInSelectedWindow,
-          showAbout: applicationAbout.startApplicationAbout(terminalIpcRouter),
+          showAbout: applicationAbout.startApplicationAbout(
+            terminalIpcRouter,
+            sendAction,
+          ),
+          showCommandPalette: () => palette?.show(),
           showSettings: startApplicationSettings(
             terminalIpcRouter,
             configurationLoadOptions,
             configurationReloader,
             keybindCapture,
+            sendAction,
           ),
-        };
-        const keybindActionInvocations = terminalActionInvocations(menuActions);
-        rebuildMenu = () =>
+        });
+        rebuildMenu = () => {
+          actionCatalog = createCoreActionCatalog(
+            app.name,
+            menuActions,
+            configurationReloader.current().configuration.keybinds,
+            currentTranslator().t,
+            extensions?.actions(),
+          );
           nativeMenu.installApplicationMenu(
-            terminalApplicationMenuTemplate(
+            coreActionMenuTemplate(
               app.name,
-              menuActions,
-              configurationReloader.current().configuration.keybinds,
+              actionCatalog,
               currentTranslator().t,
             ),
           );
+        };
         rebuildMenu();
+        palette = startCommandPalette({
+          ipcMain,
+          isTrustedSender: terminalIpcRouter.isTrustedSender,
+          selectedContents: () => BrowserWindow.getFocusedWindow()?.webContents,
+          catalog: () => actionCatalog,
+        });
+        app.once("will-quit", palette.dispose);
 
         await terminalApplication.newWindow();
       },
@@ -462,25 +524,3 @@ app
     nativeDialogs.applicationFailure(failure);
     app.quit();
   });
-
-function prepareStartup() {
-  applicationAbout.configureApplicationAbout(
-    app,
-    app.isPackaged
-      ? packagedApplicationIconPath
-      : developmentApplicationIconPath,
-  );
-  const launch = startupLaunchRequest(process.argv, app.isPackaged);
-  if (!app.isPackaged) app.dock?.setIcon(developmentApplicationIconPath);
-  const account = userInfo();
-  return {
-    account,
-    consumeLaunchRequest: launch,
-    configurationLoadOptions: {
-      environment: process.env,
-      homeDirectory: account.homedir,
-      platform: process.platform,
-      getInstalledFontFamilyMetrics: installedFontFamilyMetrics,
-    },
-  };
-}

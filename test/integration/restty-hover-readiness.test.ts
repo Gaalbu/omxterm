@@ -16,10 +16,11 @@ import {
   HOVER_FRAME_PREFIX,
   type HoverControl,
 } from "../fixtures/restty-hover-control";
-import type {
-  HoverDraw,
-  HoverGeometry,
-  HoverPixels,
+import {
+  requireEarlyHoverFailure,
+  type HoverDraw,
+  type HoverGeometry,
+  type HoverPixels,
 } from "../fixtures/restty-hover-evidence";
 
 interface Phase {
@@ -245,10 +246,9 @@ it.for([
       phase: "modified",
       category:
         control === "early-capture" ? "cue-not-drawn" : "stimulus-invalidated",
-      pixels: { total: 0, complement: 0, unusedEdges: 0 },
     });
-    expect(failed.pixels!.missingCells).toBe(failed.pixels!.expectedCells);
     if (control === "early-capture") {
+      requireEarlyHoverFailure(failed);
       const held = expectHeldFrame(frames, failed);
       expect(frames.find((frame) => frame.stage === "captured")).toMatchObject({
         active: true,
@@ -267,6 +267,12 @@ it.for([
         failed.latest.draw.cellRevision,
       );
     } else {
+      expect(failed.pixels).toMatchObject({
+        total: 0,
+        complement: 0,
+        unusedEdges: 0,
+      });
+      expect(failed.pixels!.missingCells).toBe(failed.pixels!.expectedCells);
       expect(failed.latest.draw).toMatchObject({ cells: 0, drawCells: 0 });
       expect(failed.latest.draw.cellRevision).toBeGreaterThan(
         failed.stimulus.cellRevision,

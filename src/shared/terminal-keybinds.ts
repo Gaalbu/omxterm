@@ -40,6 +40,7 @@ export const TERMINAL_ACTION_NAMES = [
   "toggleTabBar",
   "toggleTitleBar",
   "reloadConfig",
+  "commandPalette",
 ] as const;
 
 export type TerminalActionName = (typeof TERMINAL_ACTION_NAMES)[number];
@@ -49,13 +50,14 @@ export type TerminalKeybinds = Readonly<
   Record<TerminalActionName, string | null>
 >;
 
-// Built-in defaults always bind every action.
-type DefaultTerminalKeybinds = Readonly<Record<TerminalActionName, string>>;
+// New actions may be unbound by default to preserve existing configurations.
+type DefaultTerminalKeybinds = TerminalKeybinds;
 
 // Following the macOS convention, Cmd+W closes the selected tab and closing
 // the window moved to Cmd+Shift+W (ADR 0016).
 export const DEFAULT_TERMINAL_KEYBINDS: DefaultTerminalKeybinds = Object.freeze(
   {
+    commandPalette: "CommandOrControl+Shift+P",
     quit: "CommandOrControl+Q",
     copy: "CommandOrControl+C",
     paste: "CommandOrControl+V",
@@ -100,6 +102,7 @@ export const DEFAULT_TERMINAL_KEYBINDS: DefaultTerminalKeybinds = Object.freeze(
 // Linux and Windows share the conventional shifted terminal shortcuts so
 // ordinary Ctrl shell and TUI input remains PTY input (#61).
 const SHIFTED_TERMINAL_KEYBINDS: DefaultTerminalKeybinds = Object.freeze({
+  commandPalette: "Control+Shift+P",
   quit: "Control+Alt+Shift+Q",
   copy: "Control+Shift+C",
   paste: "Control+Shift+V",

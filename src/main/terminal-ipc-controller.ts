@@ -1,3 +1,4 @@
+/* eslint-disable max-lines, max-lines-per-function -- Keep session start, early native callbacks and retirement in the same controller lifetime. */
 import type {
   TerminalExit,
   TerminalSessionId,
@@ -10,9 +11,9 @@ import {
   isTerminalSessionResize,
 } from "../shared/terminal-contract";
 import { terminalIpc } from "../shared/terminal-ipc";
+import { layoutIpc, type InitialLayout } from "../shared/terminal-layout";
 import { createTerminalContextMenuTarget } from "./terminal-context-menu";
 import {
-  LocalTerminalSessionStartError,
   type LocalTerminalSession,
   type TerminalSessionLaunchKind,
 } from "./local-terminal-session";
@@ -41,12 +42,20 @@ export type {
   TrustedWebContents,
 } from "./terminal-ipc-types";
 import type { OperationalEventLog } from "./operational-events";
-import { terminalExitOutcome } from "./terminal-session-failure";
+import {
+  retainedSshExit,
+  terminalExitOutcome,
+  throwSessionStartError,
+} from "./terminal-session-failure";
 import { isTerminalRendererConfiguration } from "../shared/user-configuration";
 import { createWorkingDirectoryTracker } from "./terminal-working-directories";
 import {
+  restoredDirectory,
+  captureSessionDirectory,
+} from "./terminal-layout-session";
+import {
   createTabSelection,
-  terminalSessionStart,
+  terminalSessionLaunch,
 } from "./terminal-tab-selection";
 import type { TerminalFontData } from "../shared/terminal-font-data";
 import type { LocalImageData } from "../shared/local-image";
@@ -79,6 +88,7 @@ import {
 interface RoutedTerminalIpcController
   extends TerminalIpcController, SurfaceFontRequests {
   configuration(payload?: unknown): TerminalRendererConfiguration;
+  initialLayout(payload?: unknown): InitialLayout | null;
   start(payload?: unknown): TerminalSessionId;
   input(payload?: unknown): void;
   resize(payload?: unknown): void;
@@ -271,6 +281,12 @@ export function registerTerminalIpcRouter(
         reason: "untrusted-sender",
       }),
   );
+  ipcMain.handle(layoutIpc.initial, (event, payload) => {
+    const controller = controllerFor(event);
+    if (!controller)
+      throw new Error("Rejected layout IPC from an untrusted sender");
+    return controller.initialLayout(payload);
+  });
   ipcMain.handle(terminalIpc.start, start);
   ipcMain.handle(terminalIpc.configuration, configuration);
   ipcMain.handle(terminalIpc.fontData, fontData);
@@ -332,6 +348,7 @@ export function registerTerminalIpcRouter(
       disposed = true;
       for (const controller of [...controllers.values()]) controller.dispose();
       removeSurfaceFontIpc();
+      ipcMain.removeHandler(layoutIpc.initial);
       ipcMain.removeHandler(terminalIpc.start);
       ipcMain.removeHandler(terminalIpc.configuration);
       ipcMain.removeHandler(terminalIpc.fontData);
@@ -406,6 +423,7 @@ function createTerminalIpcController(
   let fontConfigurationGeneration = 0;
   const sessions = new Map<TerminalSessionId, RoutedSessionState>();
   let nextSessionNumber = 1;
+  let initialLayoutRead = false;
   const windowId = options.windowId;
   const writeWindowEvent = (
     event: Parameters<OperationalEventLog["write"]>[0],
@@ -461,13 +479,17 @@ function createTerminalIpcController(
 
   const start = (payload?: unknown): TerminalSessionId => {
     if (disposed) throw new Error("Terminal IPC controller is disposed");
-    const launch = terminalSessionStart(payload, () =>
-      reject("ipc", "invalid-payload"),
+    const launch = terminalSessionLaunch(
+      payload,
+      () => reject("ipc", "invalid-payload"),
+      options.consumeSshLaunch,
     );
+    const { ssh } = launch;
+    const restored = launch.restoreToken !== undefined;
+    const restoredCwd = restoredDirectory(launch, options.consumeLayoutLaunch);
     if (launch.surfaceId !== undefined) surfaceFonts.start(launch.surfaceId);
-    const workingDirectory = workingDirectories.inherited(
-      launch.workingDirectoryOf,
-    );
+    const workingDirectory =
+      restoredCwd ?? workingDirectories.inherited(launch.workingDirectoryOf);
 
     const sessionId: TerminalSessionId = `s${nextSessionNumber}`;
     nextSessionNumber += 1;
@@ -490,7 +512,7 @@ function createTerminalIpcController(
               else ownerLostBeforeRegistration = true;
               return;
             }
-            workingDirectories.observe(sessionId, data);
+            if (!ssh) workingDirectories.observe(sessionId, data);
             const outputEnd = outputFlow.record(data);
             if (outputEnd === undefined) {
               closeSession(sessionId);
@@ -523,6 +545,7 @@ function createTerminalIpcController(
                 options.webContents.send(terminalIpc.exit, {
                   sessionId,
                   ...exit,
+                  ...retainedSshExit(exit, !!ssh, state?.closed === true),
                 });
               }
               options.onSessionExit(exit, context);
@@ -542,7 +565,9 @@ function createTerminalIpcController(
             }
           },
         },
-        workingDirectory,
+        ssh ? undefined : workingDirectory,
+        ssh,
+        restored,
       );
     } catch (cause) {
       if (windowId !== undefined)
@@ -553,23 +578,21 @@ function createTerminalIpcController(
           code: null,
           durationMs: elapsedMilliseconds(startedAt),
         });
-      const launchKind =
-        cause instanceof LocalTerminalSessionStartError
-          ? cause.launchKind
-          : "default-shell";
-      options.onSessionStartError({
-        launchKind,
-        liveSessions: countLiveSessions(sessions),
-      });
-      throw new Error(
-        launchKind === "explicit-command"
-          ? "The requested command could not be started"
-          : "The Default Shell could not be started",
+      throwSessionStartError(
+        cause,
+        countLiveSessions(sessions),
+        options.onSessionStartError,
       );
     }
 
     if (!exitedBeforeRegistration && !disposed) {
       outputFlow.bind(createdSession);
+      workingDirectories.launched(
+        sessionId,
+        !ssh && createdSession.launchKind !== "explicit-command"
+          ? (workingDirectory ?? options.homeDirectory)
+          : undefined,
+      );
       sessions.set(sessionId, {
         session: createdSession,
         outputFlow,
@@ -683,6 +706,14 @@ function createTerminalIpcController(
 
   return {
     configuration,
+    initialLayout(payload) {
+      if (disposed || payload !== undefined || initialLayoutRead)
+        throw new Error("Unavailable initial layout");
+      initialLayoutRead = true;
+      // Ordinary hosts, including bounded native fixture compositions, have an
+      // explicit no-plan contract. A broken restored-plan provider still throws.
+      return options.initialLayout?.() ?? null;
+    },
     ...surfaceFonts.requests,
     applyConfiguration(configuration) {
       if (disposed || options.webContents.isDestroyed()) return;
@@ -709,6 +740,18 @@ function createTerminalIpcController(
     ...createTerminalTitleRequests(routedSession, options, reject),
     tabsEmpty: emptyTabsNotification(options, reject, () => disposed),
     hasBusySelectedSession: selection.hasBusySelectedSession,
+    reportedWorkingDirectory(sessionId) {
+      return routedSession(sessionId)
+        ? workingDirectories.reported(sessionId)
+        : undefined;
+    },
+    layoutDirectory: (id) =>
+      captureSessionDirectory(
+        id,
+        nextSessionNumber,
+        sessions,
+        workingDirectories,
+      ),
     claimContextMenuTarget: contextMenu.claim,
     hasBusyFocusedSession: selection.hasBusyFocusedSession,
     hasBusySession,

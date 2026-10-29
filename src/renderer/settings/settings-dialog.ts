@@ -24,6 +24,7 @@ import { settingsMessageText } from "../../shared/settings-messages";
 import { describeSettingsResult } from "./settings-results";
 export { describeSettingsResult } from "./settings-results";
 import { renderShortcuts } from "./settings-shortcuts";
+import { renderExtensions } from "./settings-extensions";
 import type { SettingsKeybindChange } from "../../shared/settings-keybinds";
 
 // Retained graphical editor and save-on-change controls adapted from ruscher/omxterm PR #622 at
@@ -390,6 +391,7 @@ function buildSettingsView(
     panels.append(panel);
   };
 
+  const disposers: (() => void)[] = [];
   let shortcuts: ReturnType<typeof renderShortcuts> | undefined;
   // Pages depend on the main-reported platform, so they are built with the
   // first snapshot; until then the retained editor shows a loading status.
@@ -415,6 +417,13 @@ function buildSettingsView(
       labels,
     });
     addPage("shortcuts", "settings.page.shortcuts", shortcuts.element);
+    const extensions = document.defaultView?.omxterm?.extensions;
+    if (extensions)
+      addPage(
+        "extensions",
+        "settings.page.extensions",
+        renderExtensions(document, extensions, live, labels, disposers),
+      );
     addPage(
       "config-file",
       "settings.page.file",
@@ -450,7 +459,10 @@ function buildSettingsView(
 
   return {
     element,
-    dispose: unbind,
+    dispose() {
+      unbind();
+      for (const dispose of disposers) dispose();
+    },
     release: () => shortcuts?.release(),
     async load() {
       try {

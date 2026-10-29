@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { translatorFor } from "../../src/shared/i18n";
 import { settingsMessageText } from "../../src/shared/settings-messages";
 import {
+  coreActionMenuTemplate,
   terminalActionInvocations,
   terminalApplicationMenuTemplate,
   terminalClipboardContextMenuTemplate,
@@ -11,6 +12,8 @@ import {
   TERMINAL_ACTION_NAMES,
   terminalDefaultKeybinds,
 } from "../../src/shared/terminal-keybinds";
+
+import { createCoreActionCatalog } from "../../src/main/action-catalog";
 
 function menuActions() {
   return {
@@ -39,6 +42,7 @@ function menuActions() {
     openLocalImage: vi.fn(),
     showAbout: vi.fn(),
     showSettings: vi.fn(),
+    showCommandPalette: vi.fn(),
     splitSelectedPane: vi.fn(),
     closeSelectedPane: vi.fn(),
     focusSelectedPane: vi.fn(),
@@ -59,6 +63,21 @@ function flattenMenuItems(template: MenuTemplate): MenuTemplate {
   visit(template);
   return items;
 }
+
+it("uses the runtime application name for Quit independently of the branded dialog title", () => {
+  const actions = menuActions();
+  const items = flattenMenuItems(
+    terminalApplicationMenuTemplate(
+      "omxterm",
+      actions,
+      DEFAULT_TERMINAL_KEYBINDS,
+    ),
+  );
+  expect(items.find((item) => item.label === "Quit omxterm")?.click).toBe(
+    actions.requestQuit,
+  );
+  expect(items.some((item) => item.label === "Quit OMXTerm")).toBe(false);
+});
 
 it("names the actual Portuguese menu path in Settings application-failure guidance", () => {
   const { t } = translatorFor("pt-BR");
@@ -444,6 +463,41 @@ describe("native application menu", () => {
   });
 });
 
+describe("core action catalog", () => {
+  it("adds only Command Palette to the existing View order and retains native roles", () => {
+    const actions = menuActions();
+    const catalog = createCoreActionCatalog(
+      "OMXTerm",
+      actions,
+      DEFAULT_TERMINAL_KEYBINDS,
+    );
+    const menu = coreActionMenuTemplate("OMXTerm", catalog);
+    const view = menu.find((item) => item.label === "View")!
+      .submenu as MenuTemplate;
+    expect(
+      view
+        .filter((item) => item.type !== "separator")
+        .map((item) => item.label),
+    ).toEqual([
+      "Command Palette…",
+      "Zoom In",
+      "Zoom Out",
+      "Actual Size",
+      "Toggle Snippets",
+      "Toggle Tab Bar",
+      "Toggle Title Bar",
+      "Pane",
+      "Reload User Configuration",
+      "Toggle Developer Tools",
+      "Toggle Full Screen",
+    ]);
+    expect(view[0]).toHaveProperty("accelerator", "CommandOrControl+Shift+P");
+    expect(flattenMenuItems(menu).filter((item) => item.role)).toEqual([
+      { role: "minimize", label: "Minimize" },
+    ]);
+  });
+});
+
 describe("keybind action invocations", () => {
   it("invokes the same application action as the menu item for every keybind action", () => {
     const actions = menuActions();
@@ -471,6 +525,8 @@ describe("keybind action invocations", () => {
     expect(actions.selectAllSelectedTerminal).toHaveBeenCalledOnce();
     invocations.find();
     expect(actions.findInSelectedTerminal).toHaveBeenCalledOnce();
+    invocations.commandPalette();
+    expect(actions.showCommandPalette).toHaveBeenCalledOnce();
     invocations.zoomIn();
     expect(actions.zoomInSelectedWindow).toHaveBeenCalledOnce();
     invocations.zoomOut();

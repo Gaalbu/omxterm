@@ -1,0 +1,7 @@
+SSH Connect is distributed under OMXTerm's MIT license (included as LICENSE).
+
+Design acknowledgements: @ruscher's OMXTerm #622 and #671 proposals and
+Luiz Otavio Miranda's sshtoolkit informed the workflow. The bounded static
+index and target grammar were independently implemented for OMXTerm's accepted
+#671 contract; no SSH implementation from those references was copied.
+Existing OMXTerm contributor credits and third-party notices remain applicable.

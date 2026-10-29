@@ -10,6 +10,11 @@ import { createKeybindCapture } from "../../src/main/keybind-capture";
 import { deliverKeybindsFromKeyEvents } from "../../src/main/keybind-delivery";
 import type { TerminalIpcRouter } from "../../src/main/terminal-ipc-types";
 import {
+  extensionsIpc,
+  isExtensionsRequest,
+  type ExtensionsResult,
+} from "../../src/shared/extensions";
+import {
   createUserConfigurationReloader,
   type ActiveUserConfiguration,
 } from "../../src/main/user-configuration-reloader";
@@ -72,6 +77,22 @@ export function createSettingsExercise(
     process.platform,
     capture,
   );
+  // This core Settings fixture has no extension store/runtime. Keep the real
+  // preload's Extensions category and an explicit unavailable response, rather
+  // than leaving an unhandled IPC request or claiming extension qualification.
+  ipcMain.handle(
+    extensionsIpc,
+    (event, ...args: unknown[]): ExtensionsResult => {
+      if (
+        !router.isTrustedSender(event) ||
+        event.senderFrame !== event.sender.mainFrame
+      )
+        throw new Error("Rejected fixture extension management owner");
+      if (args.length !== 1 || !isExtensionsRequest(args[0]))
+        throw new TypeError("Invalid fixture extension management request");
+      return { ok: false, error: "runtime-unavailable" };
+    },
+  );
   const settings = startSettings({
     ipcMain,
     isTrustedSender: router.isTrustedSender,
@@ -128,6 +149,7 @@ export function createSettingsExercise(
       ),
     dispose() {
       settings.dispose();
+      ipcMain.removeHandler(extensionsIpc);
       window.removeListener("blur", releaseCapture);
       releaseCapture();
     },
@@ -172,7 +194,7 @@ export async function exerciseSettingsDialog(
   const openingMinimum = [...window.getMinimumSize()];
   show();
   await waitFor(
-    "document.querySelectorAll('.settings-tabs [role=\"tab\"]').length === 6",
+    "document.querySelectorAll('.settings-tabs [role=\"tab\"]').length === 7",
   );
   const opened = await evaluate<boolean>(
     "document.querySelectorAll('.settings-dialog').length === 1 && document.activeElement?.getAttribute('role') === 'tab'",

@@ -27,7 +27,7 @@ export const hiddenGLMethods = [
 ] as const;
 
 export function instrumentHiddenWebGL() {
-  const calls = new Map<HTMLCanvasElement, Record<string, number>>();
+  const calls = new WeakMap<HTMLCanvasElement, Record<string, number>>();
   for (const name of hiddenGLMethods) {
     const original = WebGL2RenderingContext.prototype[name];
     Object.defineProperty(WebGL2RenderingContext.prototype, name, {

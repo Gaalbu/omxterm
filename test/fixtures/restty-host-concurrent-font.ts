@@ -55,6 +55,7 @@ export async function exerciseConcurrentResttyTabs(options: {
   };
   readonly sessionStarts: () => number;
   readonly ptyExits: () => number;
+  readonly sessionExited: (index: number) => boolean;
   readonly waitFor: (
     predicate: () => boolean | Promise<boolean>,
     label: string,
@@ -62,6 +63,14 @@ export async function exerciseConcurrentResttyTabs(options: {
 }) {
   const initialSessions = options.sessionStarts();
   const initialExits = options.ptyExits();
+  const targetSessionIndices = Array.from(
+    { length: 4 },
+    (_, index) => initialSessions + index,
+  );
+  const livePriorSessionIndices = Array.from(
+    { length: initialSessions },
+    (_, index) => index,
+  ).filter((index) => !options.sessionExited(index));
   // The preceding backend-loss fixture already captured its genuine error.
   // Reset only this synthetic DOM surface so a new false font error is visible.
   await options.window.webContents.executeJavaScript(
@@ -114,10 +123,33 @@ export async function exerciseConcurrentResttyTabs(options: {
       "concurrent fixture tab cleanup",
     );
   }
-  await options.waitFor(
-    () => options.ptyExits() === initialExits + 4,
-    "concurrent fixture PTY cleanup",
-  );
+  try {
+    await options.waitFor(
+      // A prior peer exit must not stand in for a missing target callback.
+      () => targetSessionIndices.every((index) => options.sessionExited(index)),
+      "concurrent fixture PTY cleanup",
+    );
+    if (livePriorSessionIndices.some((index) => options.sessionExited(index)))
+      throw new Error("Concurrent fixture unexpectedly exited a prior session");
+  } catch (cause) {
+    // Capture callback state before fixture completion requests further closes.
+    // These synthetic indices are not OS-process liveness or cause evidence.
+    const snapshot = {
+      initialExits,
+      expectedExits: initialExits + 4,
+      actualExits: options.ptyExits(),
+      pendingSessionIndices: targetSessionIndices.filter(
+        (index) => !options.sessionExited(index),
+      ),
+      newlyExitedPriorSessionIndices: livePriorSessionIndices.filter((index) =>
+        options.sessionExited(index),
+      ),
+    };
+    throw new Error(
+      `${cause instanceof Error ? cause.message : "Concurrent fixture PTY cleanup failed"}; callback snapshot: ${JSON.stringify(snapshot)}`,
+      { cause },
+    );
+  }
 
   return {
     requestedTabs: 4,

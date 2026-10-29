@@ -103,7 +103,7 @@ export function observeSettingsLayout(
   const measure = document.createElement("canvas").getContext("2d")!;
   return {
     panels: [...root.querySelectorAll<HTMLElement>(".settings-panel")]
-      .slice(0, 7)
+      .slice(0, 8) // Retain one overflow entry beyond the seven expected panels.
       .map((p) => ({
         id: p.id,
         hidden: p.hasAttribute("hidden"),
@@ -113,7 +113,7 @@ export function observeSettingsLayout(
     categories: [
       ...root.querySelectorAll<HTMLElement>(".settings-tabs [role=tab]"),
     ]
-      .slice(0, 7)
+      .slice(0, 8) // Extra categories must remain visible to the inventory oracle.
       .map((tab) => ({
         panel: tab.getAttribute("aria-controls"),
         selected: tab.getAttribute("aria-selected") === "true",
@@ -185,8 +185,8 @@ export function assertSettingsLayout(
   expectedPanel: string,
 ) {
   const { panels, categories, contentWidth } = observation;
-  assert.equal(panels.length, 6, "Settings panel inventory changed");
-  assert.equal(categories.length, 6, "Settings category inventory changed");
+  assert.equal(panels.length, 7, "Settings panel inventory changed");
+  assert.equal(categories.length, 7, "Settings category inventory changed");
   assert.deepEqual(
     categories
       .filter((category) => category.selected)

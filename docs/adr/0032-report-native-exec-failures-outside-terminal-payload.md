@@ -35,7 +35,8 @@ for the native failure acknowledgement just as for unexpected signals under
 [ADR 0016](0016-adopt-tabs-with-one-live-session-per-tab.md#session-ownership-and-lifecycle).
 Main classifies the Operational Event as `spawn-failure` with null code and uses the
 existing fixed spawn dialog. Successfully executed programs returning nonzero
-retain ordinary exit semantics; requested close and rendering failure keep
+retain ordinary exit semantics (SSH Connect deliberately retains ordinary
+nonzero output under ADR0041 without treating it as startup failure); requested close and rendering failure keep
 their outcome precedence. Native exit, not the status byte or kill request, releases
 the application shutdown record (ADR 0028).
 

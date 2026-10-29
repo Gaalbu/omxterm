@@ -6,6 +6,13 @@ OMXTerm uses [Semantic Versioning 2.0.0](https://semver.org/). Published release
 - Versions ending in `-dev.N` (for example `0.20.3-dev.0`) mark the development baseline on `main` between releases.
 - Published releases and binaries are available in [GitHub Releases](https://github.com/luizomf/omxterm/releases). See [release.md](release.md) for the release build and publication checklist.
 
+Explicitly selected partial development previews may retain their `-dev.N`
+version and publish as **non-Latest prereleases**, following the Files/SSH lanes
+in [release.md](release.md). They do not become stable releases or automatically
+advance main to the next patch baseline. Preserve exact binary/source identities
+and re-evaluate extension compatibility before any version change. The stable
+suffix-removal and complete-asset procedure below remains unchanged.
+
 ## Public contract
 
 The versioned public contract covers the user-facing behavior documented in [`spec.md`](spec.md):

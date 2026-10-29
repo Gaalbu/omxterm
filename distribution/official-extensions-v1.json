@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "entries": [
+    {
+      "id": "omxterm.files",
+      "name": "Files \u2014 Linux ARM64 preview",
+      "description": "Project-maintained local file manager preview: browse, create, rename, move, trash and delete files.",
+      "version": "0.1.0",
+      "engines": {
+        "omxterm": ">=0.23.0-dev.8 <0.24.0",
+        "api": "0.1.x"
+      },
+      "targets": ["linux-arm64"],
+      "archive": {
+        "url": "https://github.com/luizomf/omxterm/releases/download/ext-files-v0.1.0/files-0.1.0.omxext",
+        "sha256": "c1fd36c4ddb966c93235f38973730a74c86303051ca7a095b6e5df4787bc7b9f",
+        "bytes": 7917
+      },
+      "sourceCommit": "959f69ae5148182b0da67734b15b77922f7e4212",
+      "releaseUrl": "https://github.com/luizomf/omxterm/releases/tag/ext-files-v0.1.0"
+    },
+    {
+      "id": "omxterm.ssh",
+      "name": "SSH Connect",
+      "description": "Project-maintained Linux ARM64 preview: searchable OpenSSH aliases and quick-connect in core-owned terminal tabs. Synthetic-client qualification only; real authentication and remote connectivity are unqualified.",
+      "version": "0.1.0",
+      "engines": {
+        "omxterm": ">=0.24.0-dev.0",
+        "api": "0.1.x"
+      },
+      "targets": ["linux-arm64"],
+      "archive": {
+        "url": "https://github.com/luizomf/omxterm/releases/download/ext-ssh-v0.1.0/ssh-6d939f0.omxext",
+        "sha256": "d11d16df09876d20a6fc766fcb1e5d76e2214d0d0965ad90be47496e4b066699",
+        "bytes": 9418
+      },
+      "sourceCommit": "6d939f0e837dba90728e6e892010a4a1889fe0c9",
+      "releaseUrl": "https://github.com/luizomf/omxterm/releases/tag/ext-ssh-v0.1.0"
+    }
+  ]
+}

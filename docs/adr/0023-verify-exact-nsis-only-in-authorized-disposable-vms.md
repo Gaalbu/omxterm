@@ -30,7 +30,15 @@ uninstaller after confirming registration ownership. A byte-identical copy runs
 outside the install-path termination prefix, with `_?=` selecting the owned root
 and preventing a detached relaunch. This avoids NSIS terminating its own
 in-place uninstaller through its PowerShell process check. Bounded cleanup must remove
-registration, shortcuts and processes before temporary files are removed.
+registration, shortcuts, default installation and processes. Their absence alone
+does not prove payload removal at the custom `/D=` destination. The transaction
+then requires that destination to be absent or a real empty directory, removed
+only with non-recursive `rmdir`. Any remaining entry (including unexpected files
+or directories), non-directory root or inspection/removal error fails verification
+and preserves residual payload and the relocated-uninstaller tree for inspection.
+The verifier never recursively deletes the installation destination to make an
+uninstall pass. Exact owned-cache cleanup is separate from this proof; only after
+the proof succeeds is the relocated-uninstaller tree recursively removed.
 Failures preserve primary and cleanup errors and retain uncertain state for
 inspection. User data is never selected for deletion. The old application is
 not restored by this test; snapshot recovery is a separate environment action.

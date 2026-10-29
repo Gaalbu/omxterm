@@ -31,9 +31,11 @@ See [window and session behavior](docs/spec.md#window-and-session-behavior).
 **Terminal Window** — An independent native window containing one or more
 Application Tabs, with exactly one selected. It starts with a Terminal Tab.
 
-**Application Tab** — A terminal or graphical Settings entry in one window's
+**Application Tab** — A terminal, graphical Settings or internal hosted-content entry in one window's
 single ordered tab collection. Reordering and literal/next/previous navigation
-include both kinds. Removing the last Application Tab follows the window-close
+include all kinds. Separately installed Files preview activation is available through
+its explicit shared action, within the documented preview qualification limits.
+Removing the last Application Tab follows the window-close
 lifecycle, including pending failure acknowledgement.
 
 **Terminal Tab** — An Application Tab owning one or more Terminal Panes,
@@ -74,6 +76,21 @@ themed title row with native window actions.
 **Always-on-Top Window** — A window temporarily kept above ordinary windows by
 its native floating behavior. The menu toggles the selected window;
 configuration sets the default for new windows.
+
+**Command Palette** — A temporary window-owned dialog for searching and invoking
+core application actions from the native View menu or the configurable
+`commandPalette` shortcut (default: Cmd+Shift+P on macOS, Ctrl+Shift+P on Linux/Windows). It uses
+localized substring matching without fuzzy search or history and validates its
+captured selected tab/pane rather than retargeting a replacement. Copy, Paste,
+Select All, Find, positional tab selection and self-opening are excluded. Find
+awaits an established formerly focused Surface targeting contract. Settings
+remains retained application content underneath, not another modal.
+
+**Action Catalog** — The internal core action definitions shared by native-menu
+presentation, Command Palette results and main-process key delivery. It owns
+localized labels, effective bindings and callbacks into existing guarded actions;
+it is neither a public registration API nor an Extension SDK. The core palette
+does not complete the broader planned Extension work.
 
 **Window Font Zoom** — A temporary font-size adjustment shared by all tabs in
 one window, relative to its configured baseline.
@@ -213,9 +230,29 @@ destinations are not used. Wide-wrap spacers contribute no text; only exact
 core-proven, fully visible soft wraps join a destination. Uncertain viewport
 continuations remain refused; see the [terminal contract](docs/spec.md#terminal-behavior).
 
-## Extensions (planned)
+## Extensions
 
-These terms describe product direction, not a shipped extension interface.
+**Saved Layout** — One explicitly saved current-window terminal arrangement:
+terminal order, weighted splits, focused panes and local-folder provenance.
+The separately installed Linux ARM64 preview opens fresh Default Shells in a new
+window, preserving current work. It is not a saved running session, command
+replay or startup restoration. Its revisioned state survives uninstall; Forget
+removes the active snapshot, not possible interrupted-write remnants. See
+[the guide](docs/saved-layout.md).
+
+**SSH Connect** — A separately installed Linux ARM64 preview application page
+with an incomplete bounded OpenSSH alias index and distinct quick-connect field.
+Its declared `terminal.openSsh.v1` capability transfers a typed target to core,
+which owns literal system-ssh launch, PTY, Busy/close/Quit and retained nonzero
+exit output independently of extension lifetime. It is not an SSH broker,
+credential vault or reconnect service. See [the guide](docs/ssh-connect.md).
+
+**Ended-readable Surface** — Terminal rendering/font resources retained after
+an ordinary nonzero SSH Connect exit for local copy/search/refit until pane
+removal. It owns no live native session or input authority and is not Busy.
+
+These terms cover the internal modules, Linux ARM64 Files development preview
+and broader product direction; they do not define a stable extension SDK.
 
 **Extension** — An optional, separately installed and user-enabled addition that
 keeps nonessential features outside the mandatory terminal core, including
@@ -225,11 +262,38 @@ from its effects.
 _Avoid_: Plugin (historical name).
 
 **Official Extension** — An Extension maintained by the OMXTerm project, which
-may also serve as a practical example for extension authors.
+may also serve as a practical example for extension authors. Catalog identity
+binds an exact release ID/version/digest, never a namespace or filename. It is
+not a sandbox or independently signed publisher assertion.
+
+**Official Catalog** — A bounded project-controlled HTTPS release index loaded
+only by explicit Browse/Refresh. Main retains immutable selections; exact bytes
+and manifest identity must match before ordinary one-shot trust. Its in-memory
+last-successful snapshot may be stale. It is not a marketplace or update daemon.
 
 **Third-party Extension** — An Extension maintained by its author rather than
 by the OMXTerm project. Compatibility with OMXTerm does not imply project
 review, support or a safety guarantee.
+
+**Installed Packages** — The internal module that owns local archive validation,
+immutable installed versions, aggregate registry transactions, installation
+generations and deferred cleanup. It is consumed by the Linux ARM64 Files
+preview's application manager, but does not itself own management UI or execution. See the
+[foundation contract](docs/extension-installation-foundation.md).
+
+**Backend Runtime** — An internal app-owned authority that lazily activates an
+installed prebuilt backend in a directly owned bundled-Node child, binds requests
+to a captured version/epoch and distinguishes actual process exit from channel
+or stream settlement. It is not a public SDK or a descendant sandbox. See the
+[runtime contract](docs/extension-backend-runtime.md).
+
+**Version Use Lease** — An independently held native shared lease retaining one
+immutable installed version while its owner may read package files. It does not
+prove code stopped, serialize external side effects or contain descendants.
+
+**Pending Cleanup** — Managed bytes remain because they are pinned, busy or not
+yet collected. Admission can already be disabled/tombstoned; unrelated extension
+management need not stop.
 
 ## Diagnostics and distribution
 
@@ -237,9 +301,28 @@ review, support or a safety guarantee.
 validation, IPC, PTY control or failures. Local logs exclude Terminal Payload,
 clipboard, configuration and environment contents, commands and titles.
 
-**Application Network Boundary** — OMXTerm makes no application network
-requests. Child processes retain normal network access; explicitly activated web
-links open through the OS.
+**Files Development Preview** — Separately installed, precompiled Linux ARM64
+extension consumed through Settings captured-byte trust and shared namespaced
+actions. Its application owner composes independent backend/view version pins,
+per-invocation terminal context, local management and bounded Quit retirement.
+Its separately built archive/checksum/receipt are not bundled into the host;
+a build receipt identifies bytes and inputs, not completed qualification or shipment.
+No startup code activation, default/configurable shortcut or stable SDK is implied;
+see [the preview contract](docs/files-development-preview.md) for qualification limits.
+
+**Extension View Host** — Internal owner of lazy native web-content views in a
+nonpersistent epoch. It retains a captured package reader/pin, materializes bounded
+local resource responses, and retires known views/reads without terminating core
+PTYs. The Application Tab adapter acknowledges native hiding before DOM overlays.
+It is not a public SDK, activation UI or proof of main-death disk-read exclusion.
+
+**Application Network Boundary** — OMXTerm requests remote bytes only for explicit
+official-catalog browsing and HTTPS extension archive installation in the Linux
+ARM64 development preview, through bounded main-owned acquisition and
+captured-byte trust. No startup/reopen catalog, telemetry or background update
+requests are made. Internal hosted content remains
+restricted to its owned epoch-local packaged-resource protocol. Child processes
+retain normal network access; explicitly activated terminal web links open through the OS.
 
 **Release Artifact** — An exact native package (ARM64, or x64 on Linux/Windows)
 (DMG, AppImage or NSIS) published with its source tag, checksum and verification

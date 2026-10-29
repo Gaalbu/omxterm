@@ -49,7 +49,7 @@ selection does not remove variables from the inherited environment (ADR 0020).
 OMXTerm:
 
 - opens the Default Shell in the user's home directory (except a split pane's
-  usable OSC 7 directory inheritance described below): on macOS and Linux the
+  usable OSC 7 directory inheritance or explicit Saved Layout opening described below): on macOS and Linux the
   operating-system-configured shell as an interactive login shell; on Windows,
   which has no login-shell concept, a configured `windowsShell` executable when
   present, otherwise Windows PowerShell — falling back to the ComSpec command
@@ -83,9 +83,17 @@ OMXTerm:
   an optional versioned per-user AppImage desktop installer and its checksum;
   running the AppImage directly remains supported.
 
-AI assistance, broadcast input, saved or reconnectable sessions, shell integration,
+AI assistance, broadcast input, saved or reconnectable running sessions, shell integration,
 profiles, a theme picker or catalog, automatic configuration reload, automatic
-updates, and remote terminal features are outside the current product contract.
+updates, and remote terminal features beyond the optional
+[Linux ARM64 SSH Connect preview](ssh-connect.md) are outside the current product
+contract. SSH Connect is separately installed: its incomplete read-only alias
+index and distinct quick-connect page request a typed, main-owned literal
+system-ssh launch, without brokering authentication or adding reconnect. The optional
+[Saved Layout preview](saved-layout.md) explicitly saves one window's terminal
+layout and local-directory provenance, opening fresh Default Shells in a new
+window without changing current work. It never saves/restores running sessions,
+commands or output; no startup restore or autosave is added.
 
 Restty 0.3.0 and its pinned Ghostty core provide the sole Terminal Surface in
 ordinary development and every packaged application. OMXTerm has no renderer
@@ -101,7 +109,9 @@ succeeds ([ADR 0025](adr/0025-use-restty-as-the-terminal-surface.md)).
 - Settings is one lazy graphical Application Tab per native window, appended
   on first open and reused without reread, reorder or state reset. It has no
   Terminal Pane, Surface, Adapter, shell or PTY. One ordered collection owns
-  both kinds' selection, reordering and literal/next/previous navigation. The
+  all kinds' selection, reordering and literal/next/previous navigation, including
+  hosted content opened by the separately installed Files development preview's
+  explicit action, within its documented qualification limits. The
   existing strip flag and two-tab threshold include Settings; opening it never
   reveals a disabled strip. Switching preserves its DOM, category, drafts,
   revisions, scroll and pending save results; it cancels shortcut recording and
@@ -161,10 +171,14 @@ succeeds ([ADR 0025](adr/0025-use-restty-as-the-terminal-surface.md)).
   Shell in its source pane's last OSC 7-reported local directory when the shell
   emitted one and it still exists, otherwise in the home directory; main reads
   the report from PTY output, rejects non-local host names and UNC/device paths,
-  and never logs or persists the directory. An empty or local host name emitted
+  and never logs the directory. Persistence occurs only through explicit optional
+  Saved Layout saving. An empty or local host name emitted
   by a remote shell is indistinguishable from a local report; program output can
   also emit it. Either can only select an existing local directory, never execute
-  shell text. Ordinary exit removes only that pane
+  shell text. Known SSH Connect sessions are excluded from local OSC7 tracking
+  regardless of hostname; their splits/new tabs use the Default Shell at home.
+  This exclusion does not detect ssh typed manually inside a normal shell.
+  Ordinary exit removes only that pane
   and gives its space and focus to the nearest sibling; an unexpected signal
   keeps the pane until its failure dialog is acknowledged; the last pane closes
   its tab. Close Pane confirms only a Busy focused pane, Close Tab counts every
@@ -222,8 +236,8 @@ succeeds ([ADR 0025](adr/0025-use-restty-as-the-terminal-surface.md)).
   existing tabs in that window. The reordered positions immediately drive
   visible order, next/previous cycling, and literal positional selection while
   the selected tab and every Live Terminal Session and Terminal Surface remain
-  unchanged. Tab order is ephemeral and is neither shared between windows nor
-  persisted or restored.
+  unchanged. Ordinary tab order is ephemeral and not shared between windows;
+  explicit Saved Layout saving can capture terminal order for a fresh window.
 - Close Tab defaults to `Cmd+W` on macOS and `Ctrl+Shift+W` on Linux and
   Windows, and terminates every session in the selected tab. A pending
   confirmation retains its original tab: approval never retargets a later
@@ -289,6 +303,14 @@ succeeds ([ADR 0025](adr/0025-use-restty-as-the-terminal-surface.md)).
   closure is committed by the renderer's tab owner, not inferred from a zero
   native-PTY count. Queued New Tab commands cannot revive an emptied owner;
   explicit window closure and Quit still cancel pending initialization.
+- SSH Connect's core-transferred terminals are independent of extension lifetime.
+  Exit0 closes normally; an ordinary nonzero exit retains readable/copyable/searchable
+  output and an explicit exit-code notice/Close. The ended Surface keeps rendering
+  and fonts for local refit/zoom until removal, but no native input, resize or
+  protocol replies, including exit replay before start resolves. Native records
+  still retire on actual exit, and ended content is not Busy. Startup/signal
+  acknowledgement and authorized removal retain precedence. See
+  [the capability/admission contract](ssh-connect.md#capability-and-admission).
 - Native executable-start failure is distinct from a successfully executed
   program returning nonzero. Unix reports exec failure through a private native
   status channel. Windows' pinned dependency explicitly marks its asynchronous
@@ -417,13 +439,49 @@ succeeds ([ADR 0025](adr/0025-use-restty-as-the-terminal-surface.md)).
   output, configuration updates and approved pane/tab/session/
   window closure or Quit remain active. About does not add a configurable
   shortcut, settings service or persistent state.
-- `View -> Toggle Developer Tools` is a menu-only diagnostic action for the
+- `View -> Command Palette…` opens a temporary searchable dialog for core
+  application actions. `commandPalette` is remappable through Settings on every
+  Supported Platform and defaults to `CommandOrControl+Shift+P` on macOS and
+  `Control+Shift+P` on Linux/Windows. Explicit remaps and `null` remain effective;
+  an existing custom binding on that combination produces the standard actionable
+  collision error, not an automatic rewrite or silent reassignment.
+  The palette shows localized labels and effective shortcuts from the internal
+  Action Catalog used by the native menu and main key matcher. It uses
+  case-insensitive substring matching in en-US or pt-BR, not fuzzy matching,
+  aliases, ranking or command history. Up/Down selects a result; Enter or a
+  pointer click invokes it after dismissal. Escape or the backdrop cancels.
+  Enter/Escape repeats and release stay owned by the closing dialog; keyboard
+  invocation waits for the owned Enter release, and blur or a lost release
+  cancels that pending invocation.
+  Copy, Paste, Select All, Find, positional tab selection and Command Palette
+  itself are excluded from results. Find is deliberately omitted because
+  targeting the formerly focused Surface after palette input has not been
+  established. Existing Edit actions and shortcuts remain available outside the
+  palette; while its query owns input, clipboard actions edit that query rather
+  than the terminal. Native role-only Minimize is not a catalog result.
+  The palette captures the selected Application Tab and focused pane before
+  reading its catalog snapshot. Changed selection (including away and back),
+  removed/ended targets or owner disposal prevent dispatch to a replacement.
+  Main validates the selected trusted main frame and a one-shot catalog token;
+  window blur, renderer loss/reload, selection/session lifecycle changes and
+  catalog replacement invalidate pending authorization. Renderer-bound dispatch
+  rechecks the captured target before entering existing action handlers.
+  Existing Busy Session confirmation and action guards remain authoritative.
+  Settings remains retained nonmodal application content beneath the palette:
+  its controls become inert and shortcut recording cancels, without discarding
+  drafts or pending saves. Dismissal restores a surviving interactive prior
+  control when the captured target is still current. The palette does not stack
+  with About, image preview or snippet preview. It adds no persistent toolbar,
+  configuration migration, public action registration or Extension SDK.
+  Labels and bindings are a per-opening snapshot; after changing language or
+  bindings, dismiss and reopen the palette to obtain the current catalog.
+- `View -> Toggle Developer Tools` is a menu/palette diagnostic action for the
   selected Terminal Window in development and packaged applications. It opens or
   closes Electron's local Developer Tools without enabling remote debugging;
   Developer Tools never open automatically. The tools can expose private
   Terminal Payload and runtime state, so diagnostic output, screenshots, traces,
   and profiles require review and redaction before sharing.
-- `File -> Open Local Image…` is a menu-only action for the selected Terminal
+- `File -> Open Local Image…` is a menu/palette action for the selected Terminal
   Window. It opens a native picker and previews one validated local static PNG
   or JPEG in a temporary overlay without writing the file or changing User
   Configuration. Escape, the close button, or the backdrop dismisses the
@@ -567,6 +625,38 @@ succeeds ([ADR 0025](adr/0025-use-restty-as-the-terminal-surface.md)).
 
 Closing a tab or window ends its sessions. Persistent and reconnectable sessions
 remain the responsibility of a session manager such as tmux.
+
+## Saved Layout
+
+The separately installed Linux ARM64 [Saved Layout extension](saved-layout.md)
+offers Save/Replace/Open/Forget, with Refresh for cross-instance conflicts or
+unknown outcomes. It captures only the original window's terminal tabs, weighted
+flat pane trees, focus/selection and reported-local/launch-local/home provenance.
+Graphical tabs are excluded and counted. Bounds are 16 tabs, 16 panes/tab, 32
+panes total and 256 KiB, rejecting whole requests rather than truncating.
+
+Opening transfers a fully validated plan to one new core window with no dummy
+shell. Every pane starts through normal Surface initialization, explicitly using
+Default Shell and never consuming a pending `-e`. Original work is untouched;
+partial failures retain healthy panes. Core owns tokens, status, cancellation
+and actual native shutdown independently of extension retirement. Keyboard Open
+waits for Enter release; delayed presentation respects newer focus intent.
+
+Explicit saving uses an extension-scoped native-lease/CAS state adapter outside
+configuration and immutable packages. Opaque revisions and Forget tombstones
+prevent stale destructive writes. Data survives disable/update/uninstall. Forget
+removes the active snapshot, not possible interrupted-write temp copies; the
+guide supplies deliberate local cleanup instructions, not an erasure guarantee.
+Malformed/unreadable state is not repaired. A possibly committed write followed
+by transport loss requires Refresh, never automatic retry. No terminal payload,
+command, environment, title, process or SSH target is stored.
+
+Directory provenance is not current-process inspection or authenticated OSC7.
+Invalid/remote/overlong reports revoke launch fallback. Known SSH, explicit
+commands, ended and pending panes use home slots. Asynchronous directory checks
+fall back to home on missing/unavailable paths without creating folders or
+retrying a failed PTY launch. OS-mounted folders and ordinary shell startup may
+access networks. See [ADR0042](adr/0042-save-layouts-without-restoring-sessions.md).
 
 ## Terminal behavior
 
@@ -1172,7 +1262,11 @@ action vocabulary: `quit`, `copy`, `paste`, `selectAll`, `find`, `newWindow`,
 through `selectTab9`, `zoomIn`, `zoomOut`, `actualSize`, `toggleFullScreen`,
 `toggleSnippets`, `toggleTabBar`, `toggleTitleBar`, `reloadConfig`, `splitRight`,
 `splitDown`, `closePane`, `focusNextPane`, `focusPreviousPane`, `focusPaneLeft`,
-`focusPaneRight`, `focusPaneUp`, `focusPaneDown`, and `equalizePanes`. Each
+`focusPaneRight`, `focusPaneUp`, `focusPaneDown`, `equalizePanes`, and
+`commandPalette`. Command Palette defaults to `CommandOrControl+Shift+P` on macOS
+and `Control+Shift+P` on Linux/Windows. If an existing user mapping occupies that
+combination, normal canonical collision validation rejects the configuration;
+remap either action or set one to `null`. No automatic migration occurs. Each
 value is either `null` or a case-insensitive Electron accelerator containing
 exactly one key and at least one non-Shift modifier; bare or Shift-only
 accelerators are rejected so a keybind can never swallow plain typing. Function
@@ -1183,9 +1277,11 @@ accelerator, and OMXTerm no longer consumes that key for the action. It does not
 guarantee delivery to the terminal; another binding or the operating system may
 still consume the key. Linux and Windows default Find to `Ctrl+Shift+F` and
 Toggle Full Screen to `F11`; macOS keeps `Cmd+F` and `Ctrl+Cmd+F`. The
-application menu displays the effective accelerator
-and is the single shortcut registration point; there is no second shortcut
-system, and terminal control sequences inside the PTY are untouched. An
+application menu displays and registers the effective accelerator. One internal
+Action Catalog defines core action labels, effective bindings and invocation
+callbacks for the native menu, Command Palette and main key matcher; the menu
+is not a separate behavior registry. There is no second shortcut system, and
+terminal control sequences inside the PTY are untouched. An
 effective keybind works even when the platform refuses to fire its menu
 accelerator (macOS never delivers `Control+Tab` to a menu item): the main
 process invokes the same action from the key event itself, and a key that
@@ -1449,8 +1545,8 @@ so late and already-visible results use the current language without matching
 English sentences. The existing main user-file banner keeps its rendered-text
 contract. Diagnostics shown in Settings never enter operational logs.
 
-Settings occupies an opaque full-area surface with the existing six categories
-and independently scrolling content, not a modal perimeter/backdrop. Its 640×480
+Settings occupies an opaque full-area surface with six core categories plus
+Extensions, and independently scrolling content, not a modal perimeter/backdrop. Its 640×480
 renderer viewport target is comfortable desktop coverage, not a new native
 minimum. Below it, compact wrapping navigation and scrolling retain small-window
 access. Native bounds/minima are unchanged by opening Settings. The workspace
@@ -1475,9 +1571,44 @@ IPC, PTY control, resize, duration, and failures; they must never contain PTY
 input/output, clipboard data, environment contents, configuration contents,
 executable names, command arguments, commands, titles, secrets, or transcripts.
 
-The application performs no network requests: no analytics, telemetry, crash
-reporting, update check, or remote log delivery. Child processes retain their
-normal network access.
+The application makes remote requests only for deliberate official-catalog browsing
+and HTTPS extension archive installation in the Linux ARM64 development preview.
+The fixed project catalog is fetched only on Browse/Refresh, never startup or
+Settings reopen. Its bounded versioned JSON supplies plain-text release cards;
+main captures selections, checks supported target and host/API compatibility,
+and requires exact archive size/SHA-256 and manifest identity/version/engines
+before the existing one-shot trust flow. Failed refresh retains a visibly stale
+in-memory snapshot; cold failure is unavailable, not empty. Local/installed
+management remains usable offline. Explicit Update, exact-byte Reinstall and
+warned replacement/downgrade never activate code automatically. Official means
+project-maintained, not sandboxed, harmless or independently signed. See the
+[distribution decision](extension-distribution.md). Main bounds acquisition and
+passes captured bytes through existing archive validation and explicit trust;
+see the [transport policy](files-development-preview.md#https-archive-installation).
+There is no analytics, telemetry, crash reporting, update check or remote log
+delivery. URLs and archive contents are excluded from operational logs. Child
+processes retain their normal network access. The internal Extension View Host may load only its
+owned epoch-local `omx-extension` packaged-resource origin, returning bounded
+materialized bytes under a captured immutable-version pin. This exception does
+not enable catalog fetching, downloads, external web content or a public SDK.
+Remote/foreign origins, navigation, connect and browser-worker routes are refused.
+See [ADR 0039](adr/0039-own-packaged-web-content-by-epoch.md) for admission,
+hide-before-overlay, retirement and the unqualified main-death file-read gate.
+
+Hosted content is optional internal Application Tab content, with retained
+Settings and real terminal panes unchanged. Main-issued identities and monotonic
+slot presentations are owner-bound. The host hides native views before admitting
+host DOM overlays and restores only a still-current content owner. Field input
+and clipboard remain in the child, never forwarded into a terminal. Closing or
+crashing a hosted epoch retires its known views, not core PTYs. This is a
+production-facing development module consumed by the Linux ARM64 Files preview.
+Catalog acquisition and stable SDK exposure remain separate. See the
+[Files development preview qualification](files-development-preview.md#build-and-evidence-boundary)
+for distinct production workflow, renderer-crash/core-survival and module-native
+management evidence. The bounded actual-main-death observation saw renderer exit
+and independent backend-pin retention through kernel exit and collection; it does
+not establish surviving-browser later/fresh resource-read exclusion or universal
+renderer termination. That gate remains unqualified.
 
 The optional Linux AppImage desktop installer accepts only a user-supplied,
 previously checksum-verified local Linux ARM64/x64 OMXTerm AppImage matching the
@@ -1564,6 +1695,54 @@ implementation; there is no renderer selector or registry.
 The package is organized by runtime responsibility: main, preload, renderer, and
 the portable Terminal Surface. Native window management and PTY creation remain
 in main.
+
+### Internal installed-package foundation
+
+The internal Installed Packages module implements local archive
+validation/installation, compatibility, immutable version pins, generation-based
+admission, disable/tombstones and deferred physical cleanup. The Linux ARM64
+Files preview consumes it through production Settings with captured-byte trust.
+This foundation itself owns neither extension execution nor catalog/network
+acquisition or a public SDK. Main owns HTTPS acquisition separately; terminal ownership is unchanged. Its implemented interface and
+limits are governed by the [foundation contract](extension-installation-foundation.md)
+and [ADR 0038](adr/0038-pin-immutable-installed-packages.md).
+
+### Internal extension backend runtime
+
+A separately owned backend runtime consumes Installed Packages through an
+app-owned bootstrap. Normal Linux ARM64 builds include its artifacts and native
+lease/Files move addons; isolated foundation/runtime builds remain available.
+Explicit activation through the application manager lazily forks one
+standard Node ChildProcess per active extension/application runtime using bundled
+Electron Run-as-Node and Node IPC. Independent captured-version pins, fresh
+parent/child admission checks and bounded epoch authority precede ESM import.
+No store writer spans spawn, import or retirement. Cancellation revokes owned
+infrastructure, not already admitted trusted Node effects.
+
+Retirement allows two seconds of cooperation, then at most one owned forced kill;
+actual exit and stream closure remain distinct from logical disposal or kill
+acceptance. Unknown outcomes are not automatically retried. No custom supervisor,
+PID reaper, sandbox or descendant-containment promise is introduced. This replaces
+the proposed utility backend after observed macOS main-thread blocking, without
+changing the separately owned web-content host.
+
+The [runtime contract](extension-backend-runtime.md) and
+[ADR 0040](adr/0040-run-backends-in-owned-node-children.md) govern its internal
+interfaces, limits and qualification boundary. The [Files development preview](files-development-preview.md)
+connects Settings local/HTTPS archive installation, shared namespaced actions, independently
+pinned application views and bounded normal Quit retirement on Linux ARM64.
+Startup constructs infrastructure but never activates installed code; explicit
+shared action invocation does. The explicit
+official catalog reuses the same installation owner/store; there is no public
+SDK or extension shortcut configuration. An empty source catalog is valid but
+does not constitute public distribution.
+Files archive version/compatibility is maintained separately from the host;
+archives and build receipts are excluded from application packages. Build receipts
+bind final archive bytes to source/tool metadata without claiming qualification.
+Linux ARM64 package inspection exercises packaged runtime/native resolution, not
+the user-facing Files lifecycle; see [preview preparation](release.md#files-preview-preparation).
+Trusted children retain ordinary Node capabilities. Production/native/visual and
+main-death qualification remain explicit obligations, not consequences of wiring.
 
 ## Release contract
 

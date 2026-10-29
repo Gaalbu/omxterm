@@ -16,4 +16,8 @@ state; richer shell-aware behavior remains outside its current boundary. The
 one exception reads, never requests, an OSC 7 directory a shell already emits:
 a split pane may start in its source pane's last reported local directory
 ([ADR 0016](0016-adopt-tabs-with-one-live-session-per-tab.md)). Shells that do
-not report it keep the home directory.
+not report it keep the home directory for ordinary splits. The optional
+[Saved Layout extension](0042-save-layouts-without-restoring-sessions.md) can
+explicitly persist bounded main-observed reports and honestly labelled known
+launch directories for fresh Default Shells. This does not infer current cwd,
+authenticate locality, inject `cd`/`clear`, or alter shell initialization.

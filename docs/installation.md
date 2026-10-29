@@ -1,8 +1,49 @@
 # Install OMXTerm
 
-OMXTerm ships packages for Apple Silicon Macs, Linux ARM64 or x64, and Windows 11 ARM64 or x64. Both x64 downloads have **build-only qualification** from native hosted CI, not desktop, GPU, installer or ordinary-user integration qualification. See the [0.22.0 release notes](https://github.com/luizomf/omxterm/releases/tag/v0.22.0) for coverage. Grab the file for your system from the [downloads table](../README.md#platforms-and-downloads) and follow the steps below.
+OMXTerm ships packages for Apple Silicon Macs, Linux ARM64 or x64, and Windows 11 ARM64 or x64. Both x64 downloads have **build-only qualification** from native hosted CI, not desktop, GPU, installer or ordinary-user integration qualification. See the [0.23.0 release notes](https://github.com/luizomf/omxterm/releases/tag/v0.23.0) for coverage. Grab the file for your system from the [downloads table](../README.md#platforms-and-downloads) and follow the steps below.
 
 **[macOS](#macos)** · **[Linux](#linux)** · **[Windows](#windows)** · **[Update or uninstall](#updating-or-uninstalling)**
+
+## Optional Files preview
+
+Files is separately installed, never bundled. The stable
+[Linux ARM64 host 0.23.0](https://github.com/luizomf/omxterm/releases/tag/v0.23.0)
+supports the separate [Files 0.1.0 archive](https://github.com/luizomf/omxterm/releases/tag/ext-files-v0.1.0).
+Both downloads include checksums. Files and the extension runtime remain a
+Linux ARM64 development preview, not a stable SDK or support for other platforms.
+Older preview hosts support local/link installation from `0.23.0-dev.8` and
+catalog browsing from `0.23.0-dev.9`.
+
+On a compatible Linux ARM64 host, open Settings → Extensions → **Browse official
+extensions**. Choose Install/Update/Reinstall, then review the exact version/digest
+and trusted-code warning. Installation is dormant until you explicitly open Files
+from the palette or File menu. Official means project-maintained, not sandboxed.
+The catalog connects only on Browse/Refresh; installed management and local `.omxext`
+installation remain usable offline. A catalog error is not an empty list; failed
+refresh shows the last successful snapshot as stale. No npm/Python or source build
+is required for a published archive. See [Files](files-development-preview.md#official-catalog)
+for compatibility and evidence limits.
+
+## Optional SSH Connect preview
+
+SSH Connect0.1.0 requires the separate
+[Linux ARM64 host0.24.0-dev.0 prerelease](https://github.com/luizomf/omxterm/releases/tag/v0.24.0-dev.0).
+It does not run on stable0.23.0 or dev.9; the normal stable downloads below remain
+unchanged. Download the preview AppImage, matching checksum and version-matched
+helper from that release, not `/latest/download`. Verify the checksums before
+launch/install. Unchanged Files0.1.0 is also supported on this exact preview host.
+
+In Settings → Extensions, choose **Browse official extensions**, then install
+SSH Connect and review the trusted-code warning. Open SSH Connect separately from
+File or the Command Palette; installation remains dormant. The
+[separate SSH release](https://github.com/luizomf/omxterm/releases/tag/ext-ssh-v0.1.0)
+also provides the prebuilt archive/checksum/receipt for local-file or link
+installation. No source build is needed. Both releases are non-Latest previews;
+only Linux ARM64 is qualified, with synthetic clients rather than real SSH
+authentication/connectivity. See [SSH Connect](ssh-connect.md) for requirements,
+source/qualification distinctions and grammar limits. Extensions are trusted
+code, not sandboxed; OpenSSH configuration and authentication remain OpenSSH's
+responsibility.
 
 ## macOS
 
@@ -28,7 +69,7 @@ You only do this once. Later, macOS may also ask before OMXTerm opens protected 
 Download the matching `.sha256` file, then run this in the folder where both files are:
 
 ```sh
-shasum -a 256 -c OMXTerm-0.22.0-arm64.dmg.sha256
+shasum -a 256 -c OMXTerm-0.23.0-arm64.dmg.sha256
 ```
 
 A valid file prints `OK`.
@@ -47,7 +88,7 @@ Linux x64 is a **build-only** download from native hosted CI. Checks include
 exact AppImage content/architecture inspection, packaged Electron/addon loading
 and real headless PTY output/exit/resize. Desktop/GPU, FUSE launch, helper
 installation and ordinary-user integration remain unverified, not release gates.
-See the [0.22.0 release notes](https://github.com/luizomf/omxterm/releases/tag/v0.22.0)
+See the [0.23.0 release notes](https://github.com/luizomf/omxterm/releases/tag/v0.23.0)
 for actual checks and limits.
 
 ### Requirements
@@ -78,14 +119,14 @@ sudo dnf install fontconfig file xorg-x11-server-Xwayland
 Make the AppImage executable and run it:
 
 ```sh
-chmod +x OMXTerm-0.22.0-arm64.AppImage
-./OMXTerm-0.22.0-arm64.AppImage
+chmod +x OMXTerm-0.23.0-arm64.AppImage
+./OMXTerm-0.23.0-arm64.AppImage
 ```
 
 If you get a FUSE error, run it this way instead:
 
 ```sh
-./OMXTerm-0.22.0-arm64.AppImage --appimage-extract-and-run
+./OMXTerm-0.23.0-arm64.AppImage --appimage-extract-and-run
 ```
 
 ### Add it to your application menu (optional)
@@ -94,7 +135,7 @@ Download `linux_install.sh` next to the AppImage and run:
 
 ```sh
 chmod +x linux_install.sh
-./linux_install.sh install ./OMXTerm-0.22.0-arm64.AppImage
+./linux_install.sh install ./OMXTerm-0.23.0-arm64.AppImage
 ```
 
 OMXTerm now shows up in your application launcher. The [Linux installer guide](linux-installer.md) has the details. For blur, HiDPI scaling, or VM graphics, see [Linux desktop tips](linux-desktop.md).
@@ -105,7 +146,7 @@ OMXTerm now shows up in your application launcher. The [Linux installer guide](l
 Download the matching `.sha256` file next to the AppImage and run:
 
 ```sh
-sha256sum --check OMXTerm-0.22.0-arm64.AppImage.sha256
+sha256sum --check OMXTerm-0.23.0-arm64.AppImage.sha256
 ```
 
 </details>
@@ -114,10 +155,10 @@ sha256sum --check OMXTerm-0.22.0-arm64.AppImage.sha256
 
 You need a Windows 11 PC with an ARM64 or x64 (Intel/AMD) processor (check **System type** in **Settings → System → About**). Use the `-arm64.exe` installer on ARM and the `-x64.exe` installer on Intel/AMD.
 
-Windows x64 has **build-only qualification** from native hosted Windows Server x64 CI, not ARM64 emulation. Checks inspect the unpacked app and load its packaged addon in packaged Electron Run-as-Node. They do not execute NSIS, prove its payload equivalent to the inspected tree, or spawn real ConPTY. Desktop/GPU, ordinary-user integration, Windows 11 and SmartScreen/UAC remain unverified for this x64 package. See the [0.22.0 release notes](https://github.com/luizomf/omxterm/releases/tag/v0.22.0) for separate ARM64 and x64 coverage.
+Windows x64 has **build-only qualification** from native hosted Windows Server x64 CI, not ARM64 emulation. Checks inspect the unpacked app and load its packaged addon in packaged Electron Run-as-Node. They do not execute NSIS, prove its payload equivalent to the inspected tree, or spawn real ConPTY. Desktop/GPU, ordinary-user integration, Windows 11 and SmartScreen/UAC remain unverified for this x64 package. See the [0.23.0 release notes](https://github.com/luizomf/omxterm/releases/tag/v0.23.0) for separate ARM64 and x64 coverage.
 
 1. Install the Microsoft Visual C++ Redistributable for your architecture (ARM64 or x64) if you don't have it yet. See [Microsoft's download page](https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist).
-2. Download and run the matching installer: `OMXTerm-0.22.0-arm64.exe` or `OMXTerm-0.22.0-x64.exe`.
+2. Download and run the matching installer: `OMXTerm-0.23.0-arm64.exe` or `OMXTerm-0.23.0-x64.exe`.
 3. If SmartScreen warns about an unrecognized app, click **More info → Run anyway**.
 4. Launch **OMXTerm** from the Start menu.
 
@@ -129,7 +170,7 @@ OMXTerm starts Windows PowerShell by default. You can [switch to PowerShell 7 or
 In PowerShell, in your download folder:
 
 ```powershell
-$name = "OMXTerm-0.22.0-arm64.exe" # Use OMXTerm-0.22.0-x64.exe on Intel/AMD
+$name = "OMXTerm-0.23.0-arm64.exe" # Use OMXTerm-0.23.0-x64.exe on Intel/AMD
 Get-FileHash $name -Algorithm SHA256
 ```
 

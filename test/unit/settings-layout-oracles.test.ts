@@ -58,6 +58,7 @@ function sample(
     "settings-panel-window",
     "settings-panel-shortcuts",
     "settings-panel-config-file",
+    "settings-panel-extensions",
   ];
   return {
     panels: ids.map((id) => ({
@@ -99,6 +100,19 @@ function sample(
     height: 200,
   };
 }
+it("includes Extensions in the native inventory without weakening the panel oracle", () => {
+  const observation = sample();
+  expect(() =>
+    assertSettingsLayout(observation, "settings-panel-general"),
+  ).not.toThrow();
+  expect(() =>
+    assertSettingsLayout(
+      { ...observation, panels: observation.panels.slice(0, -1) },
+      "settings-panel-general",
+    ),
+  ).toThrow("panel inventory changed");
+});
+
 it("rejects the native category/display mismatch even when exactly one panel renders", () => {
   const observation = sample();
   const mismatch = {

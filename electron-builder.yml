@@ -53,6 +53,10 @@ mac:
   category: public.app-category.developer-tools
   files:
     - dist/**
+    - "!dist/extensions/**"
+    - "!dist/**/*.omxext"
+    - "!dist/**/*.omxext.json"
+    - "!dist/**/*.omxext.sha256"
     - "!dist/**/*.map"
     - "!node_modules/**/*.map"
     - "!node_modules/restty/**"
@@ -90,6 +94,10 @@ linux:
   syncDesktopName: true
   files:
     - dist/**
+    - "!dist/extensions/**"
+    - "!dist/**/*.omxext"
+    - "!dist/**/*.omxext.json"
+    - "!dist/**/*.omxext.sha256"
     - "!dist/main/macos-window-blur.node"
     - "!dist/**/*.map"
     - "!node_modules/**/*.map"
@@ -123,6 +131,10 @@ win:
   icon: assets/application-icon.png
   files:
     - dist/**
+    - "!dist/extensions/**"
+    - "!dist/**/*.omxext"
+    - "!dist/**/*.omxext.json"
+    - "!dist/**/*.omxext.sha256"
     - "!dist/main/macos-window-blur.node"
     - "!dist/**/*.map"
     - "!node_modules/**/*.map"

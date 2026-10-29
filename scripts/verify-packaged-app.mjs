@@ -61,6 +61,19 @@ const requiredAsarEntries = [
   "/package.json",
 ];
 
+const linuxExtensionEntries = [
+  "/dist/preload/extension-view.cjs",
+  ...[
+    "bootstrap.mjs",
+    "index.mjs",
+    "packages.mjs",
+    "extension-leases.node",
+    "files-move.node",
+  ].map((file) => `/dist/extension-runtime/${file}`),
+  "/node_modules/semver/package.json",
+  "/node_modules/yauzl/package.json",
+];
+
 const macBlurEntry = "/dist/main/macos-window-blur.node";
 const windowsNativeFiles = [
   "conpty.node",
@@ -85,6 +98,8 @@ const forbiddenEntryPatterns = [
   /(?:^|\/)node_modules\/(?:node-addon-api|node-api-headers)(?:\/|$)/iu,
   /(?:^|\/)node_modules\/node-pty\/(?:deps|third_party)(?:\/|$)/iu,
   /\.(?:map|pem|p12|key)$/iu,
+  /\.omxext(?:\.(?:json|sha256))?$/iu,
+  /(?:^|\/)dist\/extensions(?:\/|$)/iu,
   /\.test\.js$/iu,
   /(?:credential|private[_-]?key|session[_-]?transcript)/iu,
 ];
@@ -117,6 +132,7 @@ export function inspectAsarEntries(
   const required = [
     ...requiredAsarEntries,
     ...(platform === "darwin" ? [macBlurEntry] : []),
+    ...(platform === "linux" && arch === "arm64" ? linuxExtensionEntries : []),
     ...(platform === "win32"
       ? [
           ...windowsNativeFiles.map(
@@ -162,6 +178,58 @@ export function inspectAsarEntries(
         !entry.startsWith(`/node_modules/node-pty/prebuilds/win32-${arch}/`)),
   );
   return { missing, forbidden };
+}
+
+// Node-mode probes do not qualify the browser/Files vertical. They do protect
+// actual packaged module/native resolution, independently of source imports.
+async function verifyPackagedExtensions(executable, asar) {
+  for (const entry of linuxExtensionEntries.filter((file) =>
+    file.startsWith("/dist/"),
+  )) {
+    const prepared = await readFile(path.join(projectRoot, entry.slice(1)));
+    if (!prepared.equals(extractFile(asar, entry.slice(1))))
+      throw new Error(`Packaged extension resource differs: ${entry}`);
+  }
+  const scratch = await mkdtemp(
+    path.join(tmpdir(), "omxterm-packaged-extensions-"),
+  );
+  try {
+    const emptyPath = path.join(scratch, "empty-path");
+    await mkdir(emptyPath);
+    const probe = await readFile(
+      path.join(projectRoot, "scripts/packaged-extensions-probe.mjs"),
+      "utf8",
+    );
+    const { stdout } = await execFile(
+      executable,
+      [
+        "--input-type=module",
+        "-e",
+        probe,
+        "--",
+        asar,
+        scratch,
+        await sourceVersion(),
+      ],
+      {
+        cwd: scratch,
+        env: {
+          HOME: scratch,
+          TMPDIR: scratch,
+          PATH: emptyPath,
+          ELECTRON_RUN_AS_NODE: "1",
+        },
+        timeout: 20_000,
+        killSignal: "SIGKILL",
+      },
+    );
+    await writeFile(
+      path.join(projectRoot, ".scratch/extensions-package.json"),
+      `${JSON.stringify(JSON.parse(stdout), null, 2)}\n`,
+    );
+  } finally {
+    await rm(scratch, { recursive: true, force: true });
+  }
 }
 
 export function inspectIcnsRepresentations(representations) {
@@ -1085,6 +1153,9 @@ export async function verifyPackagedApplication(
       throw new Error(
         `Development/private-looking files were packaged: ${asarInspection.forbidden.join(", ")}`,
       );
+
+    if (platform === "linux" && process.arch === "arm64")
+      await verifyPackagedExtensions(executable, asar);
 
     await Promise.all([
       assertSameFile(

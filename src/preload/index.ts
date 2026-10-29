@@ -1,6 +1,15 @@
 import { contextBridge, ipcRenderer, webUtils } from "electron";
+import { createTerminalLayoutBridge } from "./terminal-layout-bridge";
+import { isLayoutToken } from "../shared/terminal-layout";
+import { createHostedContentBridge } from "./extension-view-bridge";
+import { createPaletteTransport } from "./command-palette-bridge";
 import { createAboutBridge } from "./about-bridge";
 import { createSettingsBridge } from "./settings-bridge";
+import {
+  extensionsIpc,
+  isExtensionsRequest,
+  type ExtensionsBridge,
+} from "../shared/extensions";
 import type { TerminalBridge } from "../shared/terminal-bridge";
 import {
   isWindowChromeCommand,
@@ -52,6 +61,9 @@ import {
   isTerminalFontFamily,
 } from "../shared/terminal-font-data";
 
+const { transport: actionTransport, palette } =
+  createPaletteTransport(ipcRenderer);
+
 let latestConfiguration: TerminalRendererConfiguration | undefined;
 let configurationRevision = 0;
 const configurationUpdateListeners = new Set<
@@ -70,6 +82,8 @@ ipcRenderer.on(terminalIpc.configurationUpdate, (_event, payload: unknown) => {
 });
 
 const terminal: TerminalBridge = {
+  palette,
+  hostedContent: createHostedContentBridge(ipcRenderer),
   async configuration() {
     const revisionAtRequest = configurationRevision;
     const configuration: unknown = await ipcRenderer.invoke(
@@ -102,31 +116,32 @@ const terminal: TerminalBridge = {
     const handler = (_event: Electron.IpcRendererEvent, payload: unknown) => {
       if (payload === undefined) listener();
     };
-    ipcRenderer.on(terminalIpc.snippetsToggle, handler);
+    actionTransport.on(terminalIpc.snippetsToggle, handler);
     return () =>
-      ipcRenderer.removeListener(terminalIpc.snippetsToggle, handler);
+      actionTransport.removeListener(terminalIpc.snippetsToggle, handler);
   },
   onTabBarToggle(listener) {
     const handler = (_event: Electron.IpcRendererEvent, payload: unknown) => {
       if (payload === undefined) listener();
     };
-    ipcRenderer.on(terminalIpc.tabBarToggle, handler);
-    return () => ipcRenderer.removeListener(terminalIpc.tabBarToggle, handler);
+    actionTransport.on(terminalIpc.tabBarToggle, handler);
+    return () =>
+      actionTransport.removeListener(terminalIpc.tabBarToggle, handler);
   },
   onFind(listener) {
     const handler = (_event: Electron.IpcRendererEvent, payload: unknown) => {
       if (payload === undefined) listener();
     };
-    ipcRenderer.on(terminalIpc.find, handler);
-    return () => ipcRenderer.removeListener(terminalIpc.find, handler);
+    actionTransport.on(terminalIpc.find, handler);
+    return () => actionTransport.removeListener(terminalIpc.find, handler);
   },
   onTitleBarToggle(listener) {
     const handler = (_event: Electron.IpcRendererEvent, payload: unknown) => {
       if (payload === undefined) listener();
     };
-    ipcRenderer.on(terminalIpc.titleBarToggle, handler);
+    actionTransport.on(terminalIpc.titleBarToggle, handler);
     return () =>
-      ipcRenderer.removeListener(terminalIpc.titleBarToggle, handler);
+      actionTransport.removeListener(terminalIpc.titleBarToggle, handler);
   },
   windowChrome(command) {
     if (!isWindowChromeCommand(command))
@@ -163,7 +178,16 @@ const terminal: TerminalBridge = {
       throw new TypeError("Invalid Surface identity");
     ipcRenderer.send(terminalIpc.releaseSurface, surfaceId);
   },
-  async start(surfaceId, workingDirectoryOf) {
+  sshPane(token, accepted) {
+    if (
+      !/^[0-9a-f-]{36}$/.test(token) ||
+      (accepted !== null && typeof accepted !== "boolean")
+    )
+      throw new TypeError("Invalid SSH pane response");
+    ipcRenderer.send("terminal:ssh-pane", { token, accepted });
+  },
+  layout: createTerminalLayoutBridge(ipcRenderer),
+  async start(surfaceId, workingDirectoryOf, launchToken, restoreToken) {
     if (surfaceId !== undefined && !isSurfaceIdentity(surfaceId))
       throw new TypeError("Invalid Surface identity");
     if (
@@ -171,14 +195,36 @@ const terminal: TerminalBridge = {
       !isTerminalSessionId(workingDirectoryOf)
     )
       throw new TypeError("Invalid Live Terminal Session identifier");
-    const sessionId: unknown = await (workingDirectoryOf !== undefined
+    if (
+      launchToken !== undefined &&
+      (!/^[0-9a-f-]{36}$/.test(launchToken) || workingDirectoryOf !== undefined)
+    )
+      throw new TypeError("Invalid SSH launch token");
+    if (
+      restoreToken !== undefined &&
+      (!isLayoutToken(restoreToken) ||
+        launchToken !== undefined ||
+        workingDirectoryOf !== undefined)
+    )
+      throw new TypeError("Invalid layout restore token");
+    const sessionId: unknown = await (restoreToken !== undefined
       ? ipcRenderer.invoke(terminalIpc.start, {
           ...(surfaceId === undefined ? {} : { surfaceId }),
-          workingDirectoryOf,
+          restoreToken,
         })
-      : surfaceId === undefined
-        ? ipcRenderer.invoke(terminalIpc.start)
-        : ipcRenderer.invoke(terminalIpc.start, surfaceId));
+      : launchToken !== undefined
+        ? ipcRenderer.invoke(terminalIpc.start, {
+            ...(surfaceId === undefined ? {} : { surfaceId }),
+            launchToken,
+          })
+        : workingDirectoryOf !== undefined
+          ? ipcRenderer.invoke(terminalIpc.start, {
+              ...(surfaceId === undefined ? {} : { surfaceId }),
+              workingDirectoryOf,
+            })
+          : surfaceId === undefined
+            ? ipcRenderer.invoke(terminalIpc.start)
+            : ipcRenderer.invoke(terminalIpc.start, surfaceId));
     if (!isTerminalSessionId(sessionId))
       throw new TypeError("Invalid Live Terminal Session identifier");
     return sessionId;
@@ -239,9 +285,9 @@ const terminal: TerminalBridge = {
     const handler = (_event: Electron.IpcRendererEvent, payload: unknown) => {
       if (payload === undefined) listener();
     };
-    ipcRenderer.on(terminalIpc.localImageOpen, handler);
+    actionTransport.on(terminalIpc.localImageOpen, handler);
     return () =>
-      ipcRenderer.removeListener(terminalIpc.localImageOpen, handler);
+      actionTransport.removeListener(terminalIpc.localImageOpen, handler);
   },
   acknowledgeOutput(sessionId: TerminalSessionId, end: number) {
     const payload = { sessionId, end };
@@ -266,6 +312,7 @@ const terminal: TerminalBridge = {
           exitCode: payload.exitCode,
           signal: payload.signal,
           ...(payload.startupFailed ? { startupFailed: true } : {}),
+          ...(payload.retained ? { retained: true } : {}),
         });
     };
     ipcRenderer.on(terminalIpc.exit, handler);
@@ -275,8 +322,9 @@ const terminal: TerminalBridge = {
     const handler = (_event: Electron.IpcRendererEvent, payload: unknown) => {
       if (isTerminalTabCommand(payload)) listener(payload);
     };
-    ipcRenderer.on(terminalIpc.tabCommand, handler);
-    return () => ipcRenderer.removeListener(terminalIpc.tabCommand, handler);
+    actionTransport.on(terminalIpc.tabCommand, handler);
+    return () =>
+      actionTransport.removeListener(terminalIpc.tabCommand, handler);
   },
   onTabTitle(listener: (sessionId: TerminalSessionId, title: string) => void) {
     const handler = (_event: Electron.IpcRendererEvent, payload: unknown) => {
@@ -311,8 +359,8 @@ const terminal: TerminalBridge = {
     const handler = (_event: Electron.IpcRendererEvent, command: unknown) => {
       if (isTerminalFontZoom(command)) listener(command);
     };
-    ipcRenderer.on(terminalIpc.fontZoom, handler);
-    return () => ipcRenderer.removeListener(terminalIpc.fontZoom, handler);
+    actionTransport.on(terminalIpc.fontZoom, handler);
+    return () => actionTransport.removeListener(terminalIpc.fontZoom, handler);
   },
   async writeClipboardText(text: string) {
     if (!isNonemptyClipboardText(text))
@@ -379,7 +427,14 @@ contextBridge.exposeInMainWorld(
   "omxterm",
   Object.freeze({
     terminal: Object.freeze(terminal),
-    about: Object.freeze(createAboutBridge(ipcRenderer)),
-    settings: Object.freeze(createSettingsBridge(ipcRenderer)),
+    about: Object.freeze(createAboutBridge(actionTransport)),
+    settings: Object.freeze(createSettingsBridge(actionTransport)),
+    extensions: Object.freeze<ExtensionsBridge>({
+      request(request) {
+        if (!isExtensionsRequest(request))
+          return Promise.reject(new TypeError("Invalid extensions request"));
+        return ipcRenderer.invoke(extensionsIpc, request);
+      },
+    }),
   }),
 );

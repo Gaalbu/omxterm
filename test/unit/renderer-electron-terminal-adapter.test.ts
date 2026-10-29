@@ -65,6 +65,53 @@ function createBridgeHarness() {
 }
 
 describe("renderer Electron terminal adapter", () => {
+  it("keeps restoration separate from SSH and cancels an unconsumed token once", async () => {
+    const h = createBridgeHarness();
+    const token = "00000000-0000-0000-0000-000000000001";
+    const bridge = {
+      ...h.bridge,
+      layout: {
+        initial: async () => null,
+        onCapture: () => () => {},
+        cancel: vi.fn(),
+      },
+    };
+    expect(() =>
+      createElectronTerminalAdapter(bridge, undefined, undefined, token, token),
+    ).toThrow("Conflicting");
+    expect(() =>
+      createElectronTerminalAdapter(bridge, undefined, "s1", undefined, token),
+    ).toThrow("Conflicting");
+    const queued = createElectronTerminalAdapter(
+      bridge,
+      undefined,
+      undefined,
+      undefined,
+      token,
+    );
+    queued.close();
+    queued.close();
+    expect(bridge.layout.cancel).toHaveBeenCalledExactlyOnceWith(token);
+    expect(h.calls.start).not.toHaveBeenCalled();
+    const mounting = createElectronTerminalAdapter(
+      bridge,
+      undefined,
+      undefined,
+      undefined,
+      token,
+    );
+    const started = mounting.start({ onOutput: vi.fn(), onExit: vi.fn() });
+    expect(h.calls.start).toHaveBeenCalledWith(
+      undefined,
+      undefined,
+      undefined,
+      token,
+    );
+    mounting.close();
+    h.startSession("s1");
+    await started;
+    expect(h.calls.close).toHaveBeenCalledExactlyOnceWith("s1", undefined);
+  });
   it("releases a late Surface registration after cancellation without starting a PTY", async () => {
     const harness = createBridgeHarness();
     let resolve!: (id: string) => void;
@@ -169,9 +216,11 @@ describe("renderer Electron terminal adapter", () => {
     harness.output("s2", "own output");
     harness.output("s1", "foreign output");
     harness.exit("s3", { exitCode: 0, signal: 0 });
-    harness.exit("s2", { exitCode: 0, signal: 15 });
     adapter.write("typed input");
     adapter.resize({ cols: 120, rows: 40 });
+    harness.exit("s2", { exitCode: 0, signal: 15 });
+    adapter.write("after exit");
+    adapter.resize({ cols: 90, rows: 30 });
 
     expect(onOutput).toHaveBeenCalledOnce();
     expect(onOutput).toHaveBeenCalledWith("own output");
@@ -181,8 +230,11 @@ describe("renderer Electron terminal adapter", () => {
     );
     expect(onExit).toHaveBeenCalledOnce();
     expect(onExit).toHaveBeenCalledWith({ exitCode: 0, signal: 15 });
-    expect(harness.calls.input).toHaveBeenCalledWith("s2", "typed input");
-    expect(harness.calls.resize).toHaveBeenCalledWith("s2", {
+    expect(harness.calls.input).toHaveBeenCalledExactlyOnceWith(
+      "s2",
+      "typed input",
+    );
+    expect(harness.calls.resize).toHaveBeenCalledExactlyOnceWith("s2", {
       cols: 120,
       rows: 40,
     });
